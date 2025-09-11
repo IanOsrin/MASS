@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MASS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root { --ink:#0d1b2a; --paper:#e6f0fa; --card:#f9fbff; --line:#a3bce2; --accent:#1a4dad; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, Arial, sans-serif; margin:0; padding:20px; background:var(--paper); color:var(--ink); display:flex; justify-content:center; align-items:center; min-height:100vh; }
+    .container { width:100%; max-width:900px; text-align:center; }
+
+    /* MASS heading with gradient + italics (replaces GALLO CMS) */
+    .app-title {
+      display:flex; align-items:center; justify-content:center; gap:10px;
+      font-weight:900; font-size:56px; font-style:italic; margin-bottom:20px;
+      background: linear-gradient(45deg, #1a4dad, #00b4d8, #90e0ef);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip:text; color: transparent;
+    }
+
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; margin:10px 0; }
+    input, select { padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); text-align:center; }
+    button { background:var(--accent); color:#fff; border:0; padding:6px 12px; border-radius:8px; cursor:pointer; font-weight:600; }
+    button:disabled { opacity:.55; cursor:not-allowed; }
+    button:hover { background:#153a82; }
+    .meta { font-size:12px; opacity:.75; text-align:center; }
+    .error { color:#c00; text-align:center; }
+    .album { border:1px solid var(--line); border-radius:10px; padding:8px; margin:8px 0; background:var(--card); transition:border-color .2s, border-width .2s; }
+    .album.faulty { border:2px solid red; }
+    .album-head { display:flex; align-items:center; justify-content:center; gap:10px; }
+    .album-title { font-size:18px; font-weight:700; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--ink); text-align:center; }
+    .album-controls { display:flex; flex-direction:column; align-items:center; gap:6px; }
+    .ddex { font-size:12px; opacity:.8; }
+    .cat { margin-top:4px; text-align:center; }
+    .tracks { display:none; margin-top:6px; padding-top:6px; border-top:1px dashed var(--line); text-align:left; }
+    .track { padding:6px 0; border-bottom:1px dashed var(--line); }
+    .track:last-child { border-bottom:0; }
+    audio { width:100%; margin-top:4px; }
+    .time { text-align:right; margin-top:2px; font-size:12px; }
+    .more { margin-top:6px; text-align:center; }
+    .details { display:none; margin-top:6px; padding:8px; border:1px dashed var(--line); border-radius:8px; background:#fff; text-align:left; }
+    .kv { display:grid; grid-template-columns: 160px 1fr; gap:6px 10px; font-size:14px; }
+    .kv div:nth-child(odd) { opacity:.7; }
+    .empty { text-align:center; padding:24px; border:1px dashed var(--line); border-radius:12px; background:#fff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Replaced the original logo+text header with a single MASS heading -->
+    <div class="app-title">MASS</div>
+
+    <form id="searchForm" class="row" autocomplete="off">
+      <input id="artist" placeholder="Artist" />
+      <input id="album"  placeholder="Album Title" />
+      <input id="ref"    placeholder="Reference Catalogue Number" />
+      <input id="track"  placeholder="Track Name" />
+      <select id="mode"><option value="contains" selected>Contains</option><option value="equals">Whole word</option></select>
+      <button id="search" type="submit">Search</button>
+      <button id="clear"  type="button">Clear</button>
+    </form>
+
+    <div class="row">
+      <button id="first" type="button" disabled>First</button>
+      <button id="prev"  type="button" disabled>Prev</button>
+      <label>Page <input id="page" type="number" min="1" value="1" style="width:60px"></label>
+      <button id="go"    type="button" disabled>Go</button>
+      <button id="next"  type="button" disabled>Next</button>
+    </div>
+
+    <div id="err" class="meta error"></div>
+    <div id="info" class="meta"></div>
+    <div id="list" class="empty">Start by searching for an artist, album, ref, or track.</div>
+  </div>
+
+  <script>
+  (function(){
+    // ---------- helpers ----------
+    var $ = function(id){ return document.getElementById(id); };
+    function fmt(s){ if(!isFinite(s)) return "--:--"; var m=Math.floor(s/60), sec=Math.floor(s%60); return m+":"+String(sec).padStart(2,'0'); }
+    function isBlank(v){ return v===undefined || v===null || String(v).trim()===''; }
+    function q(obj){ var parts=[]; for(var k in obj){ var v=obj[k]; if(v!=='' && v!=null) parts.push(encodeURIComponent(k)+'='+encodeURIComponent(v)); } return parts.join('&'); }
+    function getJSON(url){ return fetch(url,{cache:'no-store'}).then(function(r){ if(!r.ok) return r.text().then(function(t){ throw new Error(t||('HTTP '+r.status)); }); return r.json(); }); }
+    function setPagerEnabled(on){ ['first','prev','go','next'].forEach(function(id){ var el=$(id); if(el) el.disabled=!on; }); }
+    function setEmpty(){ var list=$('list'); list.innerHTML=''; list.className='empty'; list.textContent='Start by searching for an artist, album, ref, or track.'; }
+
+    // ---------- state ----------
+    var __hasSearched=false; var __trackMode=false;
+
+    // ---------- builders ----------
+    function makeDetailsGrid(t){
+      var fields=[["Language Code",t.languageCode],["Producer",t.producer],["Composer 1",t.composer],["Composer 2",t.composer2],["Composer 3",t.composer3],["ISRC",t.isrc],["Original Release date",t.originalReleaseDate],["DDEX",t.ddexStatus]];
+      var rows=fields.filter(function(p){ return !isBlank(p[1]); }); if(!rows.length) return null;
+      var grid=document.createElement('div'); grid.className='details'; var kv=document.createElement('div'); kv.className='kv';
+      rows.forEach(function(p){ var a=document.createElement('div'); a.textContent=p[0]; var b=document.createElement('div'); b.textContent=p[1]; kv.appendChild(a); kv.appendChild(b); });
+      grid.appendChild(kv); return grid;
+    }
+
+    function makeTrackRow(t){
+      var trackTitle = t.trackName || t.trackTitle || t.title || t.name;
+      var trackArtist= t.trackArtist || t.artist || t.performer || t.ArtistName;
+      var audioField = t.audioSrc || t.audioUrl || t.streamUrl || t.containerUrl || t['Audio File'];
+      var duration   = Number(t.duration);
+
+      var row=document.createElement('div'); row.className='track';
+      var title=document.createElement('div'); title.textContent=(trackTitle||'Untitled')+' — '+(trackArtist||'Unknown');
+
+      var audio=document.createElement('audio'); audio.controls=true; audio.preload='auto'; if(audioField) audio.src=String(audioField).trim();
+      var time=document.createElement('div'); time.className='time'; time.textContent=fmt(0)+' / '+fmt(duration);
+      audio.addEventListener('loadedmetadata',function(){ if(!isFinite(duration) && isFinite(audio.duration)) time.textContent=fmt(0)+' / '+fmt(audio.duration); });
+      audio.addEventListener('timeupdate',function(){ time.textContent=fmt(audio.currentTime)+' / '+fmt(audio.duration||duration); });
+      audio.addEventListener('ended',function(){ var d=isFinite(audio.duration)?audio.duration:duration; time.textContent=fmt(d)+' / '+fmt(d);
+        // Auto-play next track in the same album
+        var container = row.closest ? row.closest('.tracks') : (function(n){ while(n && !(n.classList && n.classList.contains('tracks'))) n=n.parentNode; return n; })(row);
+        if(container){
+          var audios = Array.prototype.slice.call(container.querySelectorAll('audio'));
+          var idx = audios.indexOf(audio);
+          for(var i=idx+1;i<audios.length;i++){
+            if(audios[i].src){ try{ audios[i].play(); }catch(_){} break; }
+          }
+        }
+      });
+      // Ensure only one track plays at a time per album
+      audio.addEventListener('play', function(){
+        var container = row.closest ? row.closest('.tracks') : (function(n){ while(n && !(n.classList && n.classList.contains('tracks'))) n=n.parentNode; return n; })(row);
+        if(container){
+          container.querySelectorAll('audio').forEach(function(a){ if(a!==audio && !a.paused){ try{ a.pause(); }catch(_){} }});
+        }
+      });
+      audio.addEventListener('error',function(){ var code=(audio.error&&audio.error.code)||0; var map={1:'aborted',2:'network',3:'decode',4:'src not supported'}; var note=document.createElement('div'); note.className='meta error'; note.textContent='Audio error ('+(map[code]||code)+') for: '+(audio.src||''); row.appendChild(note); });
+
+      var details=makeDetailsGrid(t);
+      if(details){ var moreWrap=document.createElement('div'); moreWrap.className='more'; var moreBtn=document.createElement('button'); moreBtn.type='button'; moreBtn.textContent='More info'; moreBtn.onclick=function(){ var open=details.style.display==='block'; details.style.display=open?'none':'block'; moreBtn.textContent=open?'More info':'Hide info'; }; moreWrap.appendChild(moreBtn); row.appendChild(moreWrap); row.appendChild(details); }
+
+      row.appendChild(title); row.appendChild(audio); row.appendChild(time); return row;
+    }
+
+    function albumCard(a){
+      var root=document.createElement('div'); root.className='album'+(a.faulty?' faulty':'');
+      var head=document.createElement('div'); head.className='album-head';
+      var title=document.createElement('div'); title.className='album-title'; title.innerHTML='<strong>'+(a.albumTitle||'(Untitled)')+'</strong> — '+(a.albumArtist||'Unknown');
+      var controls=document.createElement('div'); controls.className='album-controls';
+      var btn=document.createElement('button'); btn.className='toggle'; btn.type='button'; btn.textContent='Show Tracks';
+      var ddex=document.createElement('div'); ddex.className='ddex'; ddex.textContent='DDEX: '+(a.ddexStatus||'—');
+      controls.appendChild(btn); controls.appendChild(ddex);
+      head.appendChild(title); head.appendChild(controls);
+      var meta=document.createElement('div'); meta.className='meta cat'; meta.textContent='Cat#: '+(a.albumCatalogueNumber||'');
+      var tracks=document.createElement('div'); tracks.className='tracks';
+      root.appendChild(head); root.appendChild(meta); root.appendChild(tracks);
+
+      var loaded=false;
+      function loadTracks(){
+        tracks.textContent='Loading...';
+        getJSON('/api/albums/'+encodeURIComponent(a.albumCatalogueNumber)+'/tracks?t='+(Date.now()))
+          .then(function(full){
+            var list=(full&&full.tracks)||[];
+            tracks.innerHTML='<div class="meta">Total tracks: '+(full.trackCount||list.length)+'</div>';
+            list.forEach(function(t){ tracks.appendChild(makeTrackRow(t)); });
+            loaded=true;
+          })
+          .catch(function(){ tracks.textContent='Failed to load tracks.'; });
+      }
+
+      btn.onclick=function(){ var open=tracks.style.display==='block'; tracks.style.display=open?'none':'block'; btn.textContent=open?'Show Tracks':'Hide Tracks'; if(!loaded && !open){ loadTracks(); } };
+      return root;
+    }
+
+    // ---------- renderers ----------
+    function renderAlbums(){
+      var artist=$('artist'), album=$('album'), ref=$('ref'), mode=$('mode'), info=$('info'), err=$('err'), list=$('list'), page=$('page');
+      if(!__hasSearched){ setEmpty(); setPagerEnabled(false); return; }
+      err.textContent=''; list.className=''; list.textContent='Loading…';
+      var p=Math.max(1, Number(page.value||1));
+      var params={ page:p, mode:mode.value };
+      if(artist.value.trim()) params.artist=artist.value.trim();
+      if(album.value.trim())  params.album=album.value.trim();
+      if(ref.value.trim())    params.ref=ref.value.trim();
+      getJSON('/api/albums?'+q(params)+'&t='+(Date.now()))
+        .then(function(data){
+          list.innerHTML='';
+          (data.albums||[]).forEach(function(a){ list.appendChild(albumCard(a)); });
+          var foundInfo=(typeof data.foundCount==='number')?(' · Matches: '+data.foundCount):'';
+          info.textContent='Page '+p+' · Albums on page: '+((data.albums&&data.albums.length)||0)+foundInfo;
+          if(!data.albums || !data.albums.length) list.textContent='No albums on this page.';
+          setPagerEnabled(true);
+        })
+        .catch(function(e){ err.textContent=(e&&e.message)||String(e); list.textContent=''; setPagerEnabled(true); });
+    }
+
+    function renderTracks(){
+      var track=$('track'), mode=$('mode'), info=$('info'), err=$('err'), list=$('list'), page=$('page');
+      if(!__hasSearched){ setEmpty(); setPagerEnabled(false); return; }
+      err.textContent=''; list.className=''; list.textContent='Loading...';
+      var p=Math.max(1, Number(page.value||1));
+      var params={ page:p, mode:mode.value };
+      if(track.value.trim()) params.track=track.value.trim();
+      getJSON('/api/tracks?'+q(params)+'&t='+(Date.now()))
+        .then(function(data){
+          list.innerHTML='';
+          (data.albums||[]).forEach(function(a){ list.appendChild(albumCard(a)); });
+          var foundInfo=(typeof data.foundCount==='number')?(' · Matches: '+data.foundCount):'';
+          info.textContent='Page '+p+' · Albums on page: '+((data.albums&&data.albums.length)||0)+foundInfo;
+          if(!data.albums || !data.albums.length) list.textContent='No albums on this page.';
+          setPagerEnabled(true);
+        })
+        .catch(function(e){ err.textContent=(e&&e.message)||String(e); list.textContent=''; setPagerEnabled(true); });
+    }
+
+    // ---------- events ----------
+    $('searchForm').addEventListener('submit', function(e){ e.preventDefault(); __hasSearched=true; $('page').value=1; __trackMode=$('track').value.trim().length>0; (__trackMode?renderTracks:renderAlbums)(); });
+    $('clear').addEventListener('click', function(){ $('searchForm').reset(); $('page').value=1; __trackMode=false; __hasSearched=false; setPagerEnabled(false); $('info').textContent=''; $('err').textContent=''; setEmpty(); });
+    $('first').addEventListener('click', function(){ if(!__hasSearched) return; $('page').value=1; (__trackMode?renderTracks:renderAlbums)(); });
+    $('prev').addEventListener('click',  function(){ if(!__hasSearched) return; $('page').value=Math.max(1, Number($('page').value||1)-1); (__trackMode?renderTracks:renderAlbums)(); });
+    $('next').addEventListener('click',  function(){ if(!__hasSearched) return; $('page').value=Math.max(1, Number($('page').value||1)+1); (__trackMode?renderTracks:renderAlbums)(); });
+    $('go').addEventListener('click',    function(){ if(!__hasSearched) return; $('page').value=Math.max(1, Number($('page').value||1));   (__trackMode?renderTracks:renderAlbums)(); });
+
+    // initial
+    setEmpty(); setPagerEnabled(false);
+  })();
+  </script>
+</body>
+</html>
