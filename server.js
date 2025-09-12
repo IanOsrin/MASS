@@ -1,4 +1,4 @@
-// server.js — single-layout API (API_Album_Songs) with DDEX status fallback
+// server.js — search de-dupe, decade filter, and real tracks endpoint (FM base autodetect)
 require('dotenv').config();
 
 const express = require('express');
@@ -9,355 +9,358 @@ const morgan = (() => { try { return require('morgan'); } catch { return () => (
 const cors   = (() => { try { return require('cors');   } catch { return () => (_req,_res,next)=>next(); } })();
 
 const app  = express();
+app.use(morgan('dev'));
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/public', express.static(path.join(process.cwd(), 'public')));
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = (process.env.HOST || '127.0.0.1').trim();
 const trimQ = v => String(v ?? '').replace(/^\"(.*)\"$|^'(.*)'$/, '$1$2').trim();
 
-const FM_BASE = trimQ(process.env.FM_HOST || process.env.FM_SERVER || '');
-const FM_DB   = trimQ(process.env.FM_DB);
-const FM_USER = trimQ(process.env.FM_USER);
-const FM_PASS = trimQ(process.env.FM_PASS);
+const FM_HOST_RAW = trimQ(process.env.FM_HOST || process.env.FM_SERVER || '');
+const FM_DB       = trimQ(process.env.FM_DB);
+const FM_USER     = trimQ(process.env.FM_USER);
+const FM_PASS     = trimQ(process.env.FM_PASS);
+const FM_LAYOUT   = trimQ(process.env.FM_LAYOUT || 'API_Album_Songs');
 
-const FM_LAYOUT = trimQ(process.env.FM_LAYOUT || 'API_Album_Songs');
-
-// Albums
+// Album-level field names (override via env to match your layout)
 const F_ALBUM_REF    = trimQ(process.env.F_ALBUM_REF    || 'Album Catalogue Number');
 const F_ALBUM_TITLE  = trimQ(process.env.F_ALBUM_TITLE  || 'Tape Files::Album_Title');
 const F_ALBUM_ARTIST = trimQ(process.env.F_ALBUM_ARTIST || 'Tape Files::Album Artist');
-const F_FAULTY_HINT  = trimQ(process.env.F_FAULTY_HINT  || 'faulty');
 const F_DDEX_STATUS  = trimQ(process.env.F_DDEX_STATUS  || 'DDEX Status');
+const F_YEAR_RELEASE = trimQ(process.env.F_YEAR_RELEASE || 'Tape Files::Year of Release');
 
-// Tracks
-const F_TRACK_NAME   = trimQ(process.env.F_TRACK_NAME   || 'Trackname'); // also 'Track Name'
-const F_TRACK_ARTIST = trimQ(process.env.F_TRACK_ARTIST || 'Track Artist');
-const F_AUDIO        = trimQ(process.env.F_AUDIO        || 'Audio File');
-const F_ISRC         = trimQ(process.env.F_ISRC         || 'ISRC');
-const F_LANG         = trimQ(process.env.F_LANG         || 'Language Code');
-const F_PRODUCER     = trimQ(process.env.F_PRODUCER     || 'Producer');
-const F_COMP1        = trimQ(process.env.F_COMP1        || 'Composer 1');
-const F_COMP2        = trimQ(process.env.F_COMP2        || 'Composer 2');
-const F_COMP3        = trimQ(process.env.F_COMP3        || 'Composer 3');
-const F_ORIG_DATE    = trimQ(process.env.F_ORIG_DATE    || 'Original Release date');
+// Track-level field names (override any as needed)
+const F_TRACK_TITLE   = trimQ(process.env.F_TRACK_TITLE   || 'Track Name');
+const F_TRACK_ARTIST  = trimQ(process.env.F_TRACK_ARTIST  || 'Track Artist');
+const F_TRACK_NUMBER  = trimQ(process.env.F_TRACK_NUMBER  || 'Track Number');
+const F_AUDIO_FIELD   = trimQ(process.env.F_AUDIO_FIELD   || 'Audio File');
+const F_ISRC          = trimQ(process.env.F_ISRC          || 'ISRC');
+const F_LANG          = trimQ(process.env.F_LANG          || 'Language Code');
+const F_PRODUCER      = trimQ(process.env.F_PRODUCER      || 'Producer');
+const F_COMPOSER1     = trimQ(process.env.F_COMPOSER1     || 'Composer');
+const F_COMPOSER2     = trimQ(process.env.F_COMPOSER2     || 'Composer 2');
+const F_COMPOSER3     = trimQ(process.env.F_COMPOSER3     || 'Composer 3');
+const F_ORIG_REL_DATE = trimQ(process.env.F_ORIG_REL_DATE || 'Original Release date');
+const F_TRACK_DDEX    = trimQ(process.env.F_TRACK_DDEX    || 'DDEX Status'); // some layouts store per-track too
+const F_DURATION      = trimQ(process.env.F_DURATION      || 'Duration (s)'); // seconds; we’ll fall back to “Duration”
 
-const ALT_ALBUM_TITLE   = 'Album Title';
-const ALT_ALBUM_ARTIST  = 'Album Artist';
-const ALT_TRACK_NAME    = 'Track Name';
-
-const PAGE_SIZE      = Number(process.env.PAGE_SIZE || 15);
-const FETCH_LIMIT    = Number(process.env.FETCH_LIMIT || 1200);
-const TRACK_LIMIT    = Number(process.env.TRACK_LIMIT || 500);
-
-const TOKEN_TTL_MS   = Number(process.env.FM_TOKEN_TTL_MS || 13*60*1000);
-
-app.use(cors());
-app.use(express.json());
-app.use(morgan('dev'));
-app.use(express.static(path.join(process.cwd(), 'public')));
-
-// Config check
-if (!/^https?:\/\//i.test(FM_BASE)) {
-  console.error('[CONFIG] Set FM_SERVER or FM_HOST, e.g. https://digitalcupboard.app');
-  process.exit(1);
-}
-if (!FM_DB || !FM_USER || !FM_PASS) {
-  console.error('[CONFIG] Missing FM_DB, FM_USER or FM_PASS');
-  process.exit(1);
-}
-
-const baseDB = () => `${FM_BASE.replace(/\/+$/,'')}/fmi/data/vLatest/databases/${encodeURIComponent(FM_DB)}`;
-
-let _token = null, _lastLogin = 0;
-
-async function fmLogin(force=false) {
-  if (!force && _token && (Date.now() - _lastLogin) < TOKEN_TTL_MS) return _token;
-  const r = await axios.post(`${baseDB()}/sessions`, {}, { auth: { username: FM_USER, password: FM_PASS } });
-  _token = r?.data?.response?.token;
-  _lastLogin = Date.now();
-  if (!_token) throw new Error('No FileMaker token');
-  return _token;
-}
-
-async function fmRequest(method, path, { data, params, headers } = {}) {
-  const cfg = (t) => ({
-    method, url: `${baseDB()}${path}`, data, params,
-    headers: { Authorization: `Bearer ${t}`, ...(headers||{}) },
-    validateStatus: s => (s>=200 && s<300) || s===401
-  });
-  let t = await fmLogin();
-  let r = await axios.request(cfg(t));
-  if (r.status === 401) { t = await fmLogin(true); r = await axios.request(cfg(t)); }
-  if (r.status>=200 && r.status<300) return r;
-  const e = new Error(`FM ${method} ${path} failed: ${r.status}`);
-  e.response = r;
-  throw e;
-}
-
-const fmMatch = (mode,val) => {
-  const s = String(val||'').trim(); if (!s) return '';
-  return (String(mode||'contains').toLowerCase()==='equals') ? `==${s}` : `*${s}*`;
+// ---------- helpers ----------
+const isHtml = (x) => typeof x === 'string' && /<(?:!DOCTYPE|html|body|head)/i.test(x);
+const wrapErr = (err, fallback='Request failed') => {
+  const payload = err?.response?.data ?? err?.message ?? String(err);
+  if (isHtml(payload)) return { error: fallback, hint: "Base URL isn't the FileMaker Data API. Autodetect will try alternatives." };
+  return { error: fallback, detail: payload };
 };
-const boolish = (v) => {
-  if (typeof v==='boolean') return v;
-  if (v==null) return false;
-  const s = String(v).trim().toLowerCase();
-  return s==='1'||s==='true'||s==='t'||s==='yes'||s==='y';
-};
-function fmErrInfo(err) {
-  const status = err?.response?.status;
-  const data   = err?.response?.data;
-  const code   = data?.messages?.[0]?.code;
-  const msg    = data?.messages?.[0]?.message;
-  return { status, code, message: msg, raw: data };
+
+const must = (v,n) => { if(!v) throw new Error(`Missing env ${n}`); return v; };
+must(FM_HOST_RAW,'FM_HOST (or FM_SERVER)'); must(FM_DB,'FM_DB'); must(FM_USER,'FM_USER'); must(FM_PASS,'FM_PASS'); must(FM_LAYOUT,'FM_LAYOUT');
+
+// build candidate Data API bases
+function buildCandidates(root) {
+  let r = String(root).replace(/\/+$/,'');
+  if (!/^https?:\/\//i.test(r)) throw new Error("FM_HOST must start with http(s)://");
+  const hasData = /\/fmi\/data\//i.test(r);
+  const versions = ['vLatest','v2','v1'];
+  const list = [];
+  if (hasData) {
+    list.push(r);
+    if (/\/fmi\/data$/i.test(r)) versions.forEach(v => list.push(`${r}/${v}`));
+  } else {
+    versions.forEach(v => list.push(`${r}/fmi/data/${v}`));
+  }
+  return Array.from(new Set(list));
 }
 
-// Build album queries
-function buildAlbumQuery({ artist, album, ref, mode }) {
-  const q = {};
-  if (artist) q[F_ALBUM_ARTIST] = fmMatch(mode, artist);
-  if (album)  q[F_ALBUM_TITLE]  = fmMatch(mode, album);
-  if (ref)    q[F_ALBUM_REF]    = fmMatch(mode, ref);
-  if (!artist && !album && !ref) q[F_ALBUM_REF] = '*';
-  return q;
-}
-function buildAlbumQueryAlt({ artist, album, ref, mode }) {
-  const q = {};
-  if (artist) q[ALT_ALBUM_ARTIST] = fmMatch(mode, artist);
-  if (album)  q[ALT_ALBUM_TITLE]  = fmMatch(mode, album);
-  if (ref)    q[F_ALBUM_REF]      = fmMatch(mode, ref);
-  if (!artist && !album && !ref) q[F_ALBUM_REF] = '*';
-  return q;
+let RESOLVED_BASE = null;
+
+async function tryLogin(base) {
+  const url = `${base.replace(/\/+$/,'')}/databases/${encodeURIComponent(FM_DB)}/sessions`;
+  const r = await axios.post(url, {}, { auth: { username: FM_USER, password: FM_PASS }, validateStatus: () => true });
+  if (r.status >= 200 && r.status < 300 && r?.data?.response?.token) return r.data.response.token;
+  if (isHtml(r?.data) || r.status === 404) throw Object.assign(new Error('Wrong base'), { wrongBase: true, status: r.status });
+  throw Object.assign(new Error('Data API error'), { data: r.data, status: r.status });
 }
 
-// Robust field fallback helper
-function pick(obj, keys) {
-  for (const k of keys) {
-    if (obj && Object.prototype.hasOwnProperty.call(obj, k)) {
-      const v = obj[k];
-      if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+async function resolveBaseAndLogin() {
+  if (RESOLVED_BASE) {
+    const token = await tryLogin(RESOLVED_BASE);
+    return { base: RESOLVED_BASE, token };
+  }
+  const candidates = buildCandidates(FM_HOST_RAW);
+  let lastErr;
+  for (const cand of candidates) {
+    try {
+      const token = await tryLogin(cand);
+      RESOLVED_BASE = cand;
+      return { base: cand, token };
+    } catch (e) {
+      lastErr = e;
+      if (e.wrongBase) continue;
+      throw e;
     }
   }
-  return '';
+  throw Object.assign(new Error('Could not find a valid Data API base from FM_HOST'), { detail: lastErr?.message || lastErr });
 }
 
-// Map result rows → distinct albums
-function rowsToAlbumMap(rows) {
-  const map = new Map();
-  for (const rec of rows) {
-    const fd = rec.fieldData || {};
-    const key = pick(fd, [F_ALBUM_REF, 'Album Catalogue Number']);
-    if (!key) continue;
-    if (!map.has(key)) {
-      map.set(key, {
-        albumCatalogueNumber: key,
-        albumTitle:  pick(fd, [F_ALBUM_TITLE, 'Album Title']),
-        albumArtist: pick(fd, [F_ALBUM_ARTIST, 'Album Artist']),
-        // DDEX with generous fallbacks (including related-field style)
-        ddexStatus:  pick(fd, [F_DDEX_STATUS, 'DDEX_Status', 'DDEX Status', 'DDEX', 'Tape Files::DDEX Status', 'Tape Files::DDEX_Status']),
-        faulty: boolish(pick(fd, [F_FAULTY_HINT]))
-      });
-    }
+async function fmFind(token, base, layout, queryObj, opts={}) {
+  const url = `${base}/databases/${encodeURIComponent(FM_DB)}/layouts/${encodeURIComponent(layout)}/_find`;
+  const body = { query: [queryObj], ...opts };
+  const r = await axios.post(url, body, { headers: { Authorization: `Bearer ${token}` } });
+  return r.data?.response?.data || [];
+}
+async function fmList(token, base, layout, offset=1, limit=20) {
+  const url = `${base}/databases/${encodeURIComponent(FM_DB)}/layouts/${encodeURIComponent(layout)}/records?_offset=${offset}&_limit=${limit}`;
+  const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+  return r.data?.response?.data || [];
+}
+async function fmLogout(token, base) {
+  const url = `${base}/databases/${encodeURIComponent(FM_DB)}/sessions/${encodeURIComponent(token)}`;
+  try { await axios.delete(url, { headers: { Authorization: `Bearer ${token}` } }); } catch {}
+}
+
+function fmContains(val) { return `*${String(val).trim()}*`; }
+function parseYear(v) { const m = String(v ?? '').match(/(?:^|[^0-9])((19|20)\d{2})(?!\d)/); return m ? Number(m[1]) : null; }
+
+// prefer env field; if empty, try common alternates
+function pullYearField(f) {
+  const candidates = [
+    F_YEAR_RELEASE,
+    'Year of Release',
+    'Tape Files::Year of Release',
+    'Tape Files::Release Year',
+    'Release Year',
+  ];
+  for (const key of candidates) {
+    if (key in f && f[key] != null && String(f[key]).trim() !== '') return f[key];
   }
-  return map;
+  return null;
 }
 
-async function searchDistinctAlbumsPage(page, queryObj) {
-  const r = await fmRequest('post', `/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
-    data: { query: [queryObj], limit: FETCH_LIMIT, offset: 1 }
-  });
-  const rows = r.data?.response?.data || [];
-  const albumsAll = Array.from(rowsToAlbumMap(rows).values());
-  const foundCount = albumsAll.length;
-  const start = (Math.max(1, Number(page)) - 1) * PAGE_SIZE;
-  const pageItems = albumsAll.slice(start, start + PAGE_SIZE);
-  return { albums: pageItems, foundCount };
+function mapAlbum(rec) {
+  const f = rec.fieldData || {};
+  const yraw = pullYearField(f);
+  return {
+    albumCatalogueNumber: f[F_ALBUM_REF],
+    albumTitle: f[F_ALBUM_TITLE],
+    albumArtist: f[F_ALBUM_ARTIST],
+    ddexStatus: f[F_DDEX_STATUS] || '—',
+    yearOfRelease: parseYear(yraw),
+    faulty: !!(f.faulty || f.Faulty || f['Audio Faulty']),
+  };
 }
 
-// Probe (also fetch canonical DDEX if missing)
-async function enrichAlbum(albumRef) {
+function uniqByAlbum(albums) {
+  const seen = new Set(); const out = [];
+  for (const a of albums) {
+    if (!a || !a.albumCatalogueNumber) continue;
+    if (seen.has(a.albumCatalogueNumber)) continue;
+    seen.add(a.albumCatalogueNumber); out.push(a);
+  }
+  return out;
+}
+
+function sampleN(arr, n) {
+  if (arr.length <= n) return arr.slice();
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a.slice(0, n);
+}
+function decadeToRange(label) {
+  const t = String(label||'').toLowerCase();
+  if (t.includes('1950')) return { start: 1950, end: 1959 };
+  if (t.includes('1960')) return { start: 1960, end: 1969 };
+  if (t.includes('1970')) return { start: 1970, end: 1979 };
+  if (t.includes('1980')) return { start: 1980, end: 1989 };
+  if (t.includes('1990')) return { start: 1990, end: 1999 };
+  if (t.includes('2000')) return { start: 2000, end: 2009 };
+  if (t.includes('2010')) return { start: 2010, end: 2019 };
+  if (t.includes('modern')) return { start: 2020, end: 2099 };
+  return null;
+}
+
+// ---------- Health ----------
+app.get('/api/health', async (_req, res) => {
+  let token, base;
   try {
-    const r = await fmRequest('post', `/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
-      data: { query: [ { [F_ALBUM_REF]: `==${albumRef}` } ], limit: 1, offset: 1 }
-    });
-    const row = (r.data?.response?.data || [])[0];
-    if (!row) return { faulty: true, ddexStatus: '' };
-    const fd = row.fieldData || {};
-
-    const ddexStatus = pick(fd, [F_DDEX_STATUS, 'DDEX_Status', 'DDEX Status', 'DDEX', 'Tape Files::DDEX Status', 'Tape Files::DDEX_Status']);
-    const audioUrl = pick(fd, [F_AUDIO]);
-
-    if (!audioUrl) return { faulty: true, ddexStatus };
-
-    const probe = await axios.get(audioUrl, {
-      headers: { Range: 'bytes=0-0' },
-      validateStatus: s => s===200 || s===206
-    });
-    const ok = (probe.status === 200 || probe.status === 206);
-    return { faulty: !ok, ddexStatus };
-  } catch (_e) {
-    return { faulty: true, ddexStatus: '' };
+    const r = await resolveBaseAndLogin();
+    base = r.base; token = r.token;
+    res.json({ ok: true, base, db: FM_DB, layout: FM_LAYOUT });
+  } catch (err) {
+    res.status(500).json(wrapErr(err, 'Health check failed'));
+  } finally {
+    if (token && base) await fmLogout(token, base);
   }
-}
+});
 
-/* ================= ROUTES ================= */
-
-app.get('/health', (_req, res) => res.json({ ok: true }));
-
+// ---------- Albums search (AND across fields; de-dup) ----------
 app.get('/api/albums', async (req, res) => {
-  const page = Math.max(1, Number(req.query.page || 1));
-  const mode = String(req.query.mode || 'contains');
-
-  const primary = buildAlbumQuery({
-    artist: req.query.artist || '', album: req.query.album || '', ref: req.query.ref || '', mode
-  });
-
+  const { artist='', album='', ref='', page=1, mode='contains' } = req.query;
+  let token, base;
   try {
-    const out = await searchDistinctAlbumsPage(page, primary);
-    const albums = await Promise.all(out.albums.map(async a => {
-      const { faulty, ddexStatus } = await enrichAlbum(a.albumCatalogueNumber);
-      return { ...a, faulty, ddexStatus: a.ddexStatus || ddexStatus || '' };
-    }));
-    return res.json({ page, pageSize: PAGE_SIZE, albums, foundCount: out.foundCount });
-  } catch (err) {
-    const info = fmErrInfo(err);
-    if (info.code === '102') {
-      try {
-        const alt = buildAlbumQueryAlt({
-          artist: req.query.artist || '', album: req.query.album || '', ref: req.query.ref || '', mode
-        });
-        const out2 = await searchDistinctAlbumsPage(page, alt);
-        const albums2 = await Promise.all(out2.albums.map(async a => {
-          const { faulty, ddexStatus } = await enrichAlbum(a.albumCatalogueNumber);
-          return { ...a, faulty, ddexStatus: a.ddexStatus || ddexStatus || '' };
-        }));
-        return res.json({ page, pageSize: PAGE_SIZE, albums: albums2, foundCount: out2.foundCount });
-      } catch (err2) {
-        return res.status(500).json({ error: 'Album search failed (alt labels)', detail: fmErrInfo(err2) });
-      }
+    const r = await resolveBaseAndLogin();
+    base = r.base; token = r.token;
+
+    const p = Math.max(1, Number(page) || 1);
+    const pageSize = 20;
+
+    const terms = {};
+    if (artist) terms[F_ALBUM_ARTIST] = (mode === 'equals') ? String(artist).trim() : fmContains(artist);
+    if (album)  terms[F_ALBUM_TITLE]  = (mode === 'equals') ? String(album).trim()  : fmContains(album);
+    if (ref)    terms[F_ALBUM_REF]    = (mode === 'equals') ? String(ref).trim()    : fmContains(ref);
+
+    let records = [];
+    if (Object.keys(terms).length) {
+      records = await fmFind(token, base, FM_LAYOUT, terms, { offset: 1, limit: pageSize });
+    } else {
+      const offset = ((p - 1) * pageSize) + 1;
+      records = await fmList(token, base, FM_LAYOUT, offset, pageSize);
     }
-    return res.status(500).json({ error: 'Album search failed', detail: info });
+
+    let albums = (records||[]).map(mapAlbum).filter(a => a.albumCatalogueNumber);
+    albums = uniqByAlbum(albums);
+
+    res.json({ page: Number(p), albums, foundCount: albums.length });
+  } catch (err) {
+    res.status(500).json(wrapErr(err, 'Album search failed'));
+  } finally {
+    if (token && base) await fmLogout(token, base);
   }
 });
 
+// ---------- Tracks for album (real implementation) ----------
 app.get('/api/albums/:ref/tracks', async (req, res) => {
+  const albumRef = String(req.params.ref || '').trim();
+  if (!albumRef) return res.json({ album: '', trackCount: 0, tracks: [] });
+
+  let token, base;
   try {
-    const ref = String(req.params.ref || '').trim();
-    if (!ref) return res.json({ trackCount: 0, tracks: [] });
+    const r = await resolveBaseAndLogin();
+    base = r.base; token = r.token;
 
-    const r = await fmRequest('post', `/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
-      data: { query: [{ [F_ALBUM_REF]: `==${ref}` }], limit: TRACK_LIMIT, offset: 1 }
-    });
-    const rows = r.data?.response?.data || [];
+    // Find all rows for this album (layout is per-track rows)
+    const records = await fmFind(token, base, FM_LAYOUT, { [F_ALBUM_REF]: albumRef }, { offset: 1, limit: 999 });
 
-    const tracks = rows.map(rec => {
-      const fd = rec.fieldData || {};
-
-      const composerPrimary =
-        fd[F_COMP1] ?? fd['Composer'] ?? fd['Composer1'] ?? fd['Composer_1'] ?? '';
-
-      const composerSecond =
-        fd[F_COMP2] ?? fd['Composer 2'] ?? fd['Composer2'] ?? fd['Composer_2'] ?? '';
-
-      const composerThird =
-        fd[F_COMP3] ?? fd['Composer 3'] ?? fd['Composer3'] ?? fd['Composer_3'] ?? '';
-
-      return {
-        trackName: fd[F_TRACK_NAME] || fd['Track Name'] || '',
-        trackArtist: fd[F_TRACK_ARTIST] || '',
-        audioSrc: fd[F_AUDIO] || '',
-        isrc: fd[F_ISRC] || '',
-        languageCode: fd[F_LANG] || '',
-        producer: fd[F_PRODUCER] || '',
-        composer: composerPrimary,
-        composer2: composerSecond,
-        composer3: composerThird,
-        originalReleaseDate: fd[F_ORIG_DATE] || '',
-        duration: ''
-      };
-    });
-
-    res.json({ trackCount: tracks.length, tracks });
-  } catch (err) {
-    res.status(500).json({ error: 'Track list failed', detail: fmErrInfo(err) });
-  }
-});
-
-app.get('/api/tracks', async (req, res) => {
-  const page  = Math.max(1, Number(req.query.page || 1));
-  const mode  = String(req.query.mode || 'contains').trim().toLowerCase();
-  const track = String(req.query.track || '').trim();
-
-  if (!track) return res.json({ page, pageSize: PAGE_SIZE, albums: [], foundCount: 0 });
-
-  const qPrimary = { [F_TRACK_NAME]: fmMatch(mode, track) };
-
-  try {
-    const out = await searchDistinctAlbumsPage(page, qPrimary);
-    const albums = await Promise.all(out.albums.map(async a => {
-      const { faulty, ddexStatus } = await enrichAlbum(a.albumCatalogueNumber);
-      return { ...a, faulty, ddexStatus: a.ddexStatus || ddexStatus || '' };
-    }));
-    return res.json({ page, pageSize: PAGE_SIZE, albums, foundCount: out.foundCount });
-  } catch (err) {
-    const info = fmErrInfo(err);
-    if (info.code === '102') {
-      try {
-        const qAlt = { [ALT_TRACK_NAME]: fmMatch(mode, track) };
-        const out2 = await searchDistinctAlbumsPage(page, qAlt);
-        const albums2 = await Promise.all(out2.albums.map(async a => {
-          const { faulty, ddexStatus } = await enrichAlbum(a.albumCatalogueNumber);
-          return { ...a, faulty, ddexStatus: a.ddexStatus || ddexStatus || '' };
-        }));
-        return res.json({ page, pageSize: PAGE_SIZE, albums: albums2, foundCount: out2.foundCount });
-      } catch (err2) {
-        return res.status(500).json({ error: 'Track search failed (alt label)', detail: fmErrInfo(err2) });
+    // Flexible getters for fields with common alternatives
+    const getFirst = (f, keys) => {
+      for (const k of keys) if (k in f && f[k] != null && String(f[k]).trim() !== '') return f[k];
+      return '';
+    };
+    const parseSeconds = (v) => {
+      const s = String(v ?? '').trim();
+      if (!s) return NaN;
+      // already seconds?
+      if (/^\d+(\.\d+)?$/.test(s)) return Number(s);
+      // mm:ss or hh:mm:ss
+      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(s)) {
+        const parts = s.split(':').map(Number);
+        return parts.length === 3 ? (parts[0]*3600 + parts[1]*60 + parts[2]) : (parts[0]*60 + parts[1]);
       }
-    }
-    return res.status(500).json({ error: 'Track search failed', detail: info });
-  }
-});
-
-app.get('/api/streamByRecord/:recordId', async (req, res) => {
-  const recordId = String(req.params.recordId || '').trim();
-  const redirect = String(req.query.redirect || '') === '1';
-  const debug    = String(req.query.debug || '') === '1';
-
-  if (!recordId) return res.status(400).json({ error: 'Missing recordId' });
-
-  try {
-    const r = await fmRequest('get', `/layouts/${encodeURIComponent(FM_LAYOUT)}/records/${encodeURIComponent(recordId)}`);
-    const data = r.data?.response?.data?.[0];
-    if (!data) return res.status(404).json({ error: 'Record not found' });
-
-    const fd = data.fieldData || {};
-    const audioUrl = fd[F_AUDIO];
-    if (!audioUrl) return res.status(404).json({ error: `Field "${F_AUDIO}" has no container URL` });
-
-    if (redirect) return res.redirect(audioUrl);
-
-    const out = {
-      ok: true, host: FM_BASE, db: FM_DB, layout: FM_LAYOUT,
-      audioField: F_AUDIO, hasToken: true,
-      recordId, play: audioUrl
+      // 000:03:59.717 or similar
+      const m = s.match(/(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/);
+      if (m) return Number(m[1])*3600 + Number(m[2])*60 + Number(m[3]);
+      return NaN;
     };
 
-    if (debug) {
-      try {
-        const probe = await axios.get(audioUrl, { headers: { Range: 'bytes=0-0' }, validateStatus: s => s===200||s===206 });
-        out.probeStatus = probe.status;
-      } catch (e) { out.probeError = String(e?.response?.data || e?.message || e); }
-    }
+    const tracks = (records||[]).map(rec => {
+      const f = rec.fieldData || {};
 
-    res.json(out);
+      const title   = getFirst(f, [F_TRACK_TITLE, 'Track Title', 'Song Files::Track Name', 'TrackName', 'Title']);
+      const artist  = getFirst(f, [F_TRACK_ARTIST, 'Song Files::Track Artist', 'Artist', 'Performer']);
+      const number  = Number(getFirst(f, [F_TRACK_NUMBER, 'Index', 'TrackIndex', 'Song Index'])) || null;
+
+      const audio   = getFirst(f, [F_AUDIO_FIELD, 'Audio', 'Stream URL', 'StreamUrl', 'Container URL', 'containerUrl', 'Audio URL']);
+      const isrc    = getFirst(f, [F_ISRC, 'Song Files::ISRC', 'ISRC Code']);
+      const lang    = getFirst(f, [F_LANG, 'Language', 'Lang']);
+      const prod    = getFirst(f, [F_PRODUCER, 'Producer 1', 'Song Files::Producer']);
+      const comp1   = getFirst(f, [F_COMPOSER1, 'Composer 1', 'Song Files::Composer']);
+      const comp2   = getFirst(f, [F_COMPOSER2]);
+      const comp3   = getFirst(f, [F_COMPOSER3]);
+      const odate   = getFirst(f, [F_ORIG_REL_DATE, 'Original Release Date', 'Release Date']);
+      const tddex   = getFirst(f, [F_TRACK_DDEX, F_DDEX_STATUS]);
+      let duration  = getFirst(f, [F_DURATION, 'Track Duration', 'Duration', 'Media Duration (s)']);
+
+      const dur = parseSeconds(duration);
+
+      // normalize to the keys your front-end expects
+      return {
+        trackName: title || '(Untitled)',
+        trackArtist: artist || '',
+        audioSrc: (audio || '').toString().trim(),
+        duration: isNaN(dur) ? null : Number(dur),
+        isrc, languageCode: lang,
+        producer: prod, composer: comp1, composer2: comp2, composer3: comp3,
+        originalReleaseDate: odate,
+        ddexStatus: tddex || '',
+        trackNumber: number
+      };
+    })
+    // keep only those with at least a title or audio
+    .filter(t => t.trackName || t.audioSrc)
+    // sort by track number if present, else as-is
+    .sort((a,b) => {
+      if (a.trackNumber == null && b.trackNumber == null) return 0;
+      if (a.trackNumber == null) return 1;
+      if (b.trackNumber == null) return -1;
+      return a.trackNumber - b.trackNumber;
+    });
+
+    res.json({ album: albumRef, trackCount: tracks.length, tracks });
   } catch (err) {
-    res.status(502).json({ error: 'Upstream error on probe', detail: fmErrInfo(err) });
+    res.status(500).json(wrapErr(err, 'Track fetch failed'));
+  } finally {
+    if (token && base) await fmLogout(token, base);
   }
 });
 
+// ---------- Track search (placeholder to keep UI contract) ----------
+app.get('/api/tracks', async (_req, res) => {
+  res.json({ albums: [], foundCount: 0 });
+});
+
+// ---------- Explore: 15 random by decade ----------
+app.get('/api/explore/decade', async (req, res) => {
+  const { label='', limit=15 } = req.query;
+  const range = decadeToRange(label);
+  if (!range) return res.json({ albums: [] });
+
+  let token, base;
+  try {
+    const r = await resolveBaseAndLogin();
+    base = r.base; token = r.token;
+
+    const batchSize = 500;
+    let offset = 1, all = [];
+    while (all.length < 1500) {
+      const chunk = await fmList(token, base, FM_LAYOUT, offset, batchSize);
+      if (!chunk.length) break;
+      all = all.concat(chunk);
+      if (chunk.length < batchSize) break;
+      offset += batchSize;
+    }
+
+    let albums = all.map(mapAlbum).filter(a => a.albumCatalogueNumber);
+    albums = uniqByAlbum(albums);
+
+    const filtered = albums.filter(a => a.yearOfRelease && a.yearOfRelease >= range.start && a.yearOfRelease <= range.end);
+    const pick = sampleN(filtered, Math.max(1, Math.min(100, Number(limit)||15)));
+
+    res.json({ label, start: range.start, end: range.end, count: pick.length, albums: pick });
+  } catch (err) {
+    res.status(500).json(wrapErr(err, 'Decade explore failed'));
+  } finally {
+    if (token && base) await fmLogout(token, base);
+  }
+});
+
+// ---------- Root ----------
 app.get('/', (_req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
 });
 
 app.listen(PORT, HOST, () => {
-  console.log(`[GalloCMS] Up on http://${HOST}:${PORT}`);
+  console.log(`[MASS] http://${HOST}:${PORT}`);
+  console.log(`[MASS] FM_HOST(raw)=${FM_HOST_RAW}`);
 });
