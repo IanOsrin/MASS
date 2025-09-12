@@ -5,31 +5,59 @@
   <title>MASS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <style>
-    :root { --ink:#0d1b2a; --paper:#e6f0fa; --card:#f9fbff; --line:#a3bce2; --accent:#1a4dad; }
+    :root { --ink:#0d1b2a; --paper:#e6f0fa; --card:#f9fbff; --line:#a3bce2; --accent:#1a4dad; --accent-2:#16a34a; }
     * { box-sizing: border-box; }
     body { font-family: system-ui, Arial, sans-serif; margin:0; padding:20px; background:var(--paper); color:var(--ink); min-height:100vh; }
-    .container { width:100%; max-width:900px; margin:0 auto; text-align:center; }
+    .container { width:100%; max-width:960px; margin:0 auto; }
 
     .app-title {
       display:flex; align-items:center; justify-content:center;
-      font-weight:900; font-size:56px; font-style:italic; margin:20px 0;
+      font-weight:900; font-size:56px; font-style:italic; margin:20px 0 10px;
       background: linear-gradient(45deg, #1a4dad, #00b4d8, #90e0ef);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
       background-clip:text; color: transparent;
+      text-align:center;
     }
 
+    /* Layout rows + form controls */
     .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; margin:10px 0; }
     input, select { padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); text-align:center; }
     button { background:var(--accent); color:#fff; border:0; padding:6px 12px; border-radius:8px; cursor:pointer; font-weight:600; }
     button:disabled { opacity:.55; cursor:not-allowed; }
     button:hover { background:#153a82; }
-    .meta { font-size:12px; opacity:.75; text-align:center; }
+    .meta { font-size:12px; opacity:.8; text-align:center; }
     .error { color:#c00; text-align:center; }
+
+    /* Explore Section Card */
+    .section-card{
+      background: var(--card);
+      border:2px solid var(--line);
+      border-radius:14px;
+      padding:14px;
+      margin:18px 0;
+      box-shadow: 0 6px 14px rgba(26,77,173,0.06);
+    }
+    .section-title{
+      display:flex; align-items:center; gap:8px; justify-content:center;
+      font-weight:800; font-size:20px; margin:2px 0 4px; text-transform:uppercase; letter-spacing:.04em;
+    }
+    .section-note{
+      text-align:center; font-size:13px; opacity:.85; margin-bottom:8px;
+    }
+    .explore-panel { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:6px; }
+    .chip { background:#fff; color:var(--ink); border:1px solid var(--line); padding:8px 12px; border-radius:999px; font-weight:600; cursor:pointer; }
+    .chip:hover { border-color: var(--accent); }
+
+    .subpanel { display:none; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:10px; }
+    .tag { background:#fff; color:var(--ink); border:1px solid var(--line); padding:8px 12px; border-radius:10px; cursor:pointer; }
+    .tag:hover { border-color: var(--accent); }
+    .subheading { width:100%; font-weight:700; margin-top:6px; opacity:.85; text-align:center; }
+
+    /* Albums */
     .album { border:1px solid var(--line); border-radius:10px; padding:8px; margin:8px 0; background:var(--card); transition:border-color .2s, border-width .2s; }
-    .album-head { display:flex; align-items:center; justify-content:center; gap:10px; }
-    .album-title { font-size:18px; font-weight:700; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--ink); text-align:center; }
+    .album-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .album-title { font-size:18px; font-weight:700; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--ink); text-align:left; }
     .album-controls { display:flex; flex-direction:column; align-items:center; gap:6px; }
-    .ddex { font-size:12px; opacity:.8; }
     .cat { margin-top:4px; text-align:center; }
     .tracks { display:none; margin-top:6px; padding-top:6px; border-top:1px dashed var(--line); text-align:left; }
     .track { padding:6px 0; border-bottom:1px dashed var(--line); }
@@ -42,32 +70,34 @@
     .kv div:nth-child(odd) { opacity:.7; }
     .empty { text-align:center; padding:24px; border:1px dashed var(--line); border-radius:12px; background:#fff; }
 
-    /* Explore button in search row */
-    .explore-btn {
-      background:#16a34a;
-      border-radius:8px;
-      padding:6px 12px;
-      font-weight:700;
+    /* Pagination */
+    .pager { display:flex; gap:8px; align-items:center; justify-content:center; margin:8px 0 0; }
+
+    /* Thumbnail */
+    .thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;border:1px solid var(--line);background:#fff;flex:0 0 auto;cursor:pointer}
+    .thumb.hidden{display:none}
+    .head-core{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+
+    /* Image modal (half-screen) */
+    .modal {
+      position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+      background: rgba(0,0,0,.6); z-index: 9999; padding: 2vw;
     }
-    .explore-btn:hover { background:#15803d; }
-
-    .explore-panel { display:none; gap:8px; margin-top:5px; }
-    .chip { background:#fff; color:var(--ink); border:1px solid var(--line); padding:8px 12px; border-radius:999px; font-weight:600; cursor:pointer; }
-    .chip:hover { border-color: var(--accent); }
-
-    .subpanel { display:none; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:6px; }
-    .tag { background:#fff; color:var(--ink); border:1px solid var(--line); padding:8px 12px; border-radius:10px; cursor:pointer; }
-    .tag:hover { border-color: var(--accent); }
-    .subheading { width:100%; font-weight:700; margin-top:6px; opacity:.8; }
+    .modal.open { display: flex; }
+    .modal img {
+      width: 50vw; height: auto; max-height: 90vh;
+      border-radius: 12px; background:#fff; border: 2px solid #fff;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    .modal:focus { outline: none; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="app-title">MASS</div>
 
-    <!-- Search row with Explore on the left -->
-    <form id="searchForm" class="row" autocomplete="off">
-      <button id="exploreToggle" class="explore-btn" type="button">Explore</button>
+    <!-- Search row -->
+    <form id="searchForm" class="row" autocomplete="off" aria-label="Search">
       <input id="artist" placeholder="Artist" />
       <input id="album"  placeholder="Album Title" />
       <input id="ref"    placeholder="Reference Catalogue Number" />
@@ -77,45 +107,55 @@
       <button id="clear"  type="button">Clear</button>
     </form>
 
-    <!-- Explore panel appears just below the search row -->
-    <div id="explorePanel" class="row explore-panel" aria-hidden="true">
-      <button type="button" class="chip" id="chipGenre">Genre</button>
-      <button type="button" class="chip" id="chipMood">Mood</button>
-      <button type="button" class="chip" id="chipDecade">Decade</button>
-    </div>
+    <!-- Explore card (distinct section) -->
+    <section id="exploreCard" class="section-card" aria-label="Explore">
+      <div class="section-title">Explore</div>
+      <div class="section-note">
+        This section will generate <strong>random selections</strong> based on quick criteria like
+        <em>mood</em> or <em>decade</em>. Click a chip below, then pick an option to see a fresh sample.
+      </div>
 
-    <!-- Subpanels below the main Explore row -->
-    <div id="panelGenre" class="row subpanel" aria-hidden="true">
-      <div class="subheading">Choose a Genre</div>
-      <button class="tag" type="button">Mbaqanga</button>
-      <button class="tag" type="button">Sax Jive</button>
-      <button class="tag" type="button">Afro-Pop</button>
-      <button class="tag" type="button">Jazz</button>
-      <button class="tag" type="button">Soul</button>
-      <button class="tag" type="button">Fusion</button>
-    </div>
+      <!-- Chips row -->
+      <div id="explorePanel" class="explore-panel">
+        <button type="button" class="chip" id="chipGenre">Genre</button>
+        <button type="button" class="chip" id="chipMood">Mood</button>
+        <button type="button" class="chip" id="chipDecade">Decade</button>
+      </div>
 
-    <div id="panelDecade" class="row subpanel" aria-hidden="true">
-      <div class="subheading">Choose a Decade</div>
-      <button class="tag" type="button">1950's</button>
-      <button class="tag" type="button">1960's</button>
-      <button class="tag" type="button">1970's</button>
-      <button class="tag" type="button">1980's</button>
-      <button class="tag" type="button">1990's</button>
-      <button class="tag" type="button">2000</button>
-      <button class="tag" type="button">2010</button>
-      <button class="tag" type="button">Modern</button>
-    </div>
+      <!-- Subpanels -->
+      <div id="panelGenre" class="subpanel" aria-hidden="true">
+        <div class="subheading">Choose a Genre</div>
+        <button class="tag" type="button">Mbaqanga</button>
+        <button class="tag" type="button">Sax Jive</button>
+        <button class="tag" type="button">Afro-Pop</button>
+        <button class="tag" type="button">Jazz</button>
+        <button class="tag" type="button">Soul</button>
+        <button class="tag" type="button">Fusion</button>
+      </div>
 
-    <div id="panelMood" class="row subpanel" aria-hidden="true">
-      <div class="subheading">Choose a Mood</div>
-      <button class="tag" type="button">Happy</button>
-      <button class="tag" type="button">Romantic</button>
-      <button class="tag" type="button">Holidays</button>
-      <button class="tag" type="button">Exercise</button>
-    </div>
+      <div id="panelDecade" class="subpanel" aria-hidden="true">
+        <div class="subheading">Choose a Decade</div>
+        <button class="tag" type="button">1950's</button>
+        <button class="tag" type="button">1960's</button>
+        <button class="tag" type="button">1970's</button>
+        <button class="tag" type="button">1980's</button>
+        <button class="tag" type="button">1990's</button>
+        <button class="tag" type="button">2000</button>
+        <button class="tag" type="button">2010</button>
+        <button class="tag" type="button">Modern</button>
+      </div>
 
-    <div class="row">
+      <div id="panelMood" class="subpanel" aria-hidden="true">
+        <div class="subheading">Choose a Mood</div>
+        <button class="tag" type="button">Happy</button>
+        <button class="tag" type="button">Romantic</button>
+        <button class="tag" type="button">Holidays</button>
+        <button class="tag" type="button">Exercise</button>
+      </div>
+    </section>
+
+    <!-- Pager -->
+    <div class="pager">
       <button id="first" type="button" disabled>First</button>
       <button id="prev"  type="button" disabled>Prev</button>
       <label>Page <input id="page" type="number" min="1" value="1" style="width:60px"></label>
@@ -125,25 +165,47 @@
 
     <div id="err" class="meta error"></div>
     <div id="info" class="meta"></div>
-    <div id="list" class="empty">Start by searching for an artist, album, ref, or track.</div>
+    <div id="list" class="empty">Start by searching for an artist, album, ref, or track — or try Explore above.</div>
+  </div>
+
+  <!-- Image modal -->
+  <div id="imgModal" class="modal" role="dialog" aria-modal="true" aria-label="Album cover">
+    <img id="imgModalImg" alt="Album cover enlarged">
   </div>
 
   <script>
   (function(){
-    // ---------- helpers ----------
     var $ = function(id){ return document.getElementById(id); };
     function fmt(s){ if(!isFinite(s)) return "--:--"; var m=Math.floor(s/60), sec=Math.floor(s%60); return m+":"+String(sec).padStart(2,'0'); }
     function isBlank(v){ return v===undefined || v===null || String(v).trim()===''; }
     function q(obj){ var parts=[]; for(var k in obj){ var v=obj[k]; if(v!=='' && v!=null) parts.push(encodeURIComponent(k)+'='+encodeURIComponent(v)); } return parts.join('&'); }
     function getJSON(url){ return fetch(url,{cache:'no-store'}).then(function(r){ if(!r.ok) return r.text().then(function(t){ throw new Error(t||('HTTP '+r.status)); }); return r.json(); }); }
     function setPagerEnabled(on){ ['first','prev','go','next'].forEach(function(id){ var el=$(id); if(el) el.disabled=!on; }); }
-    function setEmpty(){ var list=$('list'); list.innerHTML=''; list.className='empty'; list.textContent='Start by searching for an artist, album, ref, or track.'; }
+    function setEmpty(){ var list=$('list'); list.innerHTML=''; list.className='empty'; list.textContent='Start by searching for an artist, album, ref, or track — or try Explore above.'; }
 
-    // ---------- state ----------
     var __hasSearched=false; var __trackMode=false;
 
-    // ---------- Explore toggle + subpanels ----------
-    var exploreToggle = $('exploreToggle');
+    // Modal setup
+    var modal = $('imgModal');
+    var modalImg = $('imgModalImg');
+    function openModal(src, alt) {
+      if (!src) return;
+      modalImg.src = src;
+      modalImg.alt = alt || 'Album cover enlarged';
+      modal.classList.add('open');
+      modal.tabIndex = -1;
+      modal.focus();
+    }
+    function closeModal() {
+      modal.classList.remove('open');
+      modalImg.src = '';
+    }
+    modal.addEventListener('click', closeModal);
+    document.addEventListener('keydown', function(ev){
+      if (ev.key === 'Escape' && modal.classList.contains('open')) closeModal();
+    });
+
+    // Explore interactions (no main toggle; the card is always visible)
     var explorePanel  = $('explorePanel');
     var panelGenre = $('panelGenre');
     var panelDecade = $('panelDecade');
@@ -158,41 +220,31 @@
         p.setAttribute('aria-hidden','true');
       });
     }
+    function togglePanel(panel){
+      var open = panel.style.display === 'flex';
+      hideAllSubpanels();
+      panel.style.display = open ? 'none' : 'flex';
+      panel.setAttribute('aria-hidden', open ? 'true' : 'false');
+    }
 
-    if (exploreToggle && explorePanel) {
-      exploreToggle.addEventListener('click', function(){
-        var open = explorePanel.style.display === 'flex';
-        explorePanel.style.display = open ? 'none' : 'flex';
-        explorePanel.setAttribute('aria-hidden', open ? 'true' : 'false');
-        if (!open) hideAllSubpanels();
-      });
-
-      function togglePanel(panel){
-        var open = panel.style.display === 'flex';
-        hideAllSubpanels();
-        panel.style.display = open ? 'none' : 'flex';
-        panel.setAttribute('aria-hidden', open ? 'true' : 'false');
-      }
-
+    if (explorePanel) {
       chipGenre && chipGenre.addEventListener('click', function(){ togglePanel(panelGenre); });
       chipDecade && chipDecade.addEventListener('click', function(){ togglePanel(panelDecade); });
       chipMood && chipMood.addEventListener('click', function(){ togglePanel(panelMood); });
 
-      // Visual feedback & (NEW) fetch by Decade when a decade tag is clicked
+      // Decade clicks → fetch random sample
       document.querySelectorAll('#panelDecade .tag').forEach(function(btn){
         btn.addEventListener('click', function(){
-          // visual toggle
           var sibs = btn.parentElement.querySelectorAll('.tag');
           sibs.forEach(function(s){ s.setAttribute('aria-pressed','false'); s.style.borderColor='var(--line)'; });
           btn.setAttribute('aria-pressed','true');
           btn.style.borderColor = 'var(--accent)';
 
-          // run decade fetch (15 random albums)
-          var label = btn.textContent.trim(); // e.g., "1970's", "Modern"
+          var label = btn.textContent.trim();
           var info=$('info'), err=$('err'), list=$('list');
           __hasSearched = true; __trackMode = false;
           list.className=''; list.textContent='Loading…';
-          setPagerEnabled(false); // decade results are a single random batch
+          setPagerEnabled(false);
           err.textContent='';
 
           getJSON('/api/explore/decade?'+q({label:label, limit:15, t:Date.now()}))
@@ -213,21 +265,10 @@
             });
         });
       });
-
-      // keep prior “optional feedback” for other subpanels (no filtering)
-      document.querySelectorAll('#panelGenre .tag, #panelMood .tag').forEach(function(btn){
-        btn.addEventListener('click', function(){
-          var sibs = btn.parentElement.querySelectorAll('.tag');
-          sibs.forEach(function(s){ s.setAttribute('aria-pressed','false'); s.style.borderColor='var(--line)'; });
-          btn.setAttribute('aria-pressed','true');
-          btn.style.borderColor = 'var(--accent)';
-        });
-      });
     }
 
-    // ---------- builders ----------
     function makeDetailsGrid(t){
-      var fields=[["Language Code",t.languageCode],["Producer",t.producer],["Composer 1",t.composer],["Composer 2",t.composer2],["Composer 3",t.composer3],["ISRC",t.isrc],["Original Release date",t.originalReleaseDate],["DDEX",t.ddexStatus]];
+      var fields=[["Language Code",t.languageCode],["Producer",t.producer],["ISRC",t.isrc],["Original Release date",t.originalReleaseDate]];
       var rows=fields.filter(function(p){ return !isBlank(p[1]); }); if(!rows.length) return null;
       var grid=document.createElement('div'); grid.className='details'; var kv=document.createElement('div'); kv.className='kv';
       rows.forEach(function(p){ var a=document.createElement('div'); a.textContent=p[0]; var b=document.createElement('div'); b.textContent=p[1]; kv.appendChild(a); kv.appendChild(b); });
@@ -241,7 +282,7 @@
       var duration   = Number(t.duration);
 
       var row=document.createElement('div'); row.className='track';
-      var title=document.createElement('div'); title.textContent=(trackTitle||'Untitled')+' — '+(trackArtist||'Unknown');
+      var title=document.createElement('div'); title.textContent=(trackArtist||'Unknown')+' — '+(trackTitle||'Untitled');
 
       var audio=document.createElement('audio'); audio.controls=true; audio.preload='auto'; if(audioField) audio.src=String(audioField).trim();
       var time=document.createElement('div'); time.className='time'; time.textContent=fmt(0)+' / '+fmt(duration);
@@ -278,25 +319,48 @@
     }
 
     function albumCard(a){
-      // hide faulty albums entirely
       if (a.faulty) return null;
 
       var root=document.createElement('div'); root.className='album';
       var head=document.createElement('div'); head.className='album-head';
-      var title=document.createElement('div'); title.className='album-title'; title.innerHTML='<strong>'+(a.albumTitle||'(Untitled)')+'</strong> — '+(a.albumArtist||'Unknown');
+
+      var headCore=document.createElement('div'); headCore.className='head-core';
+      var img=document.createElement('img'); img.className='thumb';
+      var cat=a.albumCatalogueNumber||'';
+      if(cat){
+        img.src='/api/cover/'+encodeURIComponent(cat)+'?t='+Date.now();
+        img.loading='lazy';
+        img.alt=(a.albumTitle||'Album')+' cover';
+        img.onerror=function(){ img.classList.add('hidden'); };
+        img.addEventListener('click', function(){
+          if (!img.classList.contains('hidden')) openModal(img.src, img.alt);
+        });
+      }else{
+        img.classList.add('hidden');
+      }
+
+      var title=document.createElement('div'); title.className='album-title';
+      title.innerHTML='<strong>'+(a.albumArtist||'Unknown')+'</strong> — '+(a.albumTitle||'(Untitled)');
+
+      headCore.appendChild(img);
+      headCore.appendChild(title);
+
       var controls=document.createElement('div'); controls.className='album-controls';
       var btn=document.createElement('button'); btn.className='toggle'; btn.type='button'; btn.textContent='Show Tracks';
-      var ddex=document.createElement('div'); ddex.className='ddex'; ddex.textContent='DDEX: '+(a.ddexStatus||'—');
-      controls.appendChild(btn); controls.appendChild(ddex);
-      head.appendChild(title); head.appendChild(controls);
+
+      head.appendChild(headCore);
+      head.appendChild(controls);
+
       var meta=document.createElement('div'); meta.className='meta cat'; meta.textContent='Cat#: '+(a.albumCatalogueNumber||'');
       var tracks=document.createElement('div'); tracks.className='tracks';
+
       root.appendChild(head); root.appendChild(meta); root.appendChild(tracks);
 
       var loaded=false;
       function loadTracks(){
         tracks.textContent='Loading...';
-        getJSON('/api/albums/'+encodeURIComponent(a.albumCatalogueNumber)+'/tracks?t='+(Date.now()))
+        fetch('/api/albums/'+encodeURIComponent(a.albumCatalogueNumber)+'/tracks?t='+(Date.now()))
+          .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
           .then(function(full){
             var list=(full&&full.tracks)||[];
             tracks.innerHTML='<div class="meta">Total tracks: '+(full.trackCount||list.length)+'</div>';
@@ -306,11 +370,17 @@
           .catch(function(){ tracks.textContent='Failed to load tracks.'; });
       }
 
-      btn.onclick=function(){ var open=tracks.style.display==='block'; tracks.style.display=open?'none':'block'; btn.textContent=open?'Show Tracks':'Hide Tracks'; if(!loaded && !open){ loadTracks(); } };
+      var open=false;
+      btn.onclick=function(){
+        open = !open;
+        tracks.style.display=open?'block':'none';
+        btn.textContent=open?'Hide Tracks':'Show Tracks';
+        if(open && !loaded){ loadTracks(); }
+      };
+      controls.appendChild(btn);
       return root;
     }
 
-    // ---------- renderers ----------
     function renderAlbums(){
       var artist=$('artist'), album=$('album'), ref=$('ref'), mode=$('mode'), info=$('info'), err=$('err'), list=$('list'), page=$('page');
       if(!__hasSearched){ setEmpty(); setPagerEnabled(false); return; }
@@ -359,7 +429,6 @@
         .catch(function(e){ err.textContent=(e&&e.message)||String(e); list.textContent=''; setPagerEnabled(true); });
     }
 
-    // ---------- events ----------
     $('searchForm').addEventListener('submit', function(e){
       e.preventDefault();
       __hasSearched=true;
@@ -379,7 +448,6 @@
     $('next').addEventListener('click',  function(){ if(!__hasSearched) return; $('page').value=Math.max(1, Number($('page').value||1)+1); (__trackMode?renderTracks:renderAlbums)(); });
     $('go').addEventListener('click',    function(){ if(!__hasSearched) return; $('page').value=Math.max(1, Number($('page').value||1));   (__trackMode?renderTracks:renderAlbums)(); });
 
-    // initial
     setEmpty(); setPagerEnabled(false);
   })();
   </script>
