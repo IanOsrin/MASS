@@ -10,7 +10,7 @@
     body { font-family: system-ui, Arial, sans-serif; margin:0; padding:20px; background:var(--paper); color:var(--ink); display:flex; justify-content:center; align-items:center; min-height:100vh; }
     .container { width:100%; max-width:900px; text-align:center; }
 
-    /* MASS heading with gradient + italics (replaces GALLO CMS) */
+    /* MASS heading with gradient + italics */
     .app-title {
       display:flex; align-items:center; justify-content:center; gap:10px;
       font-weight:900; font-size:56px; font-style:italic; margin-bottom:20px;
@@ -27,7 +27,7 @@
     .meta { font-size:12px; opacity:.75; text-align:center; }
     .error { color:#c00; text-align:center; }
     .album { border:1px solid var(--line); border-radius:10px; padding:8px; margin:8px 0; background:var(--card); transition:border-color .2s, border-width .2s; }
-    .album.faulty { border:2px solid red; }
+    /* Removed .album.faulty red border — faulty items are now hidden entirely */
     .album-head { display:flex; align-items:center; justify-content:center; gap:10px; }
     .album-title { font-size:18px; font-weight:700; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--ink); text-align:center; }
     .album-controls { display:flex; flex-direction:column; align-items:center; gap:6px; }
@@ -47,7 +47,6 @@
 </head>
 <body>
   <div class="container">
-    <!-- Replaced the original logo+text header with a single MASS heading -->
     <div class="app-title">MASS</div>
 
     <form id="searchForm" class="row" autocomplete="off">
@@ -109,7 +108,8 @@
       var time=document.createElement('div'); time.className='time'; time.textContent=fmt(0)+' / '+fmt(duration);
       audio.addEventListener('loadedmetadata',function(){ if(!isFinite(duration) && isFinite(audio.duration)) time.textContent=fmt(0)+' / '+fmt(audio.duration); });
       audio.addEventListener('timeupdate',function(){ time.textContent=fmt(audio.currentTime)+' / '+fmt(audio.duration||duration); });
-      audio.addEventListener('ended',function(){ var d=isFinite(audio.duration)?audio.duration:duration; time.textContent=fmt(d)+' / '+fmt(d);
+      audio.addEventListener('ended',function(){
+        var d=isFinite(audio.duration)?audio.duration:duration; time.textContent=fmt(d)+' / '+fmt(d);
         // Auto-play next track in the same album
         var container = row.closest ? row.closest('.tracks') : (function(n){ while(n && !(n.classList && n.classList.contains('tracks'))) n=n.parentNode; return n; })(row);
         if(container){
@@ -130,13 +130,21 @@
       audio.addEventListener('error',function(){ var code=(audio.error&&audio.error.code)||0; var map={1:'aborted',2:'network',3:'decode',4:'src not supported'}; var note=document.createElement('div'); note.className='meta error'; note.textContent='Audio error ('+(map[code]||code)+') for: '+(audio.src||''); row.appendChild(note); });
 
       var details=makeDetailsGrid(t);
-      if(details){ var moreWrap=document.createElement('div'); moreWrap.className='more'; var moreBtn=document.createElement('button'); moreBtn.type='button'; moreBtn.textContent='More info'; moreBtn.onclick=function(){ var open=details.style.display==='block'; details.style.display=open?'none':'block'; moreBtn.textContent=open?'More info':'Hide info'; }; moreWrap.appendChild(moreBtn); row.appendChild(moreWrap); row.appendChild(details); }
+      if(details){
+        var moreWrap=document.createElement('div'); moreWrap.className='more';
+        var moreBtn=document.createElement('button'); moreBtn.type='button'; moreBtn.textContent='More info';
+        moreBtn.onclick=function(){ var open=details.style.display==='block'; details.style.display=open?'none':'block'; moreBtn.textContent=open?'More info':'Hide info'; };
+        moreWrap.appendChild(moreBtn); row.appendChild(moreWrap); row.appendChild(details);
+      }
 
       row.appendChild(title); row.appendChild(audio); row.appendChild(time); return row;
     }
 
     function albumCard(a){
-      var root=document.createElement('div'); root.className='album'+(a.faulty?' faulty':'');
+      // HIDE faulty albums entirely
+      if (a.faulty) return null;
+
+      var root=document.createElement('div'); root.className='album';
       var head=document.createElement('div'); head.className='album-head';
       var title=document.createElement('div'); title.className='album-title'; title.innerHTML='<strong>'+(a.albumTitle||'(Untitled)')+'</strong> — '+(a.albumArtist||'Unknown');
       var controls=document.createElement('div'); controls.className='album-controls';
@@ -178,10 +186,14 @@
       getJSON('/api/albums?'+q(params)+'&t='+(Date.now()))
         .then(function(data){
           list.innerHTML='';
-          (data.albums||[]).forEach(function(a){ list.appendChild(albumCard(a)); });
+          var shown = 0;
+          (data.albums||[]).forEach(function(a){
+            var card = albumCard(a);
+            if(card){ list.appendChild(card); shown++; }
+          });
           var foundInfo=(typeof data.foundCount==='number')?(' · Matches: '+data.foundCount):'';
-          info.textContent='Page '+p+' · Albums on page: '+((data.albums&&data.albums.length)||0)+foundInfo;
-          if(!data.albums || !data.albums.length) list.textContent='No albums on this page.';
+          info.textContent='Page '+p+' · Albums on page: '+shown+foundInfo;
+          if(!shown) list.textContent='No albums on this page.';
           setPagerEnabled(true);
         })
         .catch(function(e){ err.textContent=(e&&e.message)||String(e); list.textContent=''; setPagerEnabled(true); });
@@ -197,10 +209,14 @@
       getJSON('/api/tracks?'+q(params)+'&t='+(Date.now()))
         .then(function(data){
           list.innerHTML='';
-          (data.albums||[]).forEach(function(a){ list.appendChild(albumCard(a)); });
+          var shown = 0;
+          (data.albums||[]).forEach(function(a){
+            var card = albumCard(a);
+            if(card){ list.appendChild(card); shown++; }
+          });
           var foundInfo=(typeof data.foundCount==='number')?(' · Matches: '+data.foundCount):'';
-          info.textContent='Page '+p+' · Albums on page: '+((data.albums&&data.albums.length)||0)+foundInfo;
-          if(!data.albums || !data.albums.length) list.textContent='No albums on this page.';
+          info.textContent='Page '+p+' · Albums on page: '+shown+foundInfo;
+          if(!shown) list.textContent='No albums on this page.';
           setPagerEnabled(true);
         })
         .catch(function(e){ err.textContent=(e&&e.message)||String(e); list.textContent=''; setPagerEnabled(true); });
