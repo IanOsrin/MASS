@@ -127,6 +127,11 @@ const TRACK_SEQUENCE_KEYS = [
   'Track_Order'
 ];
 
+const ARTIST_FIELDS = [
+  'Album Artist',
+  'Track Artist'
+];
+
 const YEAR_RANGE_FIELDS = [
   'Year_Release_num',
   'Year Release num',
@@ -190,6 +195,10 @@ function recordMatchesDecade(fields, start, endExclusive) {
   return false;
 }
 
+function formatRecords(rows = []) {
+  return rows.map(rec => ({ recordId: rec.recordId, modId: rec.modId, fields: rec.fieldData || {} }));
+}
+
 function normalizeDecade(query = {}) {
   const parseYear = (val) => {
     if (val === undefined || val === null) return null;
@@ -237,10 +246,6 @@ function normalizeDecade(query = {}) {
   return { start, end: endExclusive };
 }
 
-function formatRecords(rows = []) {
-  return rows.map(rec => ({ recordId: rec.recordId, modId: rec.modId, fields: rec.fieldData || {} }));
-}
-
 async function runFind(payload) {
   const started = Date.now();
   const resp = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
@@ -256,6 +261,27 @@ async function runFind(payload) {
   return { ok:true, data, total, ms, payload };
 }
 
+async function searchByArtist(term, limit, fmOffset) {
+  const pattern = contains(term);
+  let lastError = null;
+  let fallback = null;
+
+  for (const field of ARTIST_FIELDS) {
+    const payload = { query: [ { [field]: pattern } ], limit, offset: fmOffset };
+    const result = await runFind(payload);
+    if (!result.ok) {
+      lastError = result.error;
+      continue;
+    }
+    if (result.total > 0) {
+      return { ...result, fieldUsed: field, lastError };
+    }
+    if (!fallback) fallback = { ...result, fieldUsed: field, lastError };
+  }
+
+  return fallback || { ok:true, data: [], total: 0, ms: 0, fieldUsed: 'none', lastError };
+}
+
 app.get('/api/search', async (req, res) => {
   try {
     // Accept both legacy q and the 3-field form
@@ -263,9 +289,30 @@ app.get('/api/search', async (req, res) => {
     const artist = (req.query.artist || '').toString().trim();
     const album  = (req.query.album  || '').toString().trim();
     const track  = (req.query.track  || '').toString().trim();
-    const limit  = Math.max(1, Math.min(200, parseInt(req.query.limit || '60', 10)));
+    const hasArtistParam = Object.prototype.hasOwnProperty.call(req.query, 'artist');
+    if (hasArtistParam && !artist) {
+      return res.status(400).json({ error: 'Artist search requires a non-empty artist parameter' });
+    }
+
+    const defaultLimit = hasArtistParam ? 9 : 60;
+    const limit  = Math.max(1, Math.min(200, parseInt(req.query.limit || String(defaultLimit), 10)));
     const uiOff0 = Math.max(0, parseInt(req.query.offset || '0', 10)); // UI 0-based
     const fmOff  = uiOff0 + 1; // FM is 1-based
+
+    if (hasArtistParam && artist && !q && !album && !track) {
+      const result = await searchByArtist(artist, limit, fmOff);
+      const items = formatRecords(result.data);
+      console.log('[MASS] search artist', {
+        artist,
+        total: result.total,
+        field: result.fieldUsed,
+        offset: uiOff0,
+        limit,
+        ms: result.ms,
+        ...(result.lastError ? { warn: result.lastError } : {})
+      });
+      return res.json({ items, total: result.total, offset: uiOff0, limit });
+    }
 
     // Build _find queries
     let queries = [];
@@ -319,7 +366,7 @@ app.get('/api/search', async (req, res) => {
     const total = json?.response?.dataInfo?.foundCount ?? data.length;
 
     res.json({
-      items: data.map(d => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} })),
+      items: formatRecords(data),
       total,
       offset: uiOff0,
       limit
