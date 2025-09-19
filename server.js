@@ -127,6 +127,37 @@ const TRACK_SEQUENCE_KEYS = [
   'Track_Order'
 ];
 
+const YEAR_RANGE_FIELDS = [
+  'Year_Release_num',
+  'Year Release num',
+  'Year Release',
+  'Year_Release',
+  'Year'
+];
+
+const YEAR_TEXT_FIELDS = [
+  'Year of Release',
+  'Year Of Release',
+  'Year of release',
+  'Original Release Year',
+  'Original Release Date',
+  'Release Year',
+  'Recording Year',
+  'Year Release',
+  'Years Release',
+  'Tape Files::Year of Release',
+  'Tape Files::Year Release',
+  'Tape Files::Year',
+  'Albums::Year of Release',
+  'Albums::Year Release',
+  'Albums::Year',
+  'API_Albums::Year of Release',
+  'API_Albums::Year Release',
+  'API_Albums::Year'
+];
+
+const YEAR_FIELD_SET = [...new Set([...YEAR_RANGE_FIELDS, ...YEAR_TEXT_FIELDS])];
+
 function parseSequence(fields = {}) {
   for (const key of TRACK_SEQUENCE_KEYS) {
     if (!(key in fields)) continue;
@@ -140,6 +171,89 @@ function parseSequence(fields = {}) {
     }
   }
   return Number.POSITIVE_INFINITY;
+}
+
+function extractYear(value) {
+  if (value === null || value === undefined) return null;
+  const match = String(value).match(/\b(\d{4})\b/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  return Number.isFinite(year) ? year : null;
+}
+
+function recordMatchesDecade(fields, start, endExclusive) {
+  for (const key of YEAR_FIELD_SET) {
+    if (!(key in fields)) continue;
+    const year = extractYear(fields[key]);
+    if (year !== null && year >= start && year < endExclusive) return true;
+  }
+  return false;
+}
+
+function normalizeDecade(query = {}) {
+  const parseYear = (val) => {
+    if (val === undefined || val === null) return null;
+    const match = String(val).match(/(\d{4})/);
+    if (!match) return null;
+    const num = Number(match[1]);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const rawDecade = (query.decade || '').toString().trim();
+  let start = null;
+  let endExclusive = null;
+
+  if (rawDecade) {
+    if (/^\d{4}s$/i.test(rawDecade)) {
+      start = Number(rawDecade.slice(0, 4));
+    } else {
+      const matches = rawDecade.match(/\d{4}/g);
+      if (matches && matches.length) {
+        start = Number(matches[0]);
+        if (matches.length > 1) {
+          const second = Number(matches[1]);
+          if (Number.isFinite(second)) {
+            endExclusive = second + 1;
+          }
+        }
+      }
+    }
+  }
+
+  const startParam = parseYear(query.start);
+  const endParam = parseYear(query.end);
+  if (start === null && startParam !== null) start = startParam;
+  if (start === null && endParam !== null) start = endParam - 9;
+  if (endExclusive === null && endParam !== null) endExclusive = endParam + 1;
+
+  if (start === null || !Number.isFinite(start)) return null;
+  start = Math.floor(start / 10) * 10;
+  if (start < 1000) return null;
+
+  if (endExclusive === null || !Number.isFinite(endExclusive)) endExclusive = start + 10;
+  if (endExclusive <= start) endExclusive = start + 10;
+  if (endExclusive - start > 10) endExclusive = start + 10;
+
+  return { start, end: endExclusive };
+}
+
+function formatRecords(rows = []) {
+  return rows.map(rec => ({ recordId: rec.recordId, modId: rec.modId, fields: rec.fieldData || {} }));
+}
+
+async function runFind(payload) {
+  const started = Date.now();
+  const resp = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
+  const ms = Date.now() - started;
+  const json = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const msg = json?.messages?.[0]?.message || 'FM error';
+    const code = json?.messages?.[0]?.code;
+    return { ok:false, error:`${msg}${code ? ` (${code})` : ''}`, status: resp.status, ms, payload };
+  }
+  const data  = json?.response?.data || [];
+  const total = Number(json?.response?.dataInfo?.foundCount ?? data.length);
+  return { ok:true, data, total, ms, payload };
 }
 
 app.get('/api/search', async (req, res) => {
@@ -252,132 +366,87 @@ app.get('/api/container', async (req, res) => {
 
 app.get('/api/explore', async (req, res) => {
   try {
-    const start = parseInt((req.query.start || '0'), 10);
-    const end   = parseInt((req.query.end   || '0'), 10);
-    const reqLimit = Math.max(1, Math.min(400, parseInt((req.query.limit || '200'), 10)));
-    if (!start || !end || end < start) return res.status(400).json({ error:'bad decade', start, end });
+    const normalized = normalizeDecade(req.query);
+    if (!normalized) {
+      return res.status(400).json({ error: 'Invalid decade parameter. Use decade=1960, 1960s, or 1960-1969.' });
+    }
 
-    // Try many possible year fields, including related-table names
-    const FIELDS = [
-      'Year of Release',
-      'Year Of Release',
-      'Year of release',
-      'Year Release',
-      'Year',
-      'Original Release Year',
-      'Original Release Date',
-      'Release Year',
-      'Recording Year',
-      'Year_Release',
-      'Year Release num',
-      'Year_Release_num',
-      'Tape Files::Year of Release',
-      'Tape Files::Year Release',
-      'Tape Files::Year',
-      'Tape Files::Year Release num',
-      'Tape Files::Year_Release_num',
-      'Albums::Year of Release',
-      'Albums::Year Release',
-      'Albums::Year',
-      'Albums::Year Release num',
-      'Albums::Year_Release_num',
-      'API_Albums::Year of Release',
-      'API_Albums::Year Release',
-      'API_Albums::Year',
-      'API_Albums::Year Release num',
-      'API_Albums::Year_Release_num'
-    ];
+    const { start, end } = normalized; // end is exclusive
+    const decadeLabel = `${start}-${end - 1}`;
+    const limit = Math.max(1, Math.min(200, parseInt((req.query.limit || '9'), 10)));
+    const offset = Math.max(0, parseInt((req.query.offset || '0'), 10));
+    const fmOffset = offset + 1;
+    const years = Array.from({ length: end - start }, (_, i) => start + i);
+    const rangeQuery = `${start}...${end - 1}`;
+    let lastError = null;
 
-    async function tryFind(payload){
-      const r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
-      const json = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        const msg  = json?.messages?.[0]?.message || 'FM error';
-        const code = json?.messages?.[0]?.code;
-        return { ok:false, status:r.status, msg, code, data:[], total:0 };
+    const logResult = (field, payload, total, ms, note) => {
+      console.log('[MASS] explore decade', {
+        decade: decadeLabel,
+        field,
+        offset,
+        limit,
+        total,
+        ms,
+        note,
+        query: payload?.query?.length ? payload.query : payload
+      });
+    };
+
+    // Prefer numeric range fields
+    for (const field of YEAR_RANGE_FIELDS) {
+      const payload = { query: [ { [field]: rangeQuery } ], limit, offset: fmOffset };
+      const result = await runFind(payload);
+      if (!result.ok) {
+        lastError = result.error;
+        continue;
       }
-      const data  = json?.response?.data || [];
-      const total = json?.response?.dataInfo?.foundCount ?? data.length;
-      return { ok:true, data, total };
+      if (!result.total) continue;
+      const items = formatRecords(result.data);
+      logResult(field, payload, result.total, result.ms, 'range');
+      return res.json({ items, total: result.total, offset, limit });
     }
 
-    // 1) Determine a field that actually matches by probing with 1-row limit
-    let chosenField = null;
-    for (const field of FIELDS){
-      const probe = await tryFind({ query: [ { [field]: `${start}...${end}` } ], limit: 1, offset: 1 });
-      if (probe.ok && probe.total > 0){
-        chosenField = field;
-        break;
+    // Try exact matches on textual fields per year
+    for (const field of YEAR_TEXT_FIELDS) {
+      const payload = { query: years.map(year => ({ [field]: `==${year}` })), limit, offset: fmOffset };
+      const result = await runFind(payload);
+      if (!result.ok) {
+        lastError = result.error;
+        continue;
       }
+      if (!result.total) continue;
+      const items = formatRecords(result.data);
+      logResult(field, payload, result.total, result.ms, 'text-eq');
+      return res.json({ items, total: result.total, offset, limit });
     }
-    if (!chosenField){
-      // Try OR of exact years as a probe
-      const years = Array.from({ length: end - start + 1 }, (_, i) => start + i);
-      for (const field of FIELDS){
-        const probe = await tryFind({ query: years.map(y => ({ [field]: `==${y}` })), limit: 1, offset: 1 });
-        if (probe.ok && probe.total > 0){
-          chosenField = field;
-          break;
-        }
+
+    // Fallback: contains match + local filtering
+    for (const field of YEAR_TEXT_FIELDS) {
+      const fetchLimit = Math.min(400, Math.max(limit + offset, limit * 4));
+      const payload = { query: years.map(year => ({ [field]: contains(String(year)) })), limit: fetchLimit, offset: 1 };
+      const result = await runFind(payload);
+      if (!result.ok) {
+        lastError = result.error;
+        continue;
       }
-    }
-    if (!chosenField){
-      // Try prefix style probe
-      for (const field of FIELDS){
-        const probe = await tryFind({ query: [ { [field]: `${start}*` } ], limit: 1, offset: 1 });
-        if (probe.ok && probe.total > 0){
-          chosenField = field;
-          break;
-        }
-      }
-    }
-    if (!chosenField){
-      console.log(`[EXPLORE] No matching year field for ${start}-${end}`);
-      return res.json({ ok:true, items: [], total: 0, offset: 0, limit: reqLimit });
+      if (!result.data.length) continue;
+      const formatted = formatRecords(result.data);
+      const filtered = formatted.filter(rec => recordMatchesDecade(rec.fields, start, end));
+      if (!filtered.length) continue;
+      const total = filtered.length;
+      const paged = filtered.slice(offset, offset + limit);
+      logResult(field, payload, total, result.ms, 'text-filtered');
+      return res.json({ items: paged, total, offset, limit });
     }
 
-    // 2) Get total count using chosen field
-    const probe = await tryFind({ query: [ { [chosenField]: `${start}...${end}` } ], limit: 1, offset: 1 });
-    let foundTotal = probe.total || 0;
-
-    if (!foundTotal){
-      // Retry with OR-of-years to compute total
-      const years = Array.from({ length: end - start + 1 }, (_, i) => start + i);
-      const probe2 = await tryFind({ query: years.map(y => ({ [chosenField]: `==${y}` })), limit: 1, offset: 1 });
-      foundTotal = probe2.total || 0;
-      if (foundTotal === 0){
-        // Retry with prefix
-        const probe3 = await tryFind({ query: [ { [chosenField]: `${start}*` } ], limit: 1, offset: 1 });
-        foundTotal = probe3.total || 0;
-      }
+    if (lastError) {
+      console.log('[MASS] explore decade fallback', { decade: decadeLabel, warn: lastError });
     }
-
-    if (foundTotal === 0){
-      console.log(`[EXPLORE] Field ${chosenField} yielded 0 rows for ${start}-${end}`);
-      return res.json({ ok:true, items: [], total: 0, offset: 0, limit: reqLimit });
-    }
-
-    // 3) Choose a random window within the decade set
-    const windowSize = Math.min(reqLimit, 400);
-    const maxStart = Math.max(1, foundTotal - windowSize + 1);
-    const randStart = Math.floor(1 + Math.random() * maxStart);
-
-    // Perform the real fetch from the chosen field (prefer range; fall back if needed)
-    let final = await tryFind({ query: [ { [chosenField]: `${start}...${end}` } ], limit: windowSize, offset: randStart });
-    if (!final.ok || final.data.length === 0){
-      const years = Array.from({ length: end - start + 1 }, (_, i) => start + i);
-      final = await tryFind({ query: years.map(y => ({ [chosenField]: `==${y}` })), limit: windowSize, offset: randStart });
-      if (!final.ok || final.data.length === 0){
-        final = await tryFind({ query: [ { [chosenField]: `${start}*` } ], limit: windowSize, offset: randStart });
-      }
-    }
-
-    const items = (final.data || []).map(d => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} }));
-    console.log(`[EXPLORE] ${start}-${end} using ${chosenField}: total ${foundTotal}, offset ${randStart}, returned ${items.length}`);
-    return res.json({ ok:true, items, total: foundTotal, offset: randStart-1, limit: windowSize, field: chosenField });
+    return res.json({ items: [], total: 0, offset, limit });
   } catch (err) {
     const detail = err?.message || String(err);
-    return res.status(500).json({ error:'Explore failed', status:500, detail });
+    return res.status(500).json({ error: 'Explore failed', detail });
   }
 });
 
