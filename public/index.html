@@ -7,7 +7,7 @@
   <style>
     :root {
       --bg:#0f0f12; --fg:#f5f6f7; --muted:#a7abb3; --card:#17181c; --accent:#62f5a9; --border:#24262c;
-      --cover-size: 140px;
+      --cover-size: 140px; /* smaller, tidy covers */
       --overlay: rgba(0,0,0,.6);
     }
     html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;}
@@ -18,10 +18,10 @@
     .searchbar button{background:var(--accent);color:#0b1210;border:none;border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer;}
 
     main{max-width:1100px;margin:20px auto;padding:0 16px 40px;}
-    .albums{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;}
+    .albums{display:grid;grid-template-columns:1fr auto;gap:8px;}
     .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;overflow:hidden;}
 
-    /* Cover */
+    /* Cover: small, centered square; never bleeds */
     .cover-wrap{position:relative;width:var(--cover-size);height:var(--cover-size);border-radius:10px;overflow:hidden;border:1px solid var(--border);background:#101215;margin:0 auto;}
     .cover-wrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
 
@@ -41,6 +41,13 @@
     .count{text-align:center;color:var(--muted);margin:6px 0 10px;font-size:14px;}
     .error{background:#2b1517;border:1px solid #5a2327;color:#ffb1b8;padding:10px 12px;border-radius:10px;}
 
+    .decades{max-width:960px;margin:8px auto 0;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+    .decades button{background:#22252b;border:1px solid var(--border);color:var(--fg);border-radius:999px;padding:6px 10px;cursor:pointer;font-size:13px;}
+
+    /* Landing placeholder */
+    .landing{display:flex;align-items:center;justify-content:center;min-height:40vh;}
+    .landing img{max-width:1000px;max-height:1000px;opacity:.9;display:block;}
+
     /* ======= Modal (centered track window) ======= */
     .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--overlay);z-index:100;}
     .overlay.open{display:flex;}
@@ -59,31 +66,47 @@
     .track .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .controls{display:flex;align-items:center;gap:6px;}
     .playing{outline:1px solid var(--accent); background:#202427;}
+    .progress{display:flex;align-items:center;gap:8px;margin-top:6px;}
+    .seek{appearance:none;width:240px;height:8px;background:linear-gradient(var(--accent),var(--accent)) 0/var(--fill,0%) 100% no-repeat,#1b2a21;border-radius:999px;outline:none;border:1px solid var(--accent);}
+    .seek::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);}
+    .time{font-size:12px;color:var(--muted);min-width:98px;text-align:right;}
     .info{display:none;margin-top:2px;padding:8px 10px;border-radius:8px;background:#16181d;border:1px solid var(--border);color:#c9ccd3;font-size:13px;}
     .info-row{display:flex;gap:8px;margin:2px 0;}
     .info .label{min-width:110px;color:#e3e6ee;}
-
-    /* === Validator badge states === */
-    .status.badge{color:#cfd3da;}
-    .status.wait{opacity:.85;}
-    .status.ok{color:#8fe3b8;border-color:#2a6447;background:#16221d;}
-    .status.bad{color:#ffb1b8;border-color:#5a2327;background:#2b1517;}
     .no-scroll{overflow:hidden;}
+  
+    /* Busy / searching status indicator */
+    .status{display:inline-flex;align-items:center;gap:8px;margin-left:8px;color:var(--muted);font-size:13px;}
+    .status[hidden]{display:none;}
+    .status .pulse{width:8px;height:8px;border-radius:50%;background:var(--accent);
+      box-shadow:0 0 0 0 rgba(98,245,169,.7);animation:pulse 1.3s infinite;}
+    @keyframes pulse{
+      0%{transform:scale(.9);box-shadow:0 0 0 0 rgba(98,245,169,.7);} 
+      70%{transform:scale(1);box-shadow:0 0 0 10px rgba(98,245,169,0);} 
+      100%{transform:scale(.9);box-shadow:0 0 0 0 rgba(98,245,169,0);} 
+    }
+    button:disabled{opacity:.6;cursor:not-allowed;}
+
   </style>
 </head>
 <body>
   <header>
-    <div class="title">MASS</div>
+    <img src="/img/MAD_Logo.png" alt="MAD Logo" style="display:block;margin:0 auto 10px;max-height:100px">
     <div class="searchbar">
       <input id="search" type="search" placeholder="Search albums, artists, tracks, year, genre…" autocomplete="off" />
+      <button id="go">Search</button>
       <button id="clear">Clear</button>
-    </div>
+      <button id="explore">Explore</button>
+      <span id="status" class="status" hidden aria-live="polite" role="status"><span class="pulse"></span><span id="statusText">Searching…</span></span>
+
+    <div id="decades" class="decades" hidden></div>
   </header>
+  <div id="codex-canary">Codex was here</div>
 
   <main>
+    <div id="landing" class="landing" aria-hidden="false"></div>
     <div class="toolbar">
       <div id="count" class="count"></div>
-      <div id="hint" class="muted">Grouped by Album Catalogue Number. 9 albums per page. (Albums without MP3 are hidden)</div>
     </div>
     <div id="albums" class="albums"></div>
     <div id="pager" class="pager" hidden>
@@ -108,7 +131,7 @@
         </div>
         <div class="spacer"></div>
         <button id="modalClose" class="close" aria-label="Close">✕</button>
-      </header>
+          </header>
       <div id="modalContent" class="content"></div>
     </div>
   </div>
@@ -119,6 +142,7 @@
     const albumsEl = document.getElementById('albums');
     const searchEl = document.getElementById('search');
     const clearEl  = document.getElementById('clear');
+    const goEl  = document.getElementById('go');
     const pagerEl  = document.getElementById('pager');
     const prevEl   = document.getElementById('prev');
     const nextEl   = document.getElementById('next');
@@ -126,6 +150,9 @@
     const countEl  = document.getElementById('count');
     const errorEl  = document.getElementById('error');
     const player   = document.getElementById('player');
+    const landingEl = document.getElementById('landing');
+    const exploreEl = document.getElementById('explore');
+    const decadesEl = document.getElementById('decades');
 
     // Modal elements
     const overlay = document.getElementById('overlay');
@@ -138,13 +165,34 @@
 
     // Config
     const ALBUMS_PER_PAGE = 9;
-    const FM_FETCH_LIMIT  = 200;
-    const SHOW_TITLE_WARNING = false;
+    const FM_FETCH_LIMIT  = 200; // UI asks for 200; FM may cap ~100 internally
+    const SHOW_TITLE_WARNING = false; // hide badge (logic retained if ever needed)
 
     // State
     let lastQ = '';
     let inFlight = null;
     let typingTimer = null;
+
+    // Busy status indicator
+    const statusEl = document.getElementById('status');
+    const statusTextEl = document.getElementById('statusText');
+    let busyCount = 0;
+    function showBusy(label='Searching…'){
+      busyCount++;
+      if (statusTextEl) statusTextEl.textContent = label;
+      if (statusEl) statusEl.hidden = false;
+      if (goEl) goEl.disabled = true;
+      if (exploreEl) exploreEl.disabled = true;
+    }
+    function hideBusy(){
+      busyCount = Math.max(0, busyCount - 1);
+      if (busyCount === 0){
+        if (statusEl) statusEl.hidden = true;
+        if (goEl) goEl.disabled = false;
+        if (exploreEl) exploreEl.disabled = false;
+      }
+    }
+
 
     // Raw FM rows (cumulative as we lazy-load)
     let rawItems = [];
@@ -158,7 +206,7 @@
     // Single audio UI state
     let currentBtn=null, currentRow=null, currentSrc='';
 
-    // Field helper mappings
+    // Field helper mappings (adjust here if exact names differ)
     function fCatalogue(f){
       return f['Album Catalogue Number'] || f['Album Catalog Number'] || f['Album Catalogue No'] || f['Catalogue'] || '';
     }
@@ -182,32 +230,98 @@
       return c;
     }
 
+    // === Track sequence accessor (robust across common field names) ===
+    function fTrackNo(f){
+      const candidates = [
+        f['Sequence Number'],
+        f['Track Sequence'],
+        f['Track No'],
+        f['Track Number'],
+        f['Track #'],
+        f['Sequence'],
+        f['Track_Index'],
+        f['Track Order'],
+        f['Index'],
+        f['Song Sequence'],
+        f['Song Number']
+      ];
+      for (const v of candidates){
+        if (v !== undefined && v !== null && String(v).trim() !== ''){
+          const n = Number(String(v).replace(/[^\d.-]/g,''));
+          if (Number.isFinite(n)) return n;
+        }
+      }
+      return null;
+    }
+
+    // Flexible field accessors to match your layout keys
+    function fTitle(f){
+      return f['Album Title'] || f['Tape Files::Album_Title'] || f['Album_Title'] || f['Title'] || '';
+    }
+    function fArtist(f){
+      return f['Album Artist'] || f['Tape Files::Album Artist'] || f['Track Artist'] || f['Artist'] || '';
+    }
+    function fMp3(f){
+      return f['mp3'] || f['MP3'] || f['Audio File'] || f['Audio::mp3'] || '';
+    }
+    function fLang(f){
+      return f['Language'] || f['Language Code'] || '';
+    }
     function hasValidMp3(s){
       return typeof s === 'string' && s.trim().length > 0;
     }
 
     function abortInFlight(){ if(inFlight){ inFlight.abort(); inFlight=null; } }
 
-    function doSearch(q){
-      abortInFlight();
-      const ctrl=new AbortController();
-      inFlight=ctrl;
-      const params=new URLSearchParams();
-      if(q) params.set('q',q);
-      params.set('offset', 0);
-      params.set('limit',  FM_FETCH_LIMIT);
-      return fetch(`/api/search?${params}`,{signal:ctrl.signal})
-        .then(async r=>{ if(!r.ok) throw new Error(await r.text().catch(()=>`HTTP ${r.status}`)); return r.json(); })
-        .finally(()=>{ if(inFlight===ctrl) inFlight=null; });
+    // Show placeholder graphic from /img/* until user searches
+    function showLanding(){
+      // Clear albums UI
+      albumsEl.innerHTML = '';
+      pagerEl.hidden = true;
+      countEl.textContent = '';
+      errorEl.hidden = true;
+      // Try a few common placeholder names; fall back to MAD_Logo.png
+      const candidates = ['placeholder.png','placeholder.svg','landing.png','MAD_placeholder.png','MAD_Logo.png'];
+      const img = document.createElement('img');
+      let i = 0;
+      function tryNext(){
+        if(i >= candidates.length){ landingEl.innerHTML = ''; return; }
+        img.src = '/img/' + candidates[i++];
+      }
+      img.alt = 'Placeholder';
+      img.onerror = tryNext;
+      landingEl.innerHTML = '';
+      landingEl.appendChild(img);
+      landingEl.style.display = 'flex';
+      tryNext();
     }
 
-    // Normalization
+    function hideLanding(){ landingEl.style.display = 'none'; }
+
+    function doSearch(q){
+      abortInFlight();
+      const ctrl = new AbortController();
+      inFlight = ctrl;
+      const params = new URLSearchParams();
+      if (q) params.set('q', q);
+      params.set('offset', 0);
+      params.set('limit',  FM_FETCH_LIMIT);
+      return fetch(`/api/search?${params}`, { signal: ctrl.signal })
+        .then(async r => {
+          if (!r.ok) throw new Error(await r.text().catch(() => `HTTP ${r.status}`));
+          return r.json();
+        })
+        .finally(() => { if (inFlight === ctrl) inFlight = null; });
+    }
+
+
+    // Strong normalization to reduce bogus “same album different title”
     function normTitle(s){
       return String(s||'')
         .replace(/\s+/g,' ')
         .replace(/[\u2018\u2019]/g,"'")
         .replace(/[\u201C\u201D]/g,'"')
-        .replace(/^\W+|\W+$/g,'')
+        .replace(/^\W+|\W+$/g,'') // trim leading/trailing punctuation
         .trim();
     }
     function keyTitle(s){ return normTitle(s).toLowerCase(); }
@@ -218,20 +332,21 @@
       for(const rec of items){
         const f = rec.fields || {};
         const cat = fCatalogue(f) || '__NO_CAT__';
-        const title = normTitle(f[F_TITLE] || '(no album)');
-        const artist= normTitle(f[F_ARTIST] || '');
+        const title = normTitle(fTitle(f) || '(no album)');
+        const artist= normTitle(fArtist(f) || '');
         const pic   = fPicture(f) || '';
         const track = normTitle(f[F_TRACK] || '');
-        const mp3   = f[F_MP3] || '';
+        const mp3   = fMp3(f) || '';
         const genre = normTitle(f[F_GENRE] || '');
         const comps = composersFrom(f);
         const prod  = normTitle(f['Producer'] || '');
-        const lang  = normTitle(f[F_LANG] || '');
+        const lang  = normTitle(fLang(f) || '');
+        const seq   = fTrackNo(f); // ← sequence number for ordering
 
         if(!byCat.has(cat)){
           byCat.set(cat, {
             catalogue: cat === '__NO_CAT__' ? '' : cat,
-            titles: new Map(),
+            titles: new Map(), // keyTitle -> {raw,count}
             artist, picture: pic || '',
             tracks: []
           });
@@ -245,24 +360,37 @@
         if(!g.picture && pic) g.picture = pic;
         if(!g.artist && artist) g.artist = artist;
 
+        // keep all tracks for title logic; mp3 validity filtered later
         if(track){
-          g.tracks.push({ name: track, mp3, genre, composers: comps, producer: prod, language: lang });
+          g.tracks.push({ name: track, mp3, seq, genre, composers: comps, producer: prod, language: lang });
         }
       }
 
       const groups = [];
       for(const g of byCat.values()){
+        // playable tracks only
         const playableTracks = g.tracks.filter(t => hasValidMp3(t.mp3));
-        if (playableTracks.length === 0) continue; // hide albums without mp3
+        if (playableTracks.length === 0) {
+          // Hide albums that do not have a valid mp3 file
+          continue;
+        }
 
+        // Ignore title candidates that equal any track name (prevents “Sunday Afternoon” issue)
         const trackKeys = new Set(g.tracks.map(t => keyTitle(t.name)));
-        const candidates = Array.from(g.titles.entries());
+        const candidates = Array.from(g.titles.entries()); // [keyTitle, {raw,count}]
         const filtered = candidates.filter(([kt]) => !trackKeys.has(kt));
+
         const pickFrom = (arr) => arr.reduce((best, cur) => (!best || cur[1].count > best[1].count) ? cur : best, null);
         const pickedPair = pickFrom(filtered.length ? filtered : candidates);
         const displayTitle = pickedPair ? pickedPair[1].raw : '(no album)';
 
-        playableTracks.sort((a,b)=> a.name.localeCompare(b.name, undefined, { sensitivity:'base' }));
+        // Sort playable tracks by sequence number when available; fallback to name
+        playableTracks.sort((a,b)=>{
+          const an = (typeof a.seq === 'number' && isFinite(a.seq)) ? a.seq : Infinity;
+          const bn = (typeof b.seq === 'number' && isFinite(b.seq)) ? b.seq : Infinity;
+          if (an !== bn) return an - bn;
+          return a.name.localeCompare(b.name, undefined, { sensitivity:'base' });
+        });
 
         groups.push({
           catalogue: g.catalogue,
@@ -285,49 +413,9 @@
       return wrap;
     }
 
-    /* ================= Audio validator ================= */
-    function validateTrackAudio(src, timeoutMs=5000){
-      return new Promise((resolve) => {
-        if (!src) return resolve({ ok:false, ms:0, reason:'No source' });
-        const start = performance.now();
-        const a = new Audio();
-        a.preload = 'metadata';
-        // cache-bust to avoid sticky errors
-        const u = new URL(src, location.origin);
-        u.searchParams.set('_v', Date.now().toString(36));
-        let done = false;
-
-        const finish = (ok, reason='') => {
-          if (done) return;
-          done = true;
-          const ms = Math.round(performance.now() - start);
-          a.src = ''; // hint to GC
-          resolve({ ok, ms, reason });
-        };
-
-        const timer = setTimeout(() => finish(false, 'Timeout'), timeoutMs);
-
-        a.addEventListener('loadedmetadata', () => { clearTimeout(timer); finish(true, 'OK'); }, { once:true });
-        a.addEventListener('error', () => { clearTimeout(timer); finish(false, 'Load error'); }, { once:true });
-        a.src = u.toString();
-      });
-    }
-
-    function makeStatusBadge(){
-      const s = document.createElement('span');
-      s.className = 'badge status';
-      s.textContent = 'Check';
-      return s;
-    }
-    function setStatus(el, state){
-      el.classList.remove('wait','ok','bad');
-      if (state === 'wait'){ el.classList.add('wait'); el.textContent = '…'; }
-      else if (state.ok){ el.classList.add('ok'); el.textContent = `OK (${state.ms}ms)`; el.title = state.reason || 'OK'; }
-      else { el.classList.add('bad'); el.textContent = state.reason || 'Issue'; el.title = state.reason || 'Issue'; }
-    }
-
     /* ================= Modal behavior ================= */
     function closeTracksModal(){
+      // stop playback when closing
       if (!player.paused) player.pause();
       updateButtonsForStop();
       currentSrc = '';
@@ -339,14 +427,14 @@
     }
 
     function openTracksModal(album){
-      // Ensure only one window open
+      // Ensure only one window open: close any existing
       closeTracksModal();
 
-      // Header
+      // Fill header
       modalTitle.textContent = album.title || '(no album)';
       modalArtist.textContent = album.artist || '';
       modalCat.textContent = album.catalogue || '';
-      modalCat.style.display = album.catalogue ? 'inline-block' : 'none';
+      if (!album.catalogue) modalCat.style.display = 'none'; else modalCat.style.display = 'inline-block';
 
       // Cover
       if (album.picture) {
@@ -365,7 +453,7 @@
         modalCover.style.display = 'none';
       }
 
-      // Track list
+      // Build track list
       const ul = document.createElement('ul');
       ul.className = 'tracks';
 
@@ -385,22 +473,13 @@
 
         const btnPlay = document.createElement('button');
         btnPlay.className = 'btn small';
-        btnPlay.textContent = '▶ Play';
+        btnPlay.textContent = 'Validating…';
+        btnPlay.disabled = true;
         const src = t.mp3 ? (t.mp3.startsWith('http') ? `/api/container?u=${encodeURIComponent(t.mp3)}` : t.mp3) : '';
+        li._src = src;
+        li._btn = btnPlay;
+        if (src) validateAudio(li, src);
         btnPlay.addEventListener('click', () => handlePlay(btnPlay, li, src));
-
-        // Audio validator UI (per-track)
-        const status = makeStatusBadge();
-        const btnCheck = document.createElement('button');
-        btnCheck.className = 'btn small icon';
-        btnCheck.setAttribute('aria-label','Validate audio');
-        btnCheck.title = 'Validate audio';
-        btnCheck.textContent = '✓';
-        btnCheck.addEventListener('click', async () => {
-          setStatus(status, 'wait');
-          const result = await validateTrackAudio(src);
-          setStatus(status, result);
-        });
 
         const btnMore = document.createElement('button');
         btnMore.className = 'btn small icon';
@@ -421,16 +500,41 @@
           info.style.display = info.style.display === 'none' || !info.style.display ? 'block' : 'none';
         });
 
-        // assemble controls
         controls.appendChild(btnPlay);
-        controls.appendChild(btnCheck);
-        controls.appendChild(status);
         controls.appendChild(btnMore);
 
         top.appendChild(name);
         top.appendChild(controls);
 
         li.appendChild(top);
+
+        // Progress UI (non-destructive)
+        const progWrap = document.createElement('div');
+        progWrap.className = 'progress';
+        const seek = document.createElement('input');
+        seek.type = 'range'; seek.className = 'seek'; seek.min = 0; seek.max = 100; seek.value = 0;
+        const time = document.createElement('div');
+        time.className = 'time'; time.textContent = '0:00 / 0:00';
+        progWrap.appendChild(seek); progWrap.appendChild(time);
+        li.appendChild(progWrap);
+        li._seek = seek; li._time = time; li._seeking = false;
+        // Seek while dragging (works while playing or paused)
+        seek.addEventListener('input', () => {
+          if (currentRow === li && player.duration && isFinite(player.duration)) {
+            const pct = Number(seek.value) / 100;
+            player.currentTime = pct * player.duration;
+          }
+        });
+        seek.addEventListener('change', () => {
+          if (currentRow === li && player.duration && isFinite(player.duration)) {
+            const pct = Number(seek.value) / 100;
+            player.currentTime = pct * player.duration;
+          }
+          li._seeking = false;
+        });
+        seek.addEventListener('pointerdown', () => { if (currentRow === li) li._seeking = true; });
+        seek.addEventListener('pointerup',   () => { if (currentRow === li) li._seeking = false; });
+
         li.appendChild(info);
         ul.appendChild(li);
       });
@@ -438,6 +542,7 @@
       modalContent.innerHTML = '';
       modalContent.appendChild(ul);
 
+      // Open
       overlay.classList.add('open');
       overlay.setAttribute('aria-hidden', 'false');
       document.body.classList.add('no-scroll');
@@ -445,6 +550,7 @@
 
     modalClose.addEventListener('click', closeTracksModal);
     overlay.addEventListener('click', (e) => {
+      // Close if clicking backdrop (but not clicks inside the dialog)
       if (e.target === overlay) closeTracksModal();
     });
     document.addEventListener('keydown', (e) => {
@@ -462,6 +568,7 @@
       albumPage = Math.min(albumPage, maxPage - 1);
       pageInfo.textContent = `Page ${albumPage+1} / ${maxPage}`;
       prevEl.disabled = albumPage <= 0;
+      // next disabled only when we're at last page and there's nothing left to lazy-load
       nextEl.disabled = albumPage >= maxPage - 1 && rawItems.length >= rawTotalFound;
 
       const start = albumPage * ALBUMS_PER_PAGE;
@@ -480,6 +587,12 @@
           img.src = proxied; img.alt = 'Cover';
           img.onerror = () => { wrap.remove(); };
           wrap.appendChild(img);
+          // Make cover clickable to open tracks
+          wrap.tabIndex = 0;
+          wrap.setAttribute('role','button');
+          try { wrap.setAttribute('aria-label', `Open tracks for ${album.title}`); } catch {}
+          wrap.addEventListener('click', () => openTracksModal(album));
+          wrap.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTracksModal(album); } });
           card.appendChild(wrap);
         }
 
@@ -512,13 +625,58 @@
     }
 
     /* ================= Playback ================= */
+    function fmtTime(sec){ if(!isFinite(sec)||sec<0) sec=0; const m=Math.floor(sec/60); const s=Math.floor(sec%60); return m+':'+String(s).padStart(2,'0'); }
+
+// --- Audio validator: preloads metadata, shows duration, enables/disables Play
+function validateAudio(row, src) {
+  const test = new Audio();
+  test.preload = 'metadata';
+
+  let finished = false;
+  const finish = (ok, dur=0) => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timer);
+    try { test.src = ''; } catch {}
+
+    if (ok && isFinite(dur) && dur > 0) {
+      row._valid = true;
+      row._duration = dur;
+      if (row._time) row._time.textContent = '0:00 / ' + fmtTime(dur);
+      if (row._seek) { row._seek.value = 0; }
+      if (row._btn) { row._btn.disabled = false; row._btn.textContent = '▶ Play'; }
+    } else {
+      row._valid = false;
+      if (row._btn) { row._btn.disabled = true; row._btn.textContent = 'Invalid'; }
+      if (row._time) row._time.textContent = '0:00 / 0:00';
+    }
+  };
+
+  const timer = setTimeout(() => finish(false), 8000);
+  test.addEventListener('loadedmetadata', () => finish(true, test.duration));
+  test.addEventListener('error',          () => finish(false));
+  test.addEventListener('stalled',        () => finish(false));
+  test.addEventListener('abort',          () => finish(false));
+
+  test.src = src;
+}
+    function updateProgressUI(){
+      if (!currentRow) return;
+      const seek = currentRow._seek, time = currentRow._time;
+      if (!seek || !time) return;
+      const dur = player.duration, cur = player.currentTime;
+      const pct = (dur && isFinite(dur)) ? Math.min(100, Math.max(0, (cur/dur)*100)) : 0;
+      if (!(currentRow && currentRow._seeking)) { seek.value = String(pct); seek.style.setProperty('--fill', pct + '%'); }
+      time.textContent = fmtTime(cur) + ' / ' + fmtTime(dur);
+    }
+
     function handlePlay(btn, row, src){
       if (!src) return;
       if (currentSrc === src && !player.paused) { player.pause(); updateButtonsForStop(); return; }
       if (currentSrc !== src) { player.src = src; currentSrc = src; }
       player.play().then(() => {
         updateButtonsForStop();
-        currentBtn = btn; currentRow = row;
+        currentBtn = btn; currentRow = row; updateProgressUI();
         currentRow.classList.add('playing');
         currentBtn.textContent = '⏸ Pause';
         currentBtn.classList.add('btn-accent');
@@ -529,7 +687,16 @@
       if (currentBtn) { currentBtn.textContent = '▶ Play'; currentBtn.classList.remove('btn-accent'); }
       currentBtn = null; currentRow = null;
     }
-    player.addEventListener('ended', () => { updateButtonsForStop(); currentSrc=''; });
+    player.addEventListener('ended', () => {
+      if (currentRow && currentRow.nextElementSibling && currentRow.nextElementSibling._src) {
+        const nextLi = currentRow.nextElementSibling;
+        handlePlay(nextLi._btn, nextLi, nextLi._src);
+      } else {
+        updateButtonsForStop(); currentSrc=''; updateProgressUI();
+      }
+    });
+    player.addEventListener('timeupdate', () => { updateProgressUI(); });
+    player.addEventListener('loadedmetadata', () => { updateProgressUI(); });
     player.addEventListener('pause', () => {
       if (currentBtn && currentSrc === player.src) {
         currentBtn.textContent = '▶ Play';
@@ -540,26 +707,90 @@
 
     /* ================= Lazy-load FM rows ================= */
     async function loadMore(q){
-      if (rawItems.length >= rawTotalFound) return false;
-      const params = new URLSearchParams();
-      if (q) params.set('q', q);
-      params.set('offset', rawNextOffset);
-      params.set('limit', FM_FETCH_LIMIT);
-      const r = await fetch(`/api/search?${params}`);
-      if (!r.ok) throw new Error(await r.text().catch(()=>`HTTP ${r.status}`));
-      const j = await r.json();
-      const newItems = j.items || [];
-      rawItems = rawItems.concat(newItems);
-      rawTotalFound = Number(j.total || rawTotalFound);
-      const returnedOffset = Number(j.offset || 0);
-      rawNextOffset = returnedOffset + newItems.length;
-      albumGroups = groupAlbums(rawItems);
-      return newItems.length > 0;
+      showBusy('Loading more…');
+      try {
+        if (rawItems.length >= rawTotalFound) return false; // nothing left
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        params.set('offset', rawNextOffset);
+        params.set('limit', FM_FETCH_LIMIT);
+        const r = await fetch(`/api/search?${params}`);
+        if (!r.ok) throw new Error(await r.text().catch(()=>`HTTP ${r.status}`));
+        const j = await r.json();
+        const newItems = j.items || [];
+        rawItems = rawItems.concat(newItems);
+        rawTotalFound = Number(j.total || rawTotalFound);
+        const returnedOffset = Number(j.offset || 0);
+        rawNextOffset = returnedOffset + newItems.length;
+        albumGroups = groupAlbums(rawItems);
+        return newItems.length > 0;
+      } finally {
+        hideBusy();
+      }
+    }
+    /* ================= Search & paging ================= */
+    function shuffleInPlace(arr){
+      for(let i=arr.length-1;i>0;i--){ const j=(Math.random()* (i+1))|0; [arr[i],arr[j]]=[arr[j],arr[i]]; }
     }
 
-    /* ================= Search & paging ================= */
+    async function runExplore(startYear, forceRefresh=false){
+      showBusy(`Loading ${startYear}s…`);
+      hideLanding();
+      // small guard
+      const start = Number(startYear)||0;
+      if(!start) return;
+      const end = start + 9;
+      const params = new URLSearchParams();
+      params.set('start', String(start));
+      params.set('end',   String(end));
+      params.set('limit', '120'); // quick; let UI group & sample
+      let _err;
+      try {
+        const r = await fetch(`/api/explore?${params}`);
+      if(!r.ok){ errorEl.hidden=false; errorEl.textContent = 'Explore error: ' + await r.text(); return; }
+        const j = await r.json();
+      if (!j || !Array.isArray(j.items) || j.items.length === 0){
+        errorEl.hidden = false;
+        errorEl.textContent = `No albums found for the ${start}s.`;
+        rawItems = [];
+        rawTotalFound = 0;
+        rawNextOffset = 0;
+        albumGroups = [];
+        albumPage = 0;
+        renderAlbumPage();
+        return;
+      }
+      rawItems = j.items || [];
+      rawTotalFound = Number(j.total || rawItems.length);
+      rawNextOffset = 0;
+      albumGroups = groupAlbums(rawItems);
+      shuffleInPlace(albumGroups);
+      if (albumGroups.length > ALBUMS_PER_PAGE) albumGroups = albumGroups.slice(0, ALBUMS_PER_PAGE);
+      albumPage = 0;
+      renderAlbumPage();
+      } catch (e){ _err = e; throw e; } finally { hideBusy(); }
+    }
+
+    // Build decade chips and toggle
+    if (decadesEl){
+      const decades = [1950,1960,1970,1980,1990,2000,2010,2020];
+      decadesEl.innerHTML = '';
+      for(const d of decades){
+        const b = document.createElement('button');
+        b.textContent = d + 's';
+        b.addEventListener('click', (e) => runExplore(d, e.altKey));
+        decadesEl.appendChild(b);
+      }
+    }
+    if (exploreEl){
+      exploreEl.addEventListener('click', () => { decadesEl.hidden = !decadesEl.hidden; });
+    }
+/* ================= Search & paging ================= */
     function run(q){
+      if(!q){ showLanding(); return; } // keep everything else untouched; only search when user types
       lastQ = q;
+      hideLanding();
+      showBusy('Searching…');
       doSearch(q)
         .then(json => {
           rawItems = json?.items || [];
@@ -574,21 +805,23 @@
           if (err.name === 'AbortError') return;
           errorEl.hidden = false;
           errorEl.textContent = `Search error: ${err.message || err}`;
-        });
+        })
+        .finally(() => hideBusy());
     }
-
-    searchEl.addEventListener('input', () => {
+    goEl.addEventListener('click', () => { const q = searchEl.value.trim(); run(q); });
+searchEl.addEventListener('input', () => {
       clearTimeout(typingTimer);
       const q = searchEl.value.trim();
       typingTimer = setTimeout(() => run(q), 300);
     });
-    clearEl.addEventListener('click', () => { searchEl.value=''; run(''); });
+    clearEl.addEventListener('click', () => { searchEl.value=''; showLanding(); });
 
     prevEl.addEventListener('click', () => {
       if (albumPage>0){ albumPage--; renderAlbumPage(); }
     });
     nextEl.addEventListener('click', async () => {
       const maxPage = Math.max(1, Math.ceil((albumGroups.length||0) / ALBUMS_PER_PAGE));
+      // If at the last page but FM has more rows, fetch next chunk first
       if (albumPage >= maxPage - 1 && rawItems.length < rawTotalFound) {
         nextEl.disabled = true;
         try { await loadMore(lastQ); } finally { nextEl.disabled = false; }
@@ -598,8 +831,8 @@
       else { renderAlbumPage(); }
     });
 
-    // Initial load
-    run('');
+    // Initial load — show placeholder image; search begins only after typing
+    showLanding();
   </script>
 </body>
 </html>
