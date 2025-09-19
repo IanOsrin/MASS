@@ -13,9 +13,10 @@
     html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;}
     header{padding:20px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:linear-gradient(180deg,rgba(15,15,18,0.98),rgba(15,15,18,0.9));backdrop-filter:saturate(180%) blur(8px);z-index:10;}
     .title{font-size:28px;font-weight:800;letter-spacing:.3px;text-align:center;}
-    .searchbar{max-width:960px;margin:12px auto 0;display:grid;grid-template-columns:1fr auto;gap:8px;}
+    .searchbar{max-width:960px;margin:12px auto 0;display:grid;grid-template-columns:minmax(0,1fr) repeat(3,auto);gap:8px;align-items:center;}
     .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:16px;outline:none;}
     .searchbar button{background:var(--accent);color:#0b1210;border:none;border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer;}
+    .searchbar .status{grid-column:1 / -1;justify-self:flex-start;}
 
     main{max-width:1100px;margin:20px auto;padding:0 16px 40px;}
     .albums{display:grid;grid-template-columns:1fr auto;gap:8px;}
@@ -29,6 +30,7 @@
     .card h3{margin:0;font-size:18px;}
     .muted{color:var(--muted);font-size:13px;text-align:center;}
     .badge{border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:11px;color:var(--muted);}
+    .badge.badge-invalid{background:#2b1517;border-color:#5a2327;color:#ffb1b8;font-weight:600;}
 
     .btn{background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:8px 10px;cursor:pointer;}
     .btn.small{padding:6px 8px;font-size:13px;}
@@ -98,7 +100,7 @@
       <button id="clear">Clear</button>
       <button id="explore">Explore</button>
       <span id="status" class="status" hidden aria-live="polite" role="status"><span class="pulse"></span><span id="statusText">Searching…</span></span>
-
+    </div>
     <div id="decades" class="decades" hidden></div>
   </header>
   <div id="codex-canary">Codex was here</div>
@@ -170,6 +172,9 @@
 
     // State
     let lastQ = '';
+    let currentEndpoint = '/api/search';
+    let currentParams = {};
+    let currentLimit = FM_FETCH_LIMIT;
     let inFlight = null;
     let typingTimer = null;
 
@@ -275,11 +280,15 @@
 
     // Show placeholder graphic from /img/* until user searches
     function showLanding(){
+      lastQ = '';
       // Clear albums UI
       albumsEl.innerHTML = '';
       pagerEl.hidden = true;
       countEl.textContent = '';
       errorEl.hidden = true;
+      currentEndpoint = '/api/search';
+      currentParams = {};
+      currentLimit = FM_FETCH_LIMIT;
       // Try a few common placeholder names; fall back to MAD_Logo.png
       const candidates = ['placeholder.png','placeholder.svg','landing.png','MAD_placeholder.png','MAD_Logo.png'];
       const img = document.createElement('img');
@@ -298,20 +307,29 @@
 
     function hideLanding(){ landingEl.style.display = 'none'; }
 
-    function doSearch(q){
+    function fetchAlbums(endpoint, baseParams = {}, limitValue){
       abortInFlight();
       const ctrl = new AbortController();
       inFlight = ctrl;
       const params = new URLSearchParams();
-      if (q) params.set('q', q);
-      params.set('offset', 0);
-      params.set('limit',  FM_FETCH_LIMIT);
-      return fetch(`/api/search?${params}`, { signal: ctrl.signal })
+      Object.entries(baseParams).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.set(key, value);
+        }
+      });
+      params.set('offset', '0');
+      params.set('limit', String(limitValue));
+      const queryString = params.toString();
+      return fetch(`${endpoint}?${queryString}`, { signal: ctrl.signal })
         .then(async r => {
           if (!r.ok) throw new Error(await r.text().catch(() => `HTTP ${r.status}`));
           return r.json();
         })
         .finally(() => { if (inFlight === ctrl) inFlight = null; });
+    }
+
+    function doSearch(q){
+      return fetchAlbums('/api/search', q ? { q } : {}, FM_FETCH_LIMIT);
     }
 
 
@@ -478,13 +496,17 @@
         const src = t.mp3 ? (t.mp3.startsWith('http') ? `/api/container?u=${encodeURIComponent(t.mp3)}` : t.mp3) : '';
         li._src = src;
         li._btn = btnPlay;
-        if (src) validateAudio(li, src);
         btnPlay.addEventListener('click', () => handlePlay(btnPlay, li, src));
 
         const btnMore = document.createElement('button');
         btnMore.className = 'btn small icon';
         btnMore.setAttribute('aria-label','More info');
         btnMore.textContent = '⋮';
+
+        const invalidBadge = document.createElement('span');
+        invalidBadge.className = 'badge badge-invalid';
+        invalidBadge.textContent = 'Invalid audio';
+        invalidBadge.hidden = true;
 
         const info = document.createElement('div');
         info.className = 'info';
@@ -502,6 +524,7 @@
 
         controls.appendChild(btnPlay);
         controls.appendChild(btnMore);
+        controls.appendChild(invalidBadge);
 
         top.appendChild(name);
         top.appendChild(controls);
@@ -534,6 +557,42 @@
         });
         seek.addEventListener('pointerdown', () => { if (currentRow === li) li._seeking = true; });
         seek.addEventListener('pointerup',   () => { if (currentRow === li) li._seeking = false; });
+
+        const markValid = (duration) => {
+          li._valid = true;
+          li._duration = duration;
+          if (li._time) li._time.textContent = '0:00 / ' + fmtTime(duration);
+          if (li._seek) li._seek.value = 0;
+          btnPlay.disabled = false;
+          btnPlay.textContent = '▶ Play';
+          btnPlay.style.display = 'inline-flex';
+          invalidBadge.hidden = true;
+        };
+
+        const markInvalid = () => {
+          li._valid = false;
+          li._duration = undefined;
+          btnPlay.disabled = true;
+          btnPlay.style.display = 'none';
+          invalidBadge.hidden = false;
+          if (li._time) li._time.textContent = 'Invalid audio';
+        };
+
+        if (src) {
+          validateAudio(src).then(result => {
+            if (!li.isConnected) return;
+            if (result.ok) {
+              markValid(result.duration);
+            } else {
+              markInvalid();
+            }
+          }).catch(() => {
+            if (!li.isConnected) return;
+            markInvalid();
+          });
+        } else {
+          markInvalid();
+        }
 
         li.appendChild(info);
         ul.appendChild(li);
@@ -627,38 +686,57 @@
     /* ================= Playback ================= */
     function fmtTime(sec){ if(!isFinite(sec)||sec<0) sec=0; const m=Math.floor(sec/60); const s=Math.floor(sec%60); return m+':'+String(s).padStart(2,'0'); }
 
-// --- Audio validator: preloads metadata, shows duration, enables/disables Play
-function validateAudio(row, src) {
-  const test = new Audio();
-  test.preload = 'metadata';
+// --- Audio validator: preloads metadata, resolves with duration or failure
+function validateAudio(url, timeoutMs = 5000) {
+  return new Promise(resolve => {
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audio.crossOrigin = 'anonymous';
 
-  let finished = false;
-  const finish = (ok, dur=0) => {
-    if (finished) return;
-    finished = true;
-    clearTimeout(timer);
-    try { test.src = ''; } catch {}
+    let settled = false;
+    const cleanup = () => {
+      audio.removeEventListener('loadedmetadata', onLoaded);
+      audio.removeEventListener('error', onError);
+      audio.removeEventListener('stalled', onError);
+      audio.removeEventListener('abort', onError);
+      try { audio.src = ''; } catch {}
+      if (typeof audio.remove === 'function') {
+        try { audio.remove(); } catch {}
+      }
+      clearTimeout(timer);
+    };
 
-    if (ok && isFinite(dur) && dur > 0) {
-      row._valid = true;
-      row._duration = dur;
-      if (row._time) row._time.textContent = '0:00 / ' + fmtTime(dur);
-      if (row._seek) { row._seek.value = 0; }
-      if (row._btn) { row._btn.disabled = false; row._btn.textContent = '▶ Play'; }
-    } else {
-      row._valid = false;
-      if (row._btn) { row._btn.disabled = true; row._btn.textContent = 'Invalid'; }
-      if (row._time) row._time.textContent = '0:00 / 0:00';
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
+
+    const onLoaded = () => {
+      const duration = audio.duration;
+      if (Number.isFinite(duration) && duration > 0) {
+        finish({ ok:true, duration });
+      } else {
+        finish({ ok:false, reason:'no-duration' });
+      }
+    };
+
+    const onError = () => finish({ ok:false, reason:'error' });
+
+    const timer = setTimeout(() => finish({ ok:false, reason:'timeout' }), timeoutMs);
+
+    audio.addEventListener('loadedmetadata', onLoaded, { once:true });
+    audio.addEventListener('error', onError, { once:true });
+    audio.addEventListener('stalled', onError, { once:true });
+    audio.addEventListener('abort', onError, { once:true });
+
+    try {
+      audio.src = url;
+    } catch {
+      finish({ ok:false, reason:'error' });
     }
-  };
-
-  const timer = setTimeout(() => finish(false), 8000);
-  test.addEventListener('loadedmetadata', () => finish(true, test.duration));
-  test.addEventListener('error',          () => finish(false));
-  test.addEventListener('stalled',        () => finish(false));
-  test.addEventListener('abort',          () => finish(false));
-
-  test.src = src;
+  });
 }
     function updateProgressUI(){
       if (!currentRow) return;
@@ -706,15 +784,19 @@ function validateAudio(row, src) {
     });
 
     /* ================= Lazy-load FM rows ================= */
-    async function loadMore(q){
-      showBusy('Loading more…');
+    async function loadMore(){
+      showBusy('Searching…');
       try {
         if (rawItems.length >= rawTotalFound) return false; // nothing left
         const params = new URLSearchParams();
-        if (q) params.set('q', q);
-        params.set('offset', rawNextOffset);
-        params.set('limit', FM_FETCH_LIMIT);
-        const r = await fetch(`/api/search?${params}`);
+        Object.entries(currentParams).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            params.set(key, value);
+          }
+        });
+        params.set('offset', String(rawNextOffset));
+        params.set('limit', String(currentLimit));
+        const r = await fetch(`${currentEndpoint}?${params.toString()}`);
         if (!r.ok) throw new Error(await r.text().catch(()=>`HTTP ${r.status}`));
         const j = await r.json();
         const newItems = j.items || [];
@@ -729,46 +811,36 @@ function validateAudio(row, src) {
       }
     }
     /* ================= Search & paging ================= */
-    function shuffleInPlace(arr){
-      for(let i=arr.length-1;i>0;i--){ const j=(Math.random()* (i+1))|0; [arr[i],arr[j]]=[arr[j],arr[i]]; }
-    }
-
-    async function runExplore(startYear, forceRefresh=false){
-      showBusy(`Loading ${startYear}s…`);
+    async function runExplore(startYear){
+      const start = Number(startYear) || 0;
+      if (!start) return;
+      lastQ = '';
       hideLanding();
-      // small guard
-      const start = Number(startYear)||0;
-      if(!start) return;
-      const end = start + 9;
-      const params = new URLSearchParams();
-      params.set('start', String(start));
-      params.set('end',   String(end));
-      params.set('limit', '120'); // quick; let UI group & sample
-      let _err;
-      try {
-        const r = await fetch(`/api/explore?${params}`);
-      if(!r.ok){ errorEl.hidden=false; errorEl.textContent = 'Explore error: ' + await r.text(); return; }
-        const j = await r.json();
-      if (!j || !Array.isArray(j.items) || j.items.length === 0){
-        errorEl.hidden = false;
-        errorEl.textContent = `No albums found for the ${start}s.`;
-        rawItems = [];
-        rawTotalFound = 0;
-        rawNextOffset = 0;
-        albumGroups = [];
-        albumPage = 0;
-        renderAlbumPage();
-        return;
-      }
-      rawItems = j.items || [];
-      rawTotalFound = Number(j.total || rawItems.length);
-      rawNextOffset = 0;
-      albumGroups = groupAlbums(rawItems);
-      shuffleInPlace(albumGroups);
-      if (albumGroups.length > ALBUMS_PER_PAGE) albumGroups = albumGroups.slice(0, ALBUMS_PER_PAGE);
-      albumPage = 0;
-      renderAlbumPage();
-      } catch (e){ _err = e; throw e; } finally { hideBusy(); }
+      errorEl.hidden = true;
+      errorEl.textContent = '';
+      showBusy('Searching…');
+      fetchAlbums('/api/explore', { decade: String(start) }, ALBUMS_PER_PAGE)
+        .then(json => {
+          rawItems = json?.items || [];
+          rawTotalFound = Number(json?.total || rawItems.length);
+          rawNextOffset = Number(json?.offset || 0) + rawItems.length;
+          albumGroups = groupAlbums(rawItems);
+          albumPage = 0;
+          if (rawTotalFound === 0) {
+            errorEl.hidden = false;
+            errorEl.textContent = `No albums found for the ${start}s.`;
+          }
+          renderAlbumPage();
+          currentEndpoint = '/api/explore';
+          currentParams = { decade: String(start) };
+          currentLimit = ALBUMS_PER_PAGE;
+        })
+        .catch(err => {
+          if (err.name === 'AbortError') return;
+          errorEl.hidden = false;
+          errorEl.textContent = `Explore error: ${err.message || err}`;
+        })
+        .finally(() => hideBusy());
     }
 
     // Build decade chips and toggle
@@ -778,7 +850,7 @@ function validateAudio(row, src) {
       for(const d of decades){
         const b = document.createElement('button');
         b.textContent = d + 's';
-        b.addEventListener('click', (e) => runExplore(d, e.altKey));
+        b.addEventListener('click', () => runExplore(d));
         decadesEl.appendChild(b);
       }
     }
@@ -787,11 +859,14 @@ function validateAudio(row, src) {
     }
 /* ================= Search & paging ================= */
     function run(q){
-      if(!q){ showLanding(); return; } // keep everything else untouched; only search when user types
-      lastQ = q;
+      const query = q.trim();
+      if(!query){ showLanding(); return; }
+      lastQ = query;
       hideLanding();
+      errorEl.hidden = true;
+      errorEl.textContent = '';
       showBusy('Searching…');
-      doSearch(q)
+      doSearch(query)
         .then(json => {
           rawItems = json?.items || [];
           rawTotalFound = Number(json?.total || rawItems.length);
@@ -800,6 +875,10 @@ function validateAudio(row, src) {
           albumGroups = groupAlbums(rawItems);
           albumPage = 0;
           renderAlbumPage();
+
+          currentEndpoint = '/api/search';
+          currentParams = query ? { q: query } : {};
+          currentLimit = FM_FETCH_LIMIT;
         })
         .catch(err => {
           if (err.name === 'AbortError') return;
@@ -824,7 +903,7 @@ searchEl.addEventListener('input', () => {
       // If at the last page but FM has more rows, fetch next chunk first
       if (albumPage >= maxPage - 1 && rawItems.length < rawTotalFound) {
         nextEl.disabled = true;
-        try { await loadMore(lastQ); } finally { nextEl.disabled = false; }
+        try { await loadMore(); } finally { nextEl.disabled = false; }
       }
       const newMax = Math.max(1, Math.ceil((albumGroups.length||0) / ALBUMS_PER_PAGE));
       if (albumPage < newMax - 1) { albumPage++; renderAlbumPage(); }
