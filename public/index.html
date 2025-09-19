@@ -76,7 +76,7 @@
     .info-row{display:flex;gap:8px;margin:2px 0;}
     .info .label{min-width:110px;color:#e3e6ee;}
     .no-scroll{overflow:hidden;}
-  
+
     /* Busy / searching status indicator */
     .status{display:inline-flex;align-items:center;gap:8px;margin-left:8px;color:var(--muted);font-size:13px;}
     .status[hidden]{display:none;}
@@ -88,6 +88,18 @@
       100%{transform:scale(.9);box-shadow:0 0 0 0 rgba(98,245,169,0);} 
     }
     button:disabled{opacity:.6;cursor:not-allowed;}
+
+    /* Track info modal */
+    .info-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:200;}
+    .info-modal-overlay.open{display:flex;}
+    .info-modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 20px;width:min(480px,92vw);max-height:80vh;overflow:auto;box-shadow:0 18px 48px rgba(0,0,0,.4);}
+    .info-modal header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;}
+    .info-modal h3{margin:0;font-size:18px;}
+    .info-modal .info-close{border:1px solid var(--border);background:transparent;color:var(--fg);border-radius:8px;padding:6px 10px;cursor:pointer;}
+    .info-modal dl{margin:0;display:grid;grid-template-columns:minmax(120px,auto) 1fr;gap:10px 14px;font-size:14px;}
+    .info-modal dt{font-weight:600;color:var(--muted);}
+    .info-modal dd{margin:0;}
+    .info-modal-empty{color:var(--muted);font-style:italic;text-align:center;margin:12px 0;}
 
   </style>
 </head>
@@ -140,6 +152,16 @@
     </div>
   </div>
 
+  <div id="trackInfoOverlay" class="info-modal-overlay" hidden>
+    <div id="trackInfoDialog" class="info-modal" role="dialog" aria-modal="true" aria-labelledby="trackInfoTitle">
+      <header>
+        <h3 id="trackInfoTitle">More info</h3>
+        <button type="button" id="trackInfoClose" class="info-close">Close</button>
+      </header>
+      <div id="trackInfoBody"></div>
+    </div>
+  </div>
+
   <audio id="player" preload="none"></audio>
 
   <script>
@@ -168,6 +190,10 @@
     const modalCat = document.getElementById('modalCat');
     const modalContent = document.getElementById('modalContent');
     const modalClose = document.getElementById('modalClose');
+    const trackInfoOverlay = document.getElementById('trackInfoOverlay');
+    const trackInfoDialog = document.getElementById('trackInfoDialog');
+    const trackInfoBody = document.getElementById('trackInfoBody');
+    const trackInfoClose = document.getElementById('trackInfoClose');
 
     // Config
     const ALBUMS_PER_PAGE = 9;
@@ -183,6 +209,9 @@
     let currentLimit = FM_FETCH_LIMIT;
     let inFlight = null;
     let typingTimer = null;
+    let trackInfoReturnFocus = null;
+    let trackInfoFocusables = [];
+    const trackInfoFocusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
     // Busy status indicator
     const statusEl = document.getElementById('status');
@@ -230,16 +259,6 @@
     const F_MP3    = 'mp3';
     const F_GENRE  = 'Local Genre';
     const F_LANG   = 'Language';
-
-    function composersFrom(f){
-      const c = [
-        f['Composer 1'] ?? f['Composer1'],
-        f['Composer 2'] ?? f['Composer2'],
-        f['Composer 3'] ?? f['Composer3'],
-        f['Composer 4'] ?? f['Composer4'],
-      ].filter(Boolean);
-      return c;
-    }
 
     // === Track sequence accessor (robust across common field names) ===
     function fTrackNo(f){
@@ -364,10 +383,16 @@
         const pic   = fPicture(f) || '';
         const track = normTitle(f[F_TRACK] || '');
         const mp3   = fMp3(f) || '';
-        const genre = normTitle(f[F_GENRE] || '');
-        const comps = composersFrom(f);
-        const prod  = normTitle(f['Producer'] || '');
-        const lang  = normTitle(fLang(f) || '');
+        const genreRaw = f[F_GENRE] || f['Genre'] || '';
+        const genre = normTitle(genreRaw || '');
+        const producerRaw = f['Producer'] || '';
+        const languageRaw = fLang(f) || '';
+        const lang  = normTitle(languageRaw || '');
+        const composer1 = f['Composer 1'] ?? f['Composer1'] ?? '';
+        const composer2 = f['Composer 2'] ?? f['Composer2'] ?? '';
+        const composer3 = f['Composer 3'] ?? f['Composer3'] ?? '';
+        const composer4 = f['Composer 4'] ?? f['Composer4'] ?? '';
+        const isrc = f['ISRC'] || '';
         const seq   = fTrackNo(f); // ← sequence number for ordering
 
         if(!byCat.has(cat)){
@@ -389,7 +414,21 @@
 
         // keep all tracks for title logic; mp3 validity filtered later
         if(track){
-          g.tracks.push({ name: track, mp3, seq, genre, composers: comps, producer: prod, language: lang });
+          g.tracks.push({
+            name: track,
+            mp3,
+            seq,
+            genre,
+            genreDisplay: genreRaw,
+            producer: producerRaw,
+            language: lang,
+            languageDisplay: languageRaw,
+            composer1,
+            composer2,
+            composer3,
+            composer4,
+            isrc
+          });
         }
       }
 
@@ -432,16 +471,109 @@
       return groups;
     }
 
-    function row(label, value){
-      const wrap = document.createElement('div'); wrap.className = 'info-row';
-      const l = document.createElement('div'); l.className = 'label'; l.textContent = label + ':';
-      const v = document.createElement('div'); v.textContent = value;
-      wrap.appendChild(l); wrap.appendChild(v);
-      return wrap;
+    /* ================= Track info modal ================= */
+    function handleTrackInfoKeydown(e){
+      if (!trackInfoOverlay.classList.contains('open')) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeTrackInfoModal();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const focusables = trackInfoFocusables.filter(el => el && typeof el.focus === 'function' && !el.disabled && el.offsetParent !== null);
+        if (focusables.length === 0) {
+          e.preventDefault();
+          return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey) {
+          if (active === first || !trackInfoOverlay.contains(active)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (active === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
     }
+
+    function openTrackInfoModal(track, trigger){
+      if (!track) return;
+      closeTrackInfoModal({ suppressFocus: true });
+      trackInfoReturnFocus = trigger || null;
+      const entries = [];
+      const pushEntry = (label, value) => {
+        if (value === undefined || value === null) return;
+        const text = String(value).trim();
+        if (text) entries.push({ label, value: text });
+      };
+
+      pushEntry('Producer', track.producer);
+      pushEntry('Composer 1', track.composer1);
+      pushEntry('Composer 2', track.composer2);
+      pushEntry('Composer 3', track.composer3);
+      pushEntry('Composer 4', track.composer4);
+      pushEntry('Language', track.languageDisplay || track.language);
+      pushEntry('Genre', track.genreDisplay || track.genre);
+      pushEntry('ISRC', track.isrc);
+
+      if (entries.length) {
+        const dl = document.createElement('dl');
+        entries.forEach(({ label, value }) => {
+          const dt = document.createElement('dt'); dt.textContent = label;
+          const dd = document.createElement('dd'); dd.textContent = value;
+          dl.appendChild(dt); dl.appendChild(dd);
+        });
+        trackInfoBody.innerHTML = '';
+        trackInfoBody.appendChild(dl);
+      } else {
+        trackInfoBody.innerHTML = '<p class="info-modal-empty">No additional metadata.</p>';
+      }
+
+      trackInfoOverlay.hidden = false;
+      trackInfoOverlay.classList.add('open');
+      trackInfoFocusables = Array.from(trackInfoDialog.querySelectorAll(trackInfoFocusableSelector));
+      if (trackInfoFocusables.length === 0) {
+        trackInfoDialog.setAttribute('tabindex', '-1');
+        trackInfoFocusables = [trackInfoDialog];
+      } else {
+        trackInfoDialog.removeAttribute('tabindex');
+      }
+      const focusTarget = trackInfoFocusables[0] || trackInfoDialog;
+      requestAnimationFrame(() => focusTarget.focus());
+      document.addEventListener('keydown', handleTrackInfoKeydown, true);
+    }
+
+    function closeTrackInfoModal(options = {}){
+      if (!trackInfoOverlay.classList.contains('open')) return;
+      trackInfoOverlay.classList.remove('open');
+      trackInfoOverlay.hidden = true;
+      trackInfoBody.innerHTML = '';
+      trackInfoDialog.removeAttribute('tabindex');
+      document.removeEventListener('keydown', handleTrackInfoKeydown, true);
+      const focusTarget = trackInfoReturnFocus;
+      trackInfoReturnFocus = null;
+      if (!options.suppressFocus && focusTarget && typeof focusTarget.focus === 'function') {
+        requestAnimationFrame(() => focusTarget.focus());
+      }
+    }
+
+    trackInfoOverlay.addEventListener('click', (e) => {
+      if (e.target === trackInfoOverlay) {
+        closeTrackInfoModal();
+      }
+    });
+    trackInfoClose.addEventListener('click', () => closeTrackInfoModal());
 
     /* ================= Modal behavior ================= */
     function closeTracksModal(){
+      closeTrackInfoModal({ suppressFocus: true });
       // stop playback when closing
       if (!player.paused) player.pause();
       updateButtonsForStop();
@@ -511,25 +643,12 @@
         btnMore.className = 'btn small icon';
         btnMore.setAttribute('aria-label','More info');
         btnMore.textContent = '⋮';
+        btnMore.addEventListener('click', () => openTrackInfoModal(t, btnMore));
 
         const invalidBadge = document.createElement('span');
         invalidBadge.className = 'badge badge-invalid';
         invalidBadge.textContent = 'Invalid audio';
         invalidBadge.hidden = true;
-
-        const info = document.createElement('div');
-        info.className = 'info';
-
-        const rows = [];
-        if (t.genre) rows.push(row('Local Genre', t.genre));
-        if (t.composers && t.composers.length) rows.push(row('Composer(s)', t.composers.join(', ')));
-        if (t.producer) rows.push(row('Producer', t.producer));
-        if (t.language) rows.push(row('Language', t.language));
-        if (rows.length) rows.forEach(r => info.appendChild(r)); else btnMore.disabled = true;
-
-        btnMore.addEventListener('click', () => {
-          info.style.display = info.style.display === 'none' || !info.style.display ? 'block' : 'none';
-        });
 
         controls.appendChild(btnPlay);
         controls.appendChild(btnMore);
@@ -603,7 +722,6 @@
           markInvalid();
         }
 
-        li.appendChild(info);
         ul.appendChild(li);
       });
 
