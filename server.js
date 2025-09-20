@@ -163,6 +163,106 @@ const YEAR_TEXT_FIELDS = [
 
 const YEAR_FIELD_SET = [...new Set([...YEAR_RANGE_FIELDS, ...YEAR_TEXT_FIELDS])];
 
+const ALBUM_KEY_FIELD_MAP = [
+  { field: 'Album Catalogue Number', prefix: 'cat' },
+  { field: 'Album Catalog Number', prefix: 'cat_alt' },
+  { field: 'Album_ID', prefix: 'album_id' }
+];
+
+function canonicalAlbumKey(fields = {}) {
+  for (const entry of ALBUM_KEY_FIELD_MAP) {
+    const value = (fields[entry.field] || '').trim();
+    if (value) {
+      const encoded = encodeURIComponent(value);
+      return {
+        key: `${entry.prefix}:${encoded}`,
+        type: 'field',
+        field: entry.field,
+        value,
+        query: { [entry.field]: `==${value}` },
+        groupKey: `field|${entry.field}`
+      };
+    }
+  }
+
+  const title = (fields['Album Title'] || '').trim();
+  const artist = (fields['Album Artist'] || fields['Tape Files::Album Artist'] || fields['Track Artist'] || '').trim();
+  if (title && artist) {
+    return {
+      key: `titleartist:${encodeURIComponent(title)}|${encodeURIComponent(artist)}`,
+      type: 'composite',
+      title,
+      artist,
+      query: { 'Album Title': `==${title}`, 'Album Artist': `==${artist}` },
+      groupKey: 'composite'
+    };
+  }
+
+  if (title) {
+    return {
+      key: `title:${encodeURIComponent(title)}`,
+      type: 'title',
+      title,
+      query: { 'Album Title': `==${title}` },
+      groupKey: 'title'
+    };
+  }
+
+  return null;
+}
+
+function decodeAlbumKey(albumKey) {
+  if (!albumKey || typeof albumKey !== 'string') return null;
+  const idx = albumKey.indexOf(':');
+  if (idx === -1) return null;
+  const type = albumKey.slice(0, idx);
+  const payload = albumKey.slice(idx + 1);
+
+  if (type === 'cat' || type === 'cat_alt' || type === 'album_id') {
+    const entry = ALBUM_KEY_FIELD_MAP.find(item => item.prefix === type);
+    if (!entry) return null;
+    const value = decodeURIComponent(payload || '');
+    if (!value) return null;
+    return {
+      key: albumKey,
+      type: 'field',
+      field: entry.field,
+      value,
+      query: { [entry.field]: `==${value}` },
+      groupKey: `field|${entry.field}`
+    };
+  }
+
+  if (type === 'titleartist') {
+    const [titleEnc = '', artistEnc = ''] = payload.split('|');
+    const title = decodeURIComponent(titleEnc || '');
+    const artist = decodeURIComponent(artistEnc || '');
+    if (!title || !artist) return null;
+    return {
+      key: albumKey,
+      type: 'composite',
+      title,
+      artist,
+      query: { 'Album Title': `==${title}`, 'Album Artist': `==${artist}` },
+      groupKey: 'composite'
+    };
+  }
+
+  if (type === 'title') {
+    const title = decodeURIComponent(payload || '');
+    if (!title) return null;
+    return {
+      key: albumKey,
+      type: 'title',
+      title,
+      query: { 'Album Title': `==${title}` },
+      groupKey: 'title'
+    };
+  }
+
+  return null;
+}
+
 function parseSequence(fields = {}) {
   for (const key of TRACK_SEQUENCE_KEYS) {
     if (!(key in fields)) continue;
@@ -195,8 +295,145 @@ function recordMatchesDecade(fields, start, endExclusive) {
   return false;
 }
 
-function formatRecords(rows = []) {
-  return rows.map(rec => ({ recordId: rec.recordId, modId: rec.modId, fields: rec.fieldData || {} }));
+function formatRecords(rows = [], { includeAlbumKey = false } = {}) {
+  return rows.map(rec => {
+    const fields = rec.fieldData || {};
+    const out = { recordId: rec.recordId, modId: rec.modId, fields };
+    if (includeAlbumKey) {
+      const meta = canonicalAlbumKey(fields);
+      if (meta) out.__albumKeyMeta = meta;
+    }
+    return out;
+  });
+}
+
+async function countTracksForAlbumKeys(metas = []) {
+  const counts = {};
+  const uniqueMetas = [];
+  const seen = new Set();
+  for (const meta of metas) {
+    if (!meta?.key) continue;
+    if (seen.has(meta.key)) continue;
+    seen.add(meta.key);
+    uniqueMetas.push(meta);
+  }
+
+  if (!uniqueMetas.length) return counts;
+
+  const sampleKey = uniqueMetas[0]?.key || null;
+  console.log('[MASS] track-count keys', { totalKeys: uniqueMetas.length, sample: sampleKey });
+
+  const grouped = new Map();
+  for (const meta of uniqueMetas) {
+    const groupKey = meta.groupKey || meta.type || 'misc';
+    if (!grouped.has(groupKey)) grouped.set(groupKey, []);
+    grouped.get(groupKey).push(meta);
+  }
+
+  for (const [groupKey, metasForGroup] of grouped.entries()) {
+    const queries = metasForGroup.map(meta => meta.query).filter(Boolean);
+    if (!queries.length) continue;
+    const limit = Math.max(1000, metasForGroup.length * 200);
+    const payload = { query: queries, limit, offset: 1 };
+    const result = await runFind(payload);
+    if (!result.ok) {
+      console.log('[MASS] track-count warn', { group: groupKey, warn: result.error || result.status });
+      continue;
+    }
+    console.log('[MASS] track-count group', { group: groupKey, queries: metasForGroup.length, ms: result.ms });
+    const records = result.data || [];
+    for (const rec of records) {
+      const keyInfo = canonicalAlbumKey(rec.fieldData || {});
+      if (keyInfo?.key) {
+        counts[keyInfo.key] = (counts[keyInfo.key] || 0) + 1;
+      }
+    }
+  }
+
+  return counts;
+}
+
+async function attachTrackCounts(records = []) {
+  const metaMap = new Map();
+  for (const rec of records) {
+    if (rec.__albumKeyMeta) metaMap.set(rec.__albumKeyMeta.key, rec.__albumKeyMeta);
+  }
+  const metas = Array.from(metaMap.values());
+  const counts = metas.length ? await countTracksForAlbumKeys(metas) : {};
+  for (const rec of records) {
+    if (rec.__albumKeyMeta) {
+      rec.albumKey = rec.__albumKeyMeta.key;
+      rec.trackCount = counts[rec.__albumKeyMeta.key] ?? 0;
+      delete rec.__albumKeyMeta;
+    } else {
+      rec.trackCount = rec.trackCount ?? 0;
+    }
+  }
+  return counts;
+}
+
+function buildTrackObject(record, albumKey) {
+  const fields = record.fields || {};
+  const seq = parseSequence(fields);
+  const name = (fields['Track Name'] || fields['Track_Name'] || fields['TrackTitle'] || '').trim();
+  const mp3 = (fields['mp3'] || fields['MP3'] || fields['Audio File'] || fields['Audio::mp3'] || '').trim();
+  const producer = (fields['Producer'] || '').trim();
+  const composer1 = (fields['Composer 1'] || fields['Composer1'] || '').trim();
+  const composer2 = (fields['Composer 2'] || fields['Composer2'] || '').trim();
+  const composer3 = (fields['Composer 3'] || fields['Composer3'] || '').trim();
+  const composer4 = (fields['Composer 4'] || fields['Composer4'] || '').trim();
+  const language = (fields['Language'] || fields['Language Code'] || '').trim();
+  const genre = (fields['Local Genre'] || fields['Genre'] || '').trim();
+  const isrc = (fields['ISRC'] || '').trim();
+
+  return {
+    recordId: record.recordId,
+    albumKey,
+    seq,
+    name,
+    mp3,
+    producer,
+    composer1,
+    composer2,
+    composer3,
+    composer4,
+    language,
+    genre,
+    isrc
+  };
+}
+
+async function fetchFullTracksByAlbumKey(albumKey) {
+  const meta = decodeAlbumKey(albumKey);
+  if (!meta) {
+    const err = new Error('Invalid album key');
+    err.status = 400;
+    throw err;
+  }
+
+  const payload = {
+    query: [meta.query],
+    limit: 2000,
+    offset: 1
+  };
+
+  const result = await runFind(payload);
+  if (!result.ok) {
+    const err = new Error(result.error || 'Album track fetch failed');
+    err.status = result.status || 500;
+    throw err;
+  }
+
+  const records = formatRecords(result.data || [], { includeAlbumKey: false });
+  const tracks = records.map(rec => buildTrackObject(rec, albumKey));
+  tracks.sort((a, b) => {
+    if (a.seq !== b.seq) return a.seq - b.seq;
+    return String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+  });
+
+  console.log('[MASS] album-tracks', { albumKey, trackCount: tracks.length, ms: result.ms });
+
+  return { tracks, trackCount: tracks.length };
 }
 
 function normalizeDecade(query = {}) {
@@ -301,7 +538,8 @@ app.get('/api/search', async (req, res) => {
 
     if (hasArtistParam && artist && !q && !album && !track) {
       const result = await searchByArtist(artist, limit, fmOff);
-      const items = formatRecords(result.data);
+      const items = formatRecords(result.data, { includeAlbumKey: true });
+      await attachTrackCounts(items);
       console.log('[MASS] search artist', {
         artist,
         total: result.total,
@@ -363,10 +601,12 @@ app.get('/api/search', async (req, res) => {
     }
 
     const data  = json?.response?.data || [];
+    const formatted = formatRecords(data, { includeAlbumKey: true });
+    await attachTrackCounts(formatted);
     const total = json?.response?.dataInfo?.foundCount ?? data.length;
 
     res.json({
-      items: formatRecords(data),
+      items: formatted,
       total,
       offset: uiOff0,
       limit
@@ -449,7 +689,8 @@ app.get('/api/explore', async (req, res) => {
         continue;
       }
       if (!result.total) continue;
-      const items = formatRecords(result.data);
+      const items = formatRecords(result.data, { includeAlbumKey: true });
+      await attachTrackCounts(items);
       logResult(field, payload, result.total, result.ms, 'range');
       return res.json({ items, total: result.total, offset, limit });
     }
@@ -463,7 +704,8 @@ app.get('/api/explore', async (req, res) => {
         continue;
       }
       if (!result.total) continue;
-      const items = formatRecords(result.data);
+      const items = formatRecords(result.data, { includeAlbumKey: true });
+      await attachTrackCounts(items);
       logResult(field, payload, result.total, result.ms, 'text-eq');
       return res.json({ items, total: result.total, offset, limit });
     }
@@ -478,7 +720,8 @@ app.get('/api/explore', async (req, res) => {
         continue;
       }
       if (!result.data.length) continue;
-      const formatted = formatRecords(result.data);
+      const formatted = formatRecords(result.data, { includeAlbumKey: true });
+      await attachTrackCounts(formatted);
       const filtered = formatted.filter(rec => recordMatchesDecade(rec.fields, start, end));
       if (!filtered.length) continue;
       const total = filtered.length;
@@ -569,6 +812,18 @@ app.get('/api/album', async (req, res) => {
   } catch (err) {
     const detail = err?.message || String(err);
     return res.status(500).json({ error:'Album lookup failed', status:500, detail });
+  }
+});
+
+app.get('/api/album/:albumKey/tracks', async (req, res) => {
+  try {
+    const albumKey = String(req.params.albumKey || '').trim();
+    if (!albumKey) return res.status(400).json({ error: 'Missing album key' });
+    const { tracks, trackCount } = await fetchFullTracksByAlbumKey(albumKey);
+    res.json({ albumKey, trackCount, tracks });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Failed to load tracks' });
   }
 });
 
