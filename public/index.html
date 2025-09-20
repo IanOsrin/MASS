@@ -254,6 +254,7 @@
     // Grouped albums & album-page state
     let albumGroups = [];
     let albumPage = 0;
+    const albumTracksCache = new Map();
 
     // Single audio UI state
     let currentBtn=null, currentRow=null, currentSrc='';
@@ -303,14 +304,8 @@
     function fArtist(f){
       return f['Album Artist'] || f['Tape Files::Album Artist'] || f['Track Artist'] || f['Artist'] || '';
     }
-    function fMp3(f){
-      return f['mp3'] || f['MP3'] || f['Audio File'] || f['Audio::mp3'] || '';
-    }
     function fLang(f){
       return f['Language'] || f['Language Code'] || '';
-    }
-    function hasValidMp3(s){
-      return typeof s === 'string' && s.trim().length > 0;
     }
 
     function abortInFlight(){ if(inFlight){ inFlight.abort(); inFlight=null; } }
@@ -329,6 +324,12 @@
       currentEndpoint = '/api/search';
       currentParams = {};
       currentLimit = FM_FETCH_LIMIT;
+      albumTracksCache.clear();
+      albumGroups = [];
+      albumPage = 0;
+      rawItems = [];
+      rawTotalFound = 0;
+      rawNextOffset = 0;
       // Try a few common placeholder names; fall back to MAD_Logo.png
       const candidates = ['placeholder.png','placeholder.svg','landing.png','MAD_placeholder.png','MAD_Logo.png'];
       const img = document.createElement('img');
@@ -385,100 +386,33 @@
     function keyTitle(s){ return normTitle(s).toLowerCase(); }
 
     function groupAlbums(items){
-      const byCat = new Map();
+      const byKey = new Map();
 
-      for(const rec of items){
-        const f = rec.fields || {};
-        const cat = fCatalogue(f) || '__NO_CAT__';
-        const title = normTitle(fTitle(f) || '(no album)');
-        const artist= normTitle(fArtist(f) || '');
-        const pic   = fPicture(f) || '';
-        const track = normTitle(f[F_TRACK] || '');
-        const mp3   = fMp3(f) || '';
-        const genreRaw = f[F_GENRE] || f['Genre'] || '';
-        const genre = normTitle(genreRaw || '');
-        const producerRaw = f['Producer'] || '';
-        const languageRaw = fLang(f) || '';
-        const lang  = normTitle(languageRaw || '');
-        const composer1 = f['Composer 1'] ?? f['Composer1'] ?? '';
-        const composer2 = f['Composer 2'] ?? f['Composer2'] ?? '';
-        const composer3 = f['Composer 3'] ?? f['Composer3'] ?? '';
-        const composer4 = f['Composer 4'] ?? f['Composer4'] ?? '';
-        const isrc = f['ISRC'] || '';
-        const seq   = fTrackNo(f); // ← sequence number for ordering
-
-        if(!byCat.has(cat)){
-          byCat.set(cat, {
-            catalogue: cat === '__NO_CAT__' ? '' : cat,
-            titles: new Map(), // keyTitle -> {raw,count}
-            artist, picture: pic || '',
-            tracks: []
-          });
-        }
-        const g = byCat.get(cat);
-
-        const kt = keyTitle(title);
-        const entry = g.titles.get(kt) || { raw: title, count: 0 };
-        entry.count += 1; g.titles.set(kt, entry);
-
-        if(!g.picture && pic) g.picture = pic;
-        if(!g.artist && artist) g.artist = artist;
-
-        // keep all tracks for title logic; mp3 validity filtered later
-        if(track){
-          g.tracks.push({
-            name: track,
-            mp3,
-            seq,
-            genre,
-            genreDisplay: genreRaw,
-            producer: producerRaw,
-            language: lang,
-            languageDisplay: languageRaw,
-            composer1,
-            composer2,
-            composer3,
-            composer4,
-            isrc
-          });
+      for (const rec of items) {
+        const albumKey = rec.albumKey;
+        if (!albumKey) continue;
+        const fields = rec.fields || {};
+        let entry = byKey.get(albumKey);
+        if (!entry) {
+          entry = {
+            albumKey,
+            title: fTitle(fields) || '(no album)',
+            artist: fArtist(fields) || '',
+            catalogue: fCatalogue(fields) || '',
+            picture: fPicture(fields) || '',
+            trackCount: Number(rec.trackCount || 0)
+          };
+          byKey.set(albumKey, entry);
+        } else {
+          if (!entry.picture && fPicture(fields)) entry.picture = fPicture(fields);
+          entry.trackCount = Math.max(entry.trackCount, Number(rec.trackCount || 0));
+          if (!entry.catalogue && fCatalogue(fields)) entry.catalogue = fCatalogue(fields);
+          if (!entry.artist && fArtist(fields)) entry.artist = fArtist(fields);
+          if ((!entry.title || entry.title === '(no album)') && fTitle(fields)) entry.title = fTitle(fields);
         }
       }
 
-      const groups = [];
-      for(const g of byCat.values()){
-        // playable tracks only
-        const playableTracks = g.tracks.filter(t => hasValidMp3(t.mp3));
-        if (playableTracks.length === 0) {
-          // Hide albums that do not have a valid mp3 file
-          continue;
-        }
-
-        // Ignore title candidates that equal any track name (prevents “Sunday Afternoon” issue)
-        const trackKeys = new Set(g.tracks.map(t => keyTitle(t.name)));
-        const candidates = Array.from(g.titles.entries()); // [keyTitle, {raw,count}]
-        const filtered = candidates.filter(([kt]) => !trackKeys.has(kt));
-
-        const pickFrom = (arr) => arr.reduce((best, cur) => (!best || cur[1].count > best[1].count) ? cur : best, null);
-        const pickedPair = pickFrom(filtered.length ? filtered : candidates);
-        const displayTitle = pickedPair ? pickedPair[1].raw : '(no album)';
-
-        // Sort playable tracks by sequence number when available; fallback to name
-        playableTracks.sort((a,b)=>{
-          const an = (typeof a.seq === 'number' && isFinite(a.seq)) ? a.seq : Infinity;
-          const bn = (typeof b.seq === 'number' && isFinite(b.seq)) ? b.seq : Infinity;
-          if (an !== bn) return an - bn;
-          return a.name.localeCompare(b.name, undefined, { sensitivity:'base' });
-        });
-
-        groups.push({
-          catalogue: g.catalogue,
-          title: displayTitle,
-          artist: g.artist,
-          picture: g.picture,
-          tracks: playableTracks
-        });
-      }
-
+      const groups = Array.from(byKey.values()).filter(album => album.trackCount >= 0);
       groups.sort((a,b)=> a.title.localeCompare(b.title, undefined, { sensitivity:'base' }) || a.artist.localeCompare(b.artist, undefined, { sensitivity:'base' }));
       return groups;
     }
@@ -597,17 +531,55 @@
       document.body.classList.remove('no-scroll');
     }
 
-    function openTracksModal(album){
-      // Ensure only one window open: close any existing
+    async function ensureAlbumTracks(album){
+      if (!album || !album.albumKey) return { tracks: [], trackCount: 0 };
+      if (albumTracksCache.has(album.albumKey)) {
+        const cached = albumTracksCache.get(album.albumKey);
+        album.tracks = cached.tracks;
+        album.trackCount = cached.trackCount;
+        return cached;
+      }
+      const resp = await fetch(`/api/album/${encodeURIComponent(album.albumKey)}/tracks`);
+      if (!resp.ok) throw new Error(await resp.text().catch(() => `HTTP ${resp.status}`));
+      const data = await resp.json();
+      const tracks = (data.tracks || []).map(t => ({
+        id: t.recordId || t.id,
+        name: t.name || '',
+        mp3: t.mp3 || '',
+        seq: Number.isFinite(t.seq) ? t.seq : Infinity,
+        producer: t.producer || '',
+        composer1: t.composer1 || '',
+        composer2: t.composer2 || '',
+        composer3: t.composer3 || '',
+        composer4: t.composer4 || '',
+        language: t.language || '',
+        genre: t.genre || '',
+        isrc: t.isrc || ''
+      }));
+      tracks.sort((a, b) => {
+        if (a.seq !== b.seq) return a.seq - b.seq;
+        return String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity:'base' });
+      });
+      const payload = { tracks, trackCount: data.trackCount ?? tracks.length };
+      albumTracksCache.set(album.albumKey, payload);
+      album.tracks = tracks;
+      album.trackCount = payload.trackCount;
+      document.querySelectorAll(`button[data-role="show-tracks"][data-album-key="${album.albumKey}"]`).forEach(btn => {
+        const countLabel = Number.isFinite(payload.trackCount) && payload.trackCount > 0 ? `Show Tracks (${payload.trackCount})` : 'Show Tracks';
+        btn.textContent = countLabel;
+      });
+      return payload;
+    }
+
+    async function openTracksModal(album){
+      if (!album) return;
       closeTracksModal();
 
-      // Fill header
       modalTitle.textContent = album.title || '(no album)';
       modalArtist.textContent = album.artist || '';
       modalCat.textContent = album.catalogue || '';
       if (!album.catalogue) modalCat.style.display = 'none'; else modalCat.style.display = 'inline-block';
 
-      // Cover
       if (album.picture) {
         const wrap = document.createElement('div');
         wrap.className = 'cover-wrap';
@@ -624,11 +596,30 @@
         modalCover.style.display = 'none';
       }
 
-      // Build track list
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('no-scroll');
+
+      modalContent.innerHTML = '<p class="muted">Loading tracks…</p>';
+
+      let trackPayload;
+      try {
+        trackPayload = await ensureAlbumTracks(album);
+      } catch (err) {
+        modalContent.innerHTML = `<p class="error">${(err?.message || 'Failed to load tracks')}</p>`;
+        return;
+      }
+
+      const tracks = trackPayload.tracks || [];
+      if (!tracks.length) {
+        modalContent.innerHTML = '<p class="muted">No tracks found for this album.</p>';
+        return;
+      }
+
       const ul = document.createElement('ul');
       ul.className = 'tracks';
 
-      album.tracks.forEach((t, idx) => {
+      tracks.forEach((t, idx) => {
         const li = document.createElement('li');
         li.className = 'track';
 
@@ -790,6 +781,7 @@
         coverButton.className = 'album-cover';
         coverButton.addEventListener('click', () => openTracksModal(album));
         coverButton.setAttribute('aria-label', album.title ? `Open tracks for ${album.title}` : 'Open tracks');
+        coverButton.dataset.albumKey = album.albumKey;
 
         if (album.picture) {
           coverButton.classList.remove('no-image');
@@ -839,7 +831,10 @@
         const showButton = document.createElement('button');
         showButton.type = 'button';
         showButton.className = 'btn small';
-        showButton.textContent = `Show Tracks (${album.tracks.length})`;
+        const trackLabel = Number.isFinite(album.trackCount) && album.trackCount > 0 ? `Show Tracks (${album.trackCount})` : 'Show Tracks';
+        showButton.textContent = trackLabel;
+        showButton.dataset.role = 'show-tracks';
+        showButton.dataset.albumKey = album.albumKey || '';
         showButton.addEventListener('click', () => openTracksModal(album));
         actions.appendChild(showButton);
         body.appendChild(actions);
