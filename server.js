@@ -115,514 +115,6 @@ const SEARCH_FIELDS = [
 ];
 
 const begins = (s) => s ? `${s}*` : '';
-const contains = (s) => s ? `*${s}*` : '';
-
-const TRACK_SEQUENCE_KEYS = [
-  'Sequence_Number',
-  'Track_Sequence',
-  'Sequence',
-  'TrackNo',
-  'TrackNumber',
-  'Track_Order'
-];
-
-const ARTIST_FIELDS = [
-  'Album Artist',
-  'Track Artist'
-];
-
-const YEAR_RANGE_FIELDS = [
-  'Year_Release_num',
-  'Year Release num',
-  'Year Release',
-  'Year_Release',
-  'Year'
-];
-
-const YEAR_TEXT_FIELDS = [
-  'Year of Release',
-  'Year Of Release',
-  'Year of release',
-  'Original Release Year',
-  'Original Release Date',
-  'Release Year',
-  'Recording Year',
-  'Year Release',
-  'Years Release',
-  'Tape Files::Year of Release',
-  'Tape Files::Year Release',
-  'Tape Files::Year',
-  'Albums::Year of Release',
-  'Albums::Year Release',
-  'Albums::Year',
-  'API_Albums::Year of Release',
-  'API_Albums::Year Release',
-  'API_Albums::Year'
-];
-
-const YEAR_FIELD_SET = [...new Set([...YEAR_RANGE_FIELDS, ...YEAR_TEXT_FIELDS])];
-
-const ALBUM_KEY_FIELD_MAP = [
-  { field: 'Album Catalogue Number', prefix: 'cat' },
-  { field: 'Album Catalog Number', prefix: 'cat_alt' },
-  { field: 'Album_ID', prefix: 'album_id' }
-];
-
-function canonicalAlbumKey(fields = {}) {
-  for (const entry of ALBUM_KEY_FIELD_MAP) {
-    const value = (fields[entry.field] || '').trim();
-    if (value) {
-      const encoded = encodeURIComponent(value);
-      return {
-        key: `${entry.prefix}:${encoded}`,
-        type: 'field',
-        field: entry.field,
-        value,
-        query: { [entry.field]: `==${value}` },
-        groupKey: `field|${entry.field}`
-      };
-    }
-  }
-
-  const title = (fields['Album Title'] || '').trim();
-  const artist = (fields['Album Artist'] || fields['Tape Files::Album Artist'] || fields['Track Artist'] || '').trim();
-  if (title && artist) {
-    return {
-      key: `titleartist:${encodeURIComponent(title)}|${encodeURIComponent(artist)}`,
-      type: 'composite',
-      title,
-      artist,
-      query: { 'Album Title': `==${title}`, 'Album Artist': `==${artist}` },
-      groupKey: 'composite'
-    };
-  }
-
-  if (title) {
-    return {
-      key: `title:${encodeURIComponent(title)}`,
-      type: 'title',
-      title,
-      query: { 'Album Title': `==${title}` },
-      groupKey: 'title'
-    };
-  }
-
-  return null;
-}
-
-function decodeAlbumKey(albumKey) {
-  if (!albumKey || typeof albumKey !== 'string') return null;
-  const idx = albumKey.indexOf(':');
-  if (idx === -1) return null;
-  const type = albumKey.slice(0, idx);
-  const payload = albumKey.slice(idx + 1);
-
-  if (type === 'cat' || type === 'cat_alt' || type === 'album_id') {
-    const entry = ALBUM_KEY_FIELD_MAP.find(item => item.prefix === type);
-    if (!entry) return null;
-    const value = decodeURIComponent(payload || '');
-    if (!value) return null;
-    return {
-      key: albumKey,
-      type: 'field',
-      field: entry.field,
-      value,
-      query: { [entry.field]: `==${value}` },
-      groupKey: `field|${entry.field}`
-    };
-  }
-
-  if (type === 'titleartist') {
-    const [titleEnc = '', artistEnc = ''] = payload.split('|');
-    const title = decodeURIComponent(titleEnc || '');
-    const artist = decodeURIComponent(artistEnc || '');
-    if (!title || !artist) return null;
-    return {
-      key: albumKey,
-      type: 'composite',
-      title,
-      artist,
-      query: { 'Album Title': `==${title}`, 'Album Artist': `==${artist}` },
-      groupKey: 'composite'
-    };
-  }
-
-  if (type === 'title') {
-    const title = decodeURIComponent(payload || '');
-    if (!title) return null;
-    return {
-      key: albumKey,
-      type: 'title',
-      title,
-      query: { 'Album Title': `==${title}` },
-      groupKey: 'title'
-    };
-  }
-
-  return null;
-}
-
-function parseSequence(fields = {}) {
-  for (const key of TRACK_SEQUENCE_KEYS) {
-    if (!(key in fields)) continue;
-    const raw = fields[key];
-    if (raw === null || raw === undefined || raw === '') continue;
-    const direct = Number(raw);
-    if (Number.isFinite(direct)) return direct;
-    if (typeof raw === 'string') {
-      const cleaned = Number(raw.replace(/[^0-9.-]/g, ''));
-      if (Number.isFinite(cleaned)) return cleaned;
-    }
-  }
-  return Number.POSITIVE_INFINITY;
-}
-
-function extractYear(value) {
-  if (value === null || value === undefined) return null;
-  const match = String(value).match(/\b(\d{4})\b/);
-  if (!match) return null;
-  const year = Number(match[1]);
-  return Number.isFinite(year) ? year : null;
-}
-
-function recordMatchesDecade(fields, start, endExclusive) {
-  for (const key of YEAR_FIELD_SET) {
-    if (!(key in fields)) continue;
-    const year = extractYear(fields[key]);
-    if (year !== null && year >= start && year < endExclusive) return true;
-  }
-  return false;
-}
-
-function formatRecords(rows = [], { includeAlbumKey = false } = {}) {
-  return rows.map(rec => {
-    const fields = rec.fieldData || {};
-    const out = { recordId: rec.recordId, modId: rec.modId, fields };
-    if (includeAlbumKey) {
-      const meta = canonicalAlbumKey(fields);
-      if (meta) out.__albumKeyMeta = meta;
-    }
-    return out;
-  });
-}
-
-async function countTracksForAlbumKeys(metas = []) {
-  const counts = {};
-  const uniqueMetas = [];
-  const seen = new Set();
-  for (const meta of metas) {
-    if (!meta?.key) continue;
-    if (seen.has(meta.key)) continue;
-    seen.add(meta.key);
-    uniqueMetas.push(meta);
-  }
-
-  if (!uniqueMetas.length) return counts;
-
-  const sampleKey = uniqueMetas[0]?.key || null;
-  console.log('[MASS] track-count keys', { totalKeys: uniqueMetas.length, sample: sampleKey });
-
-  const grouped = new Map();
-  for (const meta of uniqueMetas) {
-    const groupKey = meta.groupKey || meta.type || 'misc';
-    if (!grouped.has(groupKey)) grouped.set(groupKey, []);
-    grouped.get(groupKey).push(meta);
-  }
-
-  for (const [groupKey, metasForGroup] of grouped.entries()) {
-    const queries = metasForGroup.map(meta => meta.query).filter(Boolean);
-    if (!queries.length) continue;
-    const limit = Math.max(1000, metasForGroup.length * 200);
-    const payload = { query: queries, limit, offset: 1 };
-    const result = await runFind(payload);
-    if (!result.ok) {
-      console.log('[MASS] track-count warn', { group: groupKey, warn: result.error || result.status });
-      continue;
-    }
-    console.log('[MASS] track-count group', { group: groupKey, queries: metasForGroup.length, ms: result.ms });
-    const records = result.data || [];
-    for (const rec of records) {
-      const keyInfo = canonicalAlbumKey(rec.fieldData || {});
-      if (keyInfo?.key) {
-        counts[keyInfo.key] = (counts[keyInfo.key] || 0) + 1;
-      }
-    }
-  }
-
-  return counts;
-}
-
-async function attachTrackCounts(records = []) {
-  const metaMap = new Map();
-  for (const rec of records) {
-    if (rec.__albumKeyMeta) metaMap.set(rec.__albumKeyMeta.key, rec.__albumKeyMeta);
-  }
-  const metas = Array.from(metaMap.values());
-  const counts = metas.length ? await countTracksForAlbumKeys(metas) : {};
-  for (const rec of records) {
-    if (rec.__albumKeyMeta) {
-      rec.albumKey = rec.__albumKeyMeta.key;
-      rec.trackCount = counts[rec.__albumKeyMeta.key] ?? 0;
-      delete rec.__albumKeyMeta;
-    } else {
-      rec.trackCount = rec.trackCount ?? 0;
-    }
-  }
-  return counts;
-}
-
-function buildTrackObject(record, albumKey) {
-  const fields = record.fields || {};
-  const seq = parseSequence(fields);
-  const name = (fields['Track Name'] || fields['Track_Name'] || fields['TrackTitle'] || '').trim();
-  const mp3 = (fields['mp3'] || fields['MP3'] || fields['Audio File'] || fields['Audio::mp3'] || '').trim();
-  const producer = (fields['Producer'] || '').trim();
-  const composer1 = (fields['Composer 1'] || fields['Composer1'] || '').trim();
-  const composer2 = (fields['Composer 2'] || fields['Composer2'] || '').trim();
-  const composer3 = (fields['Composer 3'] || fields['Composer3'] || '').trim();
-  const composer4 = (fields['Composer 4'] || fields['Composer4'] || '').trim();
-  const language = (fields['Language'] || fields['Language Code'] || '').trim();
-  const genre = (fields['Local Genre'] || fields['Genre'] || '').trim();
-  const isrc = (fields['ISRC'] || '').trim();
-
-  return {
-    recordId: record.recordId,
-    albumKey,
-    seq,
-    name,
-    mp3,
-    producer,
-    composer1,
-    composer2,
-    composer3,
-    composer4,
-    language,
-    genre,
-    isrc
-  };
-}
-
-async function fetchFullTracksByAlbumKey(albumKey) {
-  const meta = decodeAlbumKey(albumKey);
-  if (!meta) {
-    const err = new Error('Invalid album key');
-    err.status = 400;
-    throw err;
-  }
-
-  const payload = {
-    query: [meta.query],
-    limit: 2000,
-    offset: 1
-  };
-
-  const result = await runFind(payload);
-  if (!result.ok) {
-    const err = new Error(result.error || 'Album track fetch failed');
-    err.status = result.status || 500;
-    throw err;
-  }
-
-  const records = formatRecords(result.data || [], { includeAlbumKey: false });
-  const tracks = records.map(rec => buildTrackObject(rec, albumKey));
-  tracks.sort((a, b) => {
-    if (a.seq !== b.seq) return a.seq - b.seq;
-    return String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
-  });
-
-  console.log('[MASS] album-tracks', { albumKey, trackCount: tracks.length, ms: result.ms });
-
-  return { tracks, trackCount: tracks.length };
-}
-
-function normalizeDecade(query = {}) {
-  const parseYear = (val) => {
-    if (val === undefined || val === null) return null;
-    const match = String(val).match(/(\d{4})/);
-    if (!match) return null;
-    const num = Number(match[1]);
-    return Number.isFinite(num) ? num : null;
-  };
-
-  const rawDecade = (query.decade || '').toString().trim();
-  let start = null;
-  let endExclusive = null;
-
-  if (rawDecade) {
-    if (/^\d{4}s$/i.test(rawDecade)) {
-      start = Number(rawDecade.slice(0, 4));
-    } else {
-      const matches = rawDecade.match(/\d{4}/g);
-      if (matches && matches.length) {
-        start = Number(matches[0]);
-        if (matches.length > 1) {
-          const second = Number(matches[1]);
-          if (Number.isFinite(second)) {
-            endExclusive = second + 1;
-          }
-        }
-      }
-    }
-  }
-
-  const startParam = parseYear(query.start);
-  const endParam = parseYear(query.end);
-  if (start === null && startParam !== null) start = startParam;
-  if (start === null && endParam !== null) start = endParam - 9;
-  if (endExclusive === null && endParam !== null) endExclusive = endParam + 1;
-
-  if (start === null || !Number.isFinite(start)) return null;
-  start = Math.floor(start / 10) * 10;
-  if (start < 1000) return null;
-
-  if (endExclusive === null || !Number.isFinite(endExclusive)) endExclusive = start + 10;
-  if (endExclusive <= start) endExclusive = start + 10;
-  if (endExclusive - start > 10) endExclusive = start + 10;
-
-  return { start, end: endExclusive };
-}
-
-async function runFind(payload) {
-  const started = Date.now();
-  const resp = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
-  const ms = Date.now() - started;
-  const json = await resp.json().catch(() => ({}));
-  if (!resp.ok) {
-    const msg = json?.messages?.[0]?.message || 'FM error';
-    const code = json?.messages?.[0]?.code;
-    return { ok:false, error:`${msg}${code ? ` (${code})` : ''}`, status: resp.status, ms, payload };
-  }
-  const data  = json?.response?.data || [];
-  const total = Number(json?.response?.dataInfo?.foundCount ?? data.length);
-  return { ok:true, data, total, ms, payload };
-}
-
-async function fetchAllRecordsForQuery(createPayload, { chunk = 200, maxRecords = 5000 } = {}) {
-  const safeChunk = Math.max(1, Math.min(500, chunk));
-  const safeMax = Math.max(safeChunk, maxRecords);
-  let offset = 1;
-  let total = null;
-  let iterations = 0;
-  let elapsedMs = 0;
-  const data = [];
-
-  while (data.length < safeMax) {
-    const payload = createPayload(offset, safeChunk);
-    if (!payload?.query || !Array.isArray(payload.query) || !payload.query.length) {
-      throw new Error('fetchAllRecordsForQuery requires non-empty query payloads');
-    }
-    payload.offset = offset;
-    payload.limit = safeChunk;
-    const result = await runFind(payload);
-    iterations += 1;
-    elapsedMs += result.ms || 0;
-    if (!result.ok) {
-      return { ok: false, error: result.error || 'FM query failed', status: result.status, ms: elapsedMs, iterations };
-    }
-    if (total === null) total = Number.isFinite(result.total) ? Number(result.total) : data.length;
-    if (Array.isArray(result.data) && result.data.length) {
-      data.push(...result.data);
-    }
-    if (!result.data?.length || data.length >= total || result.data.length < safeChunk) {
-      break;
-    }
-    offset += safeChunk;
-  }
-
-  return { ok: true, data, total: total ?? data.length, ms: elapsedMs, iterations };
-}
-
-async function gatherDecadeRecords(normalized) {
-  const { start, end } = normalized;
-  const decadeLabel = `${start}-${end - 1}`;
-  const years = Array.from({ length: end - start }, (_, i) => start + i);
-  const rangeQuery = `${start}...${end - 1}`;
-  let lastError = null;
-
-  const buildResult = (records, total, meta) => ({
-    records: formatRecords(records, { includeAlbumKey: true }),
-    total: Number(total || 0),
-    ...meta
-  });
-
-  for (const field of YEAR_RANGE_FIELDS) {
-    const result = await fetchAllRecordsForQuery(
-      (offset, limit) => ({ query: [ { [field]: rangeQuery } ], offset, limit }),
-      { chunk: 200, maxRecords: 6000 }
-    );
-    if (!result.ok) {
-      lastError = result.error;
-      continue;
-    }
-    if (!result.data.length) continue;
-    return buildResult(result.data, result.total, { mode: 'range', fieldUsed: field, ms: result.ms, iterations: result.iterations, decadeLabel });
-  }
-
-  for (const field of YEAR_TEXT_FIELDS) {
-    const queries = years.map(year => ({ [field]: `==${year}` }));
-    const result = await fetchAllRecordsForQuery(
-      (offset, limit) => ({ query: queries, offset, limit }),
-      { chunk: 200, maxRecords: 6000 }
-    );
-    if (!result.ok) {
-      lastError = result.error;
-      continue;
-    }
-    if (!result.data.length) continue;
-    return buildResult(result.data, result.total, { mode: 'text-eq', fieldUsed: field, ms: result.ms, iterations: result.iterations, decadeLabel });
-  }
-
-  for (const field of YEAR_TEXT_FIELDS) {
-    const queries = years.map(year => ({ [field]: contains(String(year)) }));
-    const result = await fetchAllRecordsForQuery(
-      (offset, limit) => ({ query: queries, offset, limit }),
-      { chunk: 300, maxRecords: 6000 }
-    );
-    if (!result.ok) {
-      lastError = result.error;
-      continue;
-    }
-    if (!result.data.length) continue;
-    const formatted = formatRecords(result.data, { includeAlbumKey: true });
-    const filtered = formatted.filter(rec => recordMatchesDecade(rec.fields, start, end));
-    if (!filtered.length) continue;
-    return {
-      records: filtered,
-      total: filtered.length,
-      mode: 'text-filtered',
-      fieldUsed: field,
-      ms: result.ms,
-      iterations: result.iterations,
-      decadeLabel
-    };
-  }
-
-  if (lastError) {
-    console.log('[MASS] explore random warn', { decade: decadeLabel, warn: lastError });
-  }
-  return { records: [], total: 0, mode: 'none', fieldUsed: null, ms: 0, iterations: 0, decadeLabel };
-}
-
-async function searchByArtist(term, limit, fmOffset) {
-  const pattern = contains(term);
-  let lastError = null;
-  let fallback = null;
-
-  for (const field of ARTIST_FIELDS) {
-    const payload = { query: [ { [field]: pattern } ], limit, offset: fmOffset };
-    const result = await runFind(payload);
-    if (!result.ok) {
-      lastError = result.error;
-      continue;
-    }
-    if (result.total > 0) {
-      return { ...result, fieldUsed: field, lastError };
-    }
-    if (!fallback) fallback = { ...result, fieldUsed: field, lastError };
-  }
-
-  return fallback || { ok:true, data: [], total: 0, ms: 0, fieldUsed: 'none', lastError };
-}
 
 app.get('/api/search', async (req, res) => {
   try {
@@ -631,31 +123,9 @@ app.get('/api/search', async (req, res) => {
     const artist = (req.query.artist || '').toString().trim();
     const album  = (req.query.album  || '').toString().trim();
     const track  = (req.query.track  || '').toString().trim();
-    const hasArtistParam = Object.prototype.hasOwnProperty.call(req.query, 'artist');
-    if (hasArtistParam && !artist) {
-      return res.status(400).json({ error: 'Artist search requires a non-empty artist parameter' });
-    }
-
-    const defaultLimit = hasArtistParam ? 9 : 60;
-    const limit  = Math.max(1, Math.min(200, parseInt(req.query.limit || String(defaultLimit), 10)));
+    const limit  = Math.max(1, Math.min(200, parseInt(req.query.limit || '60', 10)));
     const uiOff0 = Math.max(0, parseInt(req.query.offset || '0', 10)); // UI 0-based
     const fmOff  = uiOff0 + 1; // FM is 1-based
-
-    if (hasArtistParam && artist && !q && !album && !track) {
-      const result = await searchByArtist(artist, limit, fmOff);
-      const items = formatRecords(result.data, { includeAlbumKey: true });
-      await attachTrackCounts(items);
-      console.log('[MASS] search artist', {
-        artist,
-        total: result.total,
-        field: result.fieldUsed,
-        offset: uiOff0,
-        limit,
-        ms: result.ms,
-        ...(result.lastError ? { warn: result.lastError } : {})
-      });
-      return res.json({ items, total: result.total, offset: uiOff0, limit });
-    }
 
     // Build _find queries
     let queries = [];
@@ -706,12 +176,10 @@ app.get('/api/search', async (req, res) => {
     }
 
     const data  = json?.response?.data || [];
-    const formatted = formatRecords(data, { includeAlbumKey: true });
-    await attachTrackCounts(formatted);
     const total = json?.response?.dataInfo?.foundCount ?? data.length;
 
     res.json({
-      items: formatted,
+      items: data.map(d => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} })),
       total,
       offset: uiOff0,
       limit
@@ -758,186 +226,132 @@ app.get('/api/container', async (req, res) => {
 
 app.get('/api/explore', async (req, res) => {
   try {
-    const normalized = normalizeDecade(req.query);
-    if (!normalized) {
-      return res.status(400).json({ error: 'Invalid decade parameter. Use decade=1960, 1960s, or 1960-1969.' });
-    }
+    const start = parseInt((req.query.start || '0'), 10);
+    const end   = parseInt((req.query.end   || '0'), 10);
+    const reqLimit = Math.max(1, Math.min(400, parseInt((req.query.limit || '200'), 10)));
+    if (!start || !end || end < start) return res.status(400).json({ error:'bad decade', start, end });
 
-    const { start, end } = normalized; // end is exclusive
-    const decadeLabel = `${start}-${end - 1}`;
-    const limit = Math.max(1, Math.min(200, parseInt((req.query.limit || '9'), 10)));
-    const offset = Math.max(0, parseInt((req.query.offset || '0'), 10));
-    const fmOffset = offset + 1;
-    const years = Array.from({ length: end - start }, (_, i) => start + i);
-    const rangeQuery = `${start}...${end - 1}`;
-    let lastError = null;
+    // Try many possible year fields, including related-table names
+    const FIELDS = [
+      'Year of Release',
+      'Year Of Release',
+      'Year of release',
+      'Year Release',
+      'Year',
+      'Original Release Year',
+      'Original Release Date',
+      'Release Year',
+      'Recording Year',
+      'Year_Release',
+      'Year Release num',
+      'Year_Release_num',
+      'Tape Files::Year of Release',
+      'Tape Files::Year Release',
+      'Tape Files::Year',
+      'Tape Files::Year Release num',
+      'Tape Files::Year_Release_num',
+      'Albums::Year of Release',
+      'Albums::Year Release',
+      'Albums::Year',
+      'Albums::Year Release num',
+      'Albums::Year_Release_num',
+      'API_Albums::Year of Release',
+      'API_Albums::Year Release',
+      'API_Albums::Year',
+      'API_Albums::Year Release num',
+      'API_Albums::Year_Release_num'
+    ];
 
-    const logResult = (field, payload, total, ms, note) => {
-      console.log('[MASS] explore decade', {
-        decade: decadeLabel,
-        field,
-        offset,
-        limit,
-        total,
-        ms,
-        note,
-        query: payload?.query?.length ? payload.query : payload
-      });
-    };
-
-    // Prefer numeric range fields
-    for (const field of YEAR_RANGE_FIELDS) {
-      const payload = { query: [ { [field]: rangeQuery } ], limit, offset: fmOffset };
-      const result = await runFind(payload);
-      if (!result.ok) {
-        lastError = result.error;
-        continue;
+    async function tryFind(payload){
+      const r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg  = json?.messages?.[0]?.message || 'FM error';
+        const code = json?.messages?.[0]?.code;
+        return { ok:false, status:r.status, msg, code, data:[], total:0 };
       }
-      if (!result.total) continue;
-      const items = formatRecords(result.data, { includeAlbumKey: true });
-      await attachTrackCounts(items);
-      logResult(field, payload, result.total, result.ms, 'range');
-      return res.json({ items, total: result.total, offset, limit });
+      const data  = json?.response?.data || [];
+      const total = json?.response?.dataInfo?.foundCount ?? data.length;
+      return { ok:true, data, total };
     }
 
-    // Try exact matches on textual fields per year
-    for (const field of YEAR_TEXT_FIELDS) {
-      const payload = { query: years.map(year => ({ [field]: `==${year}` })), limit, offset: fmOffset };
-      const result = await runFind(payload);
-      if (!result.ok) {
-        lastError = result.error;
-        continue;
+    // 1) Determine a field that actually matches by probing with 1-row limit
+    let chosenField = null;
+    for (const field of FIELDS){
+      const probe = await tryFind({ query: [ { [field]: `${start}...${end}` } ], limit: 1, offset: 1 });
+      if (probe.ok && probe.total > 0){
+        chosenField = field;
+        break;
       }
-      if (!result.total) continue;
-      const items = formatRecords(result.data, { includeAlbumKey: true });
-      await attachTrackCounts(items);
-      logResult(field, payload, result.total, result.ms, 'text-eq');
-      return res.json({ items, total: result.total, offset, limit });
     }
-
-    // Fallback: contains match + local filtering
-    for (const field of YEAR_TEXT_FIELDS) {
-      const fetchLimit = Math.min(400, Math.max(limit + offset, limit * 4));
-      const payload = { query: years.map(year => ({ [field]: contains(String(year)) })), limit: fetchLimit, offset: 1 };
-      const result = await runFind(payload);
-      if (!result.ok) {
-        lastError = result.error;
-        continue;
+    if (!chosenField){
+      // Try OR of exact years as a probe
+      const years = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+      for (const field of FIELDS){
+        const probe = await tryFind({ query: years.map(y => ({ [field]: `==${y}` })), limit: 1, offset: 1 });
+        if (probe.ok && probe.total > 0){
+          chosenField = field;
+          break;
+        }
       }
-      if (!result.data.length) continue;
-      const formatted = formatRecords(result.data, { includeAlbumKey: true });
-      await attachTrackCounts(formatted);
-      const filtered = formatted.filter(rec => recordMatchesDecade(rec.fields, start, end));
-      if (!filtered.length) continue;
-      const total = filtered.length;
-      const paged = filtered.slice(offset, offset + limit);
-      logResult(field, payload, total, result.ms, 'text-filtered');
-      return res.json({ items: paged, total, offset, limit });
+    }
+    if (!chosenField){
+      // Try prefix style probe
+      for (const field of FIELDS){
+        const probe = await tryFind({ query: [ { [field]: `${start}*` } ], limit: 1, offset: 1 });
+        if (probe.ok && probe.total > 0){
+          chosenField = field;
+          break;
+        }
+      }
+    }
+    if (!chosenField){
+      console.log(`[EXPLORE] No matching year field for ${start}-${end}`);
+      return res.json({ ok:true, items: [], total: 0, offset: 0, limit: reqLimit });
     }
 
-    if (lastError) {
-      console.log('[MASS] explore decade fallback', { decade: decadeLabel, warn: lastError });
+    // 2) Get total count using chosen field
+    const probe = await tryFind({ query: [ { [chosenField]: `${start}...${end}` } ], limit: 1, offset: 1 });
+    let foundTotal = probe.total || 0;
+
+    if (!foundTotal){
+      // Retry with OR-of-years to compute total
+      const years = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+      const probe2 = await tryFind({ query: years.map(y => ({ [chosenField]: `==${y}` })), limit: 1, offset: 1 });
+      foundTotal = probe2.total || 0;
+      if (foundTotal === 0){
+        // Retry with prefix
+        const probe3 = await tryFind({ query: [ { [chosenField]: `${start}*` } ], limit: 1, offset: 1 });
+        foundTotal = probe3.total || 0;
+      }
     }
-    return res.json({ items: [], total: 0, offset, limit });
+
+    if (foundTotal === 0){
+      console.log(`[EXPLORE] Field ${chosenField} yielded 0 rows for ${start}-${end}`);
+      return res.json({ ok:true, items: [], total: 0, offset: 0, limit: reqLimit });
+    }
+
+    // 3) Choose a random window within the decade set
+    const windowSize = Math.min(reqLimit, 400);
+    const maxStart = Math.max(1, foundTotal - windowSize + 1);
+    const randStart = Math.floor(1 + Math.random() * maxStart);
+
+    // Perform the real fetch from the chosen field (prefer range; fall back if needed)
+    let final = await tryFind({ query: [ { [chosenField]: `${start}...${end}` } ], limit: windowSize, offset: randStart });
+    if (!final.ok || final.data.length === 0){
+      const years = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+      final = await tryFind({ query: years.map(y => ({ [chosenField]: `==${y}` })), limit: windowSize, offset: randStart });
+      if (!final.ok || final.data.length === 0){
+        final = await tryFind({ query: [ { [chosenField]: `${start}*` } ], limit: windowSize, offset: randStart });
+      }
+    }
+
+    const items = (final.data || []).map(d => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} }));
+    console.log(`[EXPLORE] ${start}-${end} using ${chosenField}: total ${foundTotal}, offset ${randStart}, returned ${items.length}`);
+    return res.json({ ok:true, items, total: foundTotal, offset: randStart-1, limit: windowSize, field: chosenField });
   } catch (err) {
     const detail = err?.message || String(err);
-    return res.status(500).json({ error: 'Explore failed', detail });
-  }
-});
-
-app.get('/api/explore/random', async (req, res) => {
-  try {
-    const normalized = normalizeDecade(req.query);
-    if (!normalized) {
-      return res.status(400).json({ error: 'Invalid decade parameter. Use decade=1960, 1960s, or 1960-1969.' });
-    }
-
-    const limitParam = parseInt((req.query.limit || '9'), 10);
-    const limit = Math.max(1, Math.min(60, Number.isFinite(limitParam) ? limitParam : 9));
-    const rawExclude = (req.query.exclude || '').toString().trim();
-    const excludeList = rawExclude ? rawExclude.split(',').map(item => item.trim()).filter(Boolean) : [];
-    const excludeSet = new Set(excludeList);
-
-    const started = Date.now();
-    const decadeData = await gatherDecadeRecords(normalized);
-    const sourceRecords = decadeData.records || [];
-
-    if (!sourceRecords.length) {
-      console.log('[MASS] explore random', {
-        decade: decadeData.decadeLabel,
-        totalRecords: 0,
-        uniqueAlbums: 0,
-        returned: 0,
-        excludeCount: 0,
-        ms: Date.now() - started,
-        mode: decadeData.mode,
-        field: decadeData.fieldUsed
-      });
-      return res.json({ items: [], total: 0, limit, excludeCount: 0 });
-    }
-
-    const uniqueMap = new Map();
-    for (const record of sourceRecords) {
-      const meta = record.__albumKeyMeta || canonicalAlbumKey(record.fields);
-      if (!meta?.key) continue;
-      const existing = uniqueMap.get(meta.key);
-      if (!existing) {
-        record.__albumKeyMeta = meta;
-        uniqueMap.set(meta.key, record);
-        continue;
-      }
-      const existingPicture = existing.fields?.['Artwork::Picture'] || existing.fields?.Picture || existing.fields?.['Artwork Picture'];
-      const nextPicture = record.fields?.['Artwork::Picture'] || record.fields?.Picture || record.fields?.['Artwork Picture'];
-      if (!existingPicture && nextPicture) {
-        record.__albumKeyMeta = meta;
-        uniqueMap.set(meta.key, record);
-      }
-    }
-
-    const uniqueRecords = Array.from(uniqueMap.values());
-    const availableRecords = [];
-    let excludeCount = 0;
-    for (const rec of uniqueRecords) {
-      const key = rec.__albumKeyMeta?.key;
-      if (!key) continue;
-      if (excludeSet.has(key)) {
-        excludeCount += 1;
-        continue;
-      }
-      availableRecords.push(rec);
-    }
-
-    const remainingTotal = availableRecords.length;
-    const sampleCount = Math.min(limit, remainingTotal);
-    const pool = availableRecords.slice();
-    const selected = [];
-    for (let i = 0; i < sampleCount; i += 1) {
-      const idx = Math.floor(Math.random() * pool.length);
-      const [item] = pool.splice(idx, 1);
-      if (item) selected.push(item);
-    }
-
-    await attachTrackCounts(selected);
-
-    const elapsed = Date.now() - started;
-    console.log('[MASS] explore random', {
-      decade: decadeData.decadeLabel,
-      totalRecords: sourceRecords.length,
-      uniqueAlbums: uniqueRecords.length,
-      returned: selected.length,
-      remaining: remainingTotal,
-      excludeProvided: excludeList.length,
-      excludeCount,
-      ms: elapsed,
-      mode: decadeData.mode,
-      field: decadeData.fieldUsed,
-      iterations: decadeData.iterations
-    });
-
-    return res.json({ items: selected, total: remainingTotal, limit, excludeCount });
-  } catch (err) {
-    const detail = err?.message || String(err);
-    return res.status(500).json({ error: 'Explore random failed', detail });
+    return res.status(500).json({ error:'Explore failed', status:500, detail });
   }
 });
 
@@ -984,47 +398,16 @@ app.get('/api/album', async (req, res) => {
     }
 
     const data  = json?.response?.data || [];
-    const decorated = data.map((d, idx) => ({
-      recordId: d.recordId,
-      modId: d.modId,
-      fields: d.fieldData || {},
-      _seq: parseSequence(d.fieldData || {}),
-      _idx: idx
-    }));
-
-    decorated.sort((a, b) => {
-      if (a._seq !== b._seq) return a._seq - b._seq;
-      return a._idx - b._idx;
-    });
-
-    if (decorated.length) {
-      const sample = decorated.slice(0, 5).map(item => (item._seq === Number.POSITIVE_INFINITY ? '∞' : item._seq));
-      console.log('[MASS] album track sequence sample', sample);
-    }
-
-    const items = decorated.map(({ _seq, _idx, ...rest }) => rest);
-    const total = json?.response?.dataInfo?.foundCount ?? items.length;
+    const total = json?.response?.dataInfo?.foundCount ?? data.length;
 
     return res.json({
       ok: true,
-      items,
+      items: data.map(d => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} })),
       total, offset: 0, limit
     });
   } catch (err) {
     const detail = err?.message || String(err);
     return res.status(500).json({ error:'Album lookup failed', status:500, detail });
-  }
-});
-
-app.get('/api/album/:albumKey/tracks', async (req, res) => {
-  try {
-    const albumKey = String(req.params.albumKey || '').trim();
-    if (!albumKey) return res.status(400).json({ error: 'Missing album key' });
-    const { tracks, trackCount } = await fetchFullTracksByAlbumKey(albumKey);
-    res.json({ albumKey, trackCount, tracks });
-  } catch (err) {
-    const status = err.status || 500;
-    res.status(status).json({ error: err.message || 'Failed to load tracks' });
   }
 });
 
