@@ -1,4 +1,3 @@
-// CODEX_CANARY
 // server.js — CommonJS, Node 18+ (global fetch). Supports 3-field search and streams containers correctly.
 require('dotenv').config();
 const express = require('express');
