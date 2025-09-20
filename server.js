@@ -497,6 +497,112 @@ async function runFind(payload) {
   return { ok:true, data, total, ms, payload };
 }
 
+async function fetchAllRecordsForQuery(createPayload, { chunk = 200, maxRecords = 5000 } = {}) {
+  const safeChunk = Math.max(1, Math.min(500, chunk));
+  const safeMax = Math.max(safeChunk, maxRecords);
+  let offset = 1;
+  let total = null;
+  let iterations = 0;
+  let elapsedMs = 0;
+  const data = [];
+
+  while (data.length < safeMax) {
+    const payload = createPayload(offset, safeChunk);
+    if (!payload?.query || !Array.isArray(payload.query) || !payload.query.length) {
+      throw new Error('fetchAllRecordsForQuery requires non-empty query payloads');
+    }
+    payload.offset = offset;
+    payload.limit = safeChunk;
+    const result = await runFind(payload);
+    iterations += 1;
+    elapsedMs += result.ms || 0;
+    if (!result.ok) {
+      return { ok: false, error: result.error || 'FM query failed', status: result.status, ms: elapsedMs, iterations };
+    }
+    if (total === null) total = Number.isFinite(result.total) ? Number(result.total) : data.length;
+    if (Array.isArray(result.data) && result.data.length) {
+      data.push(...result.data);
+    }
+    if (!result.data?.length || data.length >= total || result.data.length < safeChunk) {
+      break;
+    }
+    offset += safeChunk;
+  }
+
+  return { ok: true, data, total: total ?? data.length, ms: elapsedMs, iterations };
+}
+
+async function gatherDecadeRecords(normalized) {
+  const { start, end } = normalized;
+  const decadeLabel = `${start}-${end - 1}`;
+  const years = Array.from({ length: end - start }, (_, i) => start + i);
+  const rangeQuery = `${start}...${end - 1}`;
+  let lastError = null;
+
+  const buildResult = (records, total, meta) => ({
+    records: formatRecords(records, { includeAlbumKey: true }),
+    total: Number(total || 0),
+    ...meta
+  });
+
+  for (const field of YEAR_RANGE_FIELDS) {
+    const result = await fetchAllRecordsForQuery(
+      (offset, limit) => ({ query: [ { [field]: rangeQuery } ], offset, limit }),
+      { chunk: 200, maxRecords: 6000 }
+    );
+    if (!result.ok) {
+      lastError = result.error;
+      continue;
+    }
+    if (!result.data.length) continue;
+    return buildResult(result.data, result.total, { mode: 'range', fieldUsed: field, ms: result.ms, iterations: result.iterations, decadeLabel });
+  }
+
+  for (const field of YEAR_TEXT_FIELDS) {
+    const queries = years.map(year => ({ [field]: `==${year}` }));
+    const result = await fetchAllRecordsForQuery(
+      (offset, limit) => ({ query: queries, offset, limit }),
+      { chunk: 200, maxRecords: 6000 }
+    );
+    if (!result.ok) {
+      lastError = result.error;
+      continue;
+    }
+    if (!result.data.length) continue;
+    return buildResult(result.data, result.total, { mode: 'text-eq', fieldUsed: field, ms: result.ms, iterations: result.iterations, decadeLabel });
+  }
+
+  for (const field of YEAR_TEXT_FIELDS) {
+    const queries = years.map(year => ({ [field]: contains(String(year)) }));
+    const result = await fetchAllRecordsForQuery(
+      (offset, limit) => ({ query: queries, offset, limit }),
+      { chunk: 300, maxRecords: 6000 }
+    );
+    if (!result.ok) {
+      lastError = result.error;
+      continue;
+    }
+    if (!result.data.length) continue;
+    const formatted = formatRecords(result.data, { includeAlbumKey: true });
+    const filtered = formatted.filter(rec => recordMatchesDecade(rec.fields, start, end));
+    if (!filtered.length) continue;
+    return {
+      records: filtered,
+      total: filtered.length,
+      mode: 'text-filtered',
+      fieldUsed: field,
+      ms: result.ms,
+      iterations: result.iterations,
+      decadeLabel
+    };
+  }
+
+  if (lastError) {
+    console.log('[MASS] explore random warn', { decade: decadeLabel, warn: lastError });
+  }
+  return { records: [], total: 0, mode: 'none', fieldUsed: null, ms: 0, iterations: 0, decadeLabel };
+}
+
 async function searchByArtist(term, limit, fmOffset) {
   const pattern = contains(term);
   let lastError = null;
@@ -736,6 +842,102 @@ app.get('/api/explore', async (req, res) => {
   } catch (err) {
     const detail = err?.message || String(err);
     return res.status(500).json({ error: 'Explore failed', detail });
+  }
+});
+
+app.get('/api/explore/random', async (req, res) => {
+  try {
+    const normalized = normalizeDecade(req.query);
+    if (!normalized) {
+      return res.status(400).json({ error: 'Invalid decade parameter. Use decade=1960, 1960s, or 1960-1969.' });
+    }
+
+    const limitParam = parseInt((req.query.limit || '9'), 10);
+    const limit = Math.max(1, Math.min(60, Number.isFinite(limitParam) ? limitParam : 9));
+    const rawExclude = (req.query.exclude || '').toString().trim();
+    const excludeList = rawExclude ? rawExclude.split(',').map(item => item.trim()).filter(Boolean) : [];
+    const excludeSet = new Set(excludeList);
+
+    const started = Date.now();
+    const decadeData = await gatherDecadeRecords(normalized);
+    const sourceRecords = decadeData.records || [];
+
+    if (!sourceRecords.length) {
+      console.log('[MASS] explore random', {
+        decade: decadeData.decadeLabel,
+        totalRecords: 0,
+        uniqueAlbums: 0,
+        returned: 0,
+        excludeCount: 0,
+        ms: Date.now() - started,
+        mode: decadeData.mode,
+        field: decadeData.fieldUsed
+      });
+      return res.json({ items: [], total: 0, limit, excludeCount: 0 });
+    }
+
+    const uniqueMap = new Map();
+    for (const record of sourceRecords) {
+      const meta = record.__albumKeyMeta || canonicalAlbumKey(record.fields);
+      if (!meta?.key) continue;
+      const existing = uniqueMap.get(meta.key);
+      if (!existing) {
+        record.__albumKeyMeta = meta;
+        uniqueMap.set(meta.key, record);
+        continue;
+      }
+      const existingPicture = existing.fields?.['Artwork::Picture'] || existing.fields?.Picture || existing.fields?.['Artwork Picture'];
+      const nextPicture = record.fields?.['Artwork::Picture'] || record.fields?.Picture || record.fields?.['Artwork Picture'];
+      if (!existingPicture && nextPicture) {
+        record.__albumKeyMeta = meta;
+        uniqueMap.set(meta.key, record);
+      }
+    }
+
+    const uniqueRecords = Array.from(uniqueMap.values());
+    const availableRecords = [];
+    let excludeCount = 0;
+    for (const rec of uniqueRecords) {
+      const key = rec.__albumKeyMeta?.key;
+      if (!key) continue;
+      if (excludeSet.has(key)) {
+        excludeCount += 1;
+        continue;
+      }
+      availableRecords.push(rec);
+    }
+
+    const remainingTotal = availableRecords.length;
+    const sampleCount = Math.min(limit, remainingTotal);
+    const pool = availableRecords.slice();
+    const selected = [];
+    for (let i = 0; i < sampleCount; i += 1) {
+      const idx = Math.floor(Math.random() * pool.length);
+      const [item] = pool.splice(idx, 1);
+      if (item) selected.push(item);
+    }
+
+    await attachTrackCounts(selected);
+
+    const elapsed = Date.now() - started;
+    console.log('[MASS] explore random', {
+      decade: decadeData.decadeLabel,
+      totalRecords: sourceRecords.length,
+      uniqueAlbums: uniqueRecords.length,
+      returned: selected.length,
+      remaining: remainingTotal,
+      excludeProvided: excludeList.length,
+      excludeCount,
+      ms: elapsed,
+      mode: decadeData.mode,
+      field: decadeData.fieldUsed,
+      iterations: decadeData.iterations
+    });
+
+    return res.json({ items: selected, total: remainingTotal, limit, excludeCount });
+  } catch (err) {
+    const detail = err?.message || String(err);
+    return res.status(500).json({ error: 'Explore random failed', detail });
   }
 });
 

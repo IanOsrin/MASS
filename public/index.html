@@ -58,7 +58,9 @@
     .explore-panel{max-width:960px;margin:12px auto 0;overflow:hidden;transition:max-height .3s ease;}
     .explore-panel[hidden]{display:none;}
     .decades{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding:12px 0;}
-    .decades button{background:#22252b;border:1px solid var(--border);color:var(--fg);border-radius:999px;padding:6px 10px;cursor:pointer;font-size:13px;}
+    .decades button{background:#22252b;border:1px solid var(--border);color:var(--fg);border-radius:999px;padding:6px 10px;cursor:pointer;font-size:13px;transition:background .2s ease,color .2s ease;}
+    .decades button.active{background:var(--accent);color:#0b1210;border-color:var(--accent);font-weight:700;}
+    .decades button[disabled]{opacity:0.6;cursor:not-allowed;}
 
     /* Landing placeholder */
     .landing{display:flex;align-items:center;justify-content:center;min-height:40vh;padding:24px;}
@@ -197,6 +199,16 @@
     const exploreEl = document.getElementById('explore');
     const decadesPanel = document.getElementById('explorePanel');
     const decadesEl = document.getElementById('decades');
+    const toolbarEl = document.querySelector('.toolbar');
+
+    const exploreNoticeEl = document.createElement('div');
+    let exploreNoticeTimer = null;
+    exploreNoticeEl.id = 'exploreNotice';
+    exploreNoticeEl.className = 'badge';
+    exploreNoticeEl.hidden = true;
+    if (toolbarEl) {
+      toolbarEl.appendChild(exploreNoticeEl);
+    }
 
     // Modal elements
     const overlay = document.getElementById('overlay');
@@ -216,11 +228,13 @@
     const FM_FETCH_LIMIT  = 200; // UI asks for 200; FM may cap ~100 internally
     const ARTIST_FETCH_LIMIT = 9;
     const SHOW_TITLE_WARNING = false; // hide badge (logic retained if ever needed)
+    const EXPLORE_CHUNK_SIZE = 9;
 
     // State
     let lastQ = '';
     let lastArtist = '';
-    let exploreState = { activeDecade: null, offset: 0, total: 0 };
+    let exploreActiveDecade = null;
+    const exploreDecadesState = new Map();
     let currentEndpoint = '/api/search';
     let currentParams = {};
     let currentLimit = FM_FETCH_LIMIT;
@@ -321,6 +335,11 @@
       lastArtist = '';
       if (searchEl) searchEl.value = '';
       if (artistEl) artistEl.value = '';
+      exploreActiveDecade = null;
+      if (decadesEl) {
+        decadesEl.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+      }
+      showExploreNotice('', 0);
       // Clear albums UI
       albumsEl.innerHTML = '';
       pagerEl.hidden = true;
@@ -390,8 +409,9 @@
     }
     function keyTitle(s){ return normTitle(s).toLowerCase(); }
 
-    function groupAlbums(items){
+    function groupAlbums(items, { preserveOrder = false } = {}){
       const byKey = new Map();
+      const ordered = [];
 
       for (const rec of items) {
         const albumKey = rec.albumKey;
@@ -408,6 +428,7 @@
             trackCount: Number(rec.trackCount || 0)
           };
           byKey.set(albumKey, entry);
+          if (preserveOrder) ordered.push(entry);
         } else {
           if (!entry.picture && fPicture(fields)) entry.picture = fPicture(fields);
           entry.trackCount = Math.max(entry.trackCount, Number(rec.trackCount || 0));
@@ -417,8 +438,11 @@
         }
       }
 
-      const groups = Array.from(byKey.values()).filter(album => album.trackCount >= 0);
-      groups.sort((a,b)=> a.title.localeCompare(b.title, undefined, { sensitivity:'base' }) || a.artist.localeCompare(b.artist, undefined, { sensitivity:'base' }));
+      const candidates = preserveOrder ? ordered : Array.from(byKey.values());
+      const groups = candidates.filter(album => album.trackCount >= 0);
+      if (!preserveOrder) {
+        groups.sort((a,b)=> a.title.localeCompare(b.title, undefined, { sensitivity:'base' }) || a.artist.localeCompare(b.artist, undefined, { sensitivity:'base' }));
+      }
       return groups;
     }
 
@@ -752,7 +776,94 @@
     });
 
     /* ================= Rendering albums (cards) ================= */
+    function createAlbumCard(album){
+      const card = document.createElement('article');
+      card.className = 'album-card';
+
+      const coverButton = document.createElement('button');
+      coverButton.type = 'button';
+      coverButton.className = 'album-cover';
+      coverButton.addEventListener('click', () => openTracksModal(album));
+      coverButton.setAttribute('aria-label', album.title ? `Open tracks for ${album.title}` : 'Open tracks');
+      coverButton.dataset.albumKey = album.albumKey || '';
+
+      if (album.picture) {
+        coverButton.classList.remove('no-image');
+        coverButton.textContent = '';
+        const proxied = `/api/container?u=${encodeURIComponent(album.picture)}`;
+        const img = document.createElement('img');
+        img.src = proxied;
+        img.alt = album.title ? `${album.title} cover` : 'Album cover';
+        img.onerror = () => {
+          coverButton.classList.add('no-image');
+          coverButton.innerHTML = 'No cover';
+        };
+        coverButton.appendChild(img);
+      } else {
+        coverButton.classList.add('no-image');
+        coverButton.textContent = 'No cover';
+      }
+      card.appendChild(coverButton);
+
+      const body = document.createElement('div');
+      body.className = 'album-body';
+
+      const titleEl = document.createElement('h3');
+      titleEl.className = 'album-title';
+      titleEl.textContent = album.title || '(no album)';
+      body.appendChild(titleEl);
+
+      if (album.artist) {
+        const subtitleEl = document.createElement('div');
+        subtitleEl.className = 'subtitle';
+        subtitleEl.textContent = album.artist;
+        body.appendChild(subtitleEl);
+      }
+
+      const meta = document.createElement('div');
+      meta.className = 'album-meta';
+      if (album.catalogue) {
+        const catBadge = document.createElement('span');
+        catBadge.className = 'badge';
+        catBadge.textContent = album.catalogue;
+        meta.appendChild(catBadge);
+      }
+      if (meta.childElementCount) body.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'album-actions';
+      const showButton = document.createElement('button');
+      showButton.type = 'button';
+      showButton.className = 'btn small';
+      const trackLabel = Number.isFinite(album.trackCount) && album.trackCount > 0 ? `Show Tracks (${album.trackCount})` : 'Show Tracks';
+      showButton.textContent = trackLabel;
+      showButton.dataset.role = 'show-tracks';
+      showButton.dataset.albumKey = album.albumKey || '';
+      showButton.addEventListener('click', () => openTracksModal(album));
+      actions.appendChild(showButton);
+      body.appendChild(actions);
+
+      card.appendChild(body);
+      return card;
+    }
+
+    function renderAlbums(albums, { replace = false } = {}){
+      if (replace) {
+        albumsEl.innerHTML = '';
+      }
+      if (!Array.isArray(albums)) return;
+      for (const album of albums) {
+        if (!album) continue;
+        const card = createAlbumCard(album);
+        albumsEl.appendChild(card);
+      }
+    }
+
     function renderAlbumPage(){
+      if (currentEndpoint === '/api/explore/random') {
+        pagerEl.hidden = true;
+        return;
+      }
       albumsEl.innerHTML = '';
       const totalAlbums = albumGroups.length;
       if (totalAlbums) {
@@ -765,96 +876,113 @@
         countEl.textContent = '';
       }
 
-      if (currentEndpoint === '/api/explore' && exploreState.activeDecade !== null) {
-        const totalPages = Math.max(1, Math.ceil((exploreState.total || 0) / ALBUMS_PER_PAGE));
-        const currentPage = Math.floor((exploreState.offset || 0) / ALBUMS_PER_PAGE) + 1;
-        pagerEl.hidden = exploreState.total <= ALBUMS_PER_PAGE;
-        pageInfo.textContent = `Page ${Math.min(currentPage, totalPages)} / ${totalPages}`;
-        prevEl.disabled = exploreState.offset <= 0;
-        nextEl.disabled = exploreState.offset + ALBUMS_PER_PAGE >= exploreState.total;
-      } else {
-        const maxPage = Math.max(1, Math.ceil(totalAlbums / ALBUMS_PER_PAGE));
-        pagerEl.hidden = totalAlbums <= ALBUMS_PER_PAGE;
-        albumPage = Math.min(albumPage, maxPage - 1);
-        pageInfo.textContent = `Page ${albumPage+1} / ${maxPage}`;
-        prevEl.disabled = albumPage <= 0;
-        nextEl.disabled = albumPage >= maxPage - 1 && rawItems.length >= rawTotalFound;
-      }
+      const maxPage = Math.max(1, Math.ceil(totalAlbums / ALBUMS_PER_PAGE));
+      pagerEl.hidden = totalAlbums <= ALBUMS_PER_PAGE;
+      albumPage = Math.min(albumPage, maxPage - 1);
+      pageInfo.textContent = `Page ${albumPage+1} / ${maxPage}`;
+      prevEl.disabled = albumPage <= 0;
+      nextEl.disabled = albumPage >= maxPage - 1 && rawItems.length >= rawTotalFound;
 
       const start = albumPage * ALBUMS_PER_PAGE;
       const end   = Math.min(start + ALBUMS_PER_PAGE, totalAlbums);
       const slice = albumGroups.slice(start, end);
+      renderAlbums(slice, { replace: false });
+    }
 
-      for (const album of slice) {
-        const card = document.createElement('article');
-        card.className = 'album-card';
-
-        const coverButton = document.createElement('button');
-        coverButton.type = 'button';
-        coverButton.className = 'album-cover';
-        coverButton.addEventListener('click', () => openTracksModal(album));
-        coverButton.setAttribute('aria-label', album.title ? `Open tracks for ${album.title}` : 'Open tracks');
-        coverButton.dataset.albumKey = album.albumKey;
-
-        if (album.picture) {
-          coverButton.classList.remove('no-image');
-          coverButton.textContent = '';
-          const proxied = `/api/container?u=${encodeURIComponent(album.picture)}`;
-          const img = document.createElement('img');
-          img.src = proxied;
-          img.alt = album.title ? `${album.title} cover` : 'Album cover';
-          img.onerror = () => {
-            coverButton.classList.add('no-image');
-            coverButton.innerHTML = 'No cover';
-          };
-          coverButton.appendChild(img);
-        } else {
-          coverButton.classList.add('no-image');
-          coverButton.textContent = 'No cover';
-        }
-        card.appendChild(coverButton);
-
-        const body = document.createElement('div');
-        body.className = 'album-body';
-
-        const titleEl = document.createElement('h3');
-        titleEl.className = 'album-title';
-        titleEl.textContent = album.title || '(no album)';
-        body.appendChild(titleEl);
-
-        if (album.artist) {
-          const subtitleEl = document.createElement('div');
-          subtitleEl.className = 'subtitle';
-          subtitleEl.textContent = album.artist;
-          body.appendChild(subtitleEl);
-        }
-
-        const meta = document.createElement('div');
-        meta.className = 'album-meta';
-        if (album.catalogue) {
-          const catBadge = document.createElement('span');
-          catBadge.className = 'badge';
-          catBadge.textContent = album.catalogue;
-          meta.appendChild(catBadge);
-        }
-        if (meta.childElementCount) body.appendChild(meta);
-
-        const actions = document.createElement('div');
-        actions.className = 'album-actions';
-        const showButton = document.createElement('button');
-        showButton.type = 'button';
-        showButton.className = 'btn small';
-        const trackLabel = Number.isFinite(album.trackCount) && album.trackCount > 0 ? `Show Tracks (${album.trackCount})` : 'Show Tracks';
-        showButton.textContent = trackLabel;
-        showButton.dataset.role = 'show-tracks';
-        showButton.dataset.albumKey = album.albumKey || '';
-        showButton.addEventListener('click', () => openTracksModal(album));
-        actions.appendChild(showButton);
-        body.appendChild(actions);
-
-        card.appendChild(body);
-        albumsEl.appendChild(card);
+    function getDecadeState(decade){
+      let state = exploreDecadesState.get(decade);
+      if (!state) {
+        state = {
+          shown: new Set(),
+          albums: [],
+          remainingEstimate: null,
+          chunkSize: EXPLORE_CHUNK_SIZE,
+          loading: false
+        };
+        exploreDecadesState.set(decade, state);
       }
+      return state;
+    }
+
+    function setActiveDecadeButton(decade){
+      if (!decadesEl) return;
+      const buttons = decadesEl.querySelectorAll('button[data-decade]');
+      buttons.forEach(btn => {
+        if (Number(btn.dataset.decade) === decade) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    function setDecadeButtonLoading(btn, loading){
+      if (!btn) return;
+      if (loading) {
+        if (!btn.dataset.originalLabel) {
+          btn.dataset.originalLabel = btn.textContent;
+        }
+        const label = btn.dataset.originalLabel;
+        btn.disabled = true;
+        btn.classList.add('loading');
+        btn.textContent = `${label} · Loading…`;
+      } else {
+        const label = btn.dataset.originalLabel || btn.textContent.replace(/ · Loading…$/, '');
+        btn.classList.remove('loading');
+        btn.textContent = label;
+        if (!btn.dataset.cooldown) {
+          btn.disabled = false;
+        }
+      }
+    }
+
+    function temporarilyDisableButton(btn, duration = 1800){
+      if (!btn) return;
+      btn.dataset.cooldown = '1';
+      btn.disabled = true;
+      btn.classList.add('cooldown');
+      setTimeout(() => {
+        btn.classList.remove('cooldown');
+        delete btn.dataset.cooldown;
+        if (!btn.classList.contains('loading')) {
+          btn.disabled = false;
+        }
+      }, duration);
+    }
+
+    function showExploreNotice(message, duration = 2000){
+      if (!exploreNoticeEl) return;
+      if (exploreNoticeTimer) {
+        clearTimeout(exploreNoticeTimer);
+        exploreNoticeTimer = null;
+      }
+      if (!message) {
+        exploreNoticeEl.hidden = true;
+        exploreNoticeEl.textContent = '';
+        return;
+      }
+      exploreNoticeEl.textContent = message;
+      exploreNoticeEl.hidden = false;
+      if (duration > 0) {
+        exploreNoticeTimer = setTimeout(() => {
+          exploreNoticeEl.hidden = true;
+          exploreNoticeEl.textContent = '';
+          exploreNoticeTimer = null;
+        }, duration);
+      }
+    }
+
+    function updateExploreCountDisplay(state){
+      if (!countEl) return;
+      if (!state || !state.albums.length) {
+        countEl.textContent = state?.loading ? 'Loading albums…' : '';
+        return;
+      }
+      let text = `Albums shown: ${state.albums.length}`;
+      if (state.remainingEstimate !== null) {
+        text += state.remainingEstimate <= 0 ? ' — No more albums' : ` — ~${state.remainingEstimate} remaining`;
+      }
+      countEl.textContent = text;
     }
 
     /* ================= Playback ================= */
@@ -985,49 +1113,111 @@ function validateAudio(url, timeoutMs = 5000) {
       }
     }
     /* ================= Search & paging ================= */
-    async function runExplore(startYear, options = {}) {
+    async function handleExploreDecade(startYear, triggerButton) {
       const start = Number(startYear) || 0;
       if (!start) return;
       lastQ = '';
       lastArtist = '';
-      exploreState = { activeDecade: start, offset: options.offset || 0, total: exploreState.total || 0 };
       hideLanding();
       errorEl.hidden = true;
       errorEl.textContent = '';
-      showBusy('Searching…');
+      showExploreNotice('', 0);
 
-      const params = { decade: String(start), offset: exploreState.offset, limit: ALBUMS_PER_PAGE };
-      fetchAlbums('/api/explore', params, ALBUMS_PER_PAGE)
-        .then(json => {
-          rawItems = json?.items || [];
-          rawTotalFound = Number(json?.total || rawItems.length);
-          rawNextOffset = Number(json?.offset || 0) + rawItems.length;
+      const state = getDecadeState(start);
+      const switching = exploreActiveDecade !== start;
+      exploreActiveDecade = start;
+      setActiveDecadeButton(start);
 
-          exploreState = {
-            activeDecade: start,
-            offset: Number(json?.offset || 0),
-            total: Number(json?.total || rawItems.length)
-          };
+      if (switching) {
+        albumsEl.innerHTML = '';
+        if (state.albums.length) {
+          renderAlbums(state.albums, { replace: false });
+        }
+        albumGroups = state.albums.slice();
+        pagerEl.hidden = true;
+        albumPage = 0;
+        rawItems = [];
+        rawTotalFound = 0;
+        rawNextOffset = 0;
+        currentEndpoint = '/api/explore/random';
+        currentParams = { decade: String(start) };
+        currentLimit = state.chunkSize || EXPLORE_CHUNK_SIZE;
+        updateExploreCountDisplay(state);
+      }
 
-          albumGroups = groupAlbums(rawItems);
-          albumPage = 0;
-          renderAlbumPage();
+      if (state.loading) return;
 
-          currentEndpoint = '/api/explore';
-          currentParams = { decade: String(start) };
-          currentLimit = ALBUMS_PER_PAGE;
+      state.loading = true;
+      updateExploreCountDisplay(state);
+      setDecadeButtonLoading(triggerButton, true);
 
-          if (!rawItems.length) {
-            errorEl.hidden = false;
-            errorEl.textContent = `No albums found for the ${start}s.`;
-          }
-        })
-        .catch(err => {
-          if (err.name === 'AbortError') return;
-          errorEl.hidden = false;
-          errorEl.textContent = `Explore error: ${err.message || err}`;
-        })
-        .finally(() => hideBusy());
+      abortInFlight();
+      const ctrl = new AbortController();
+      inFlight = ctrl;
+
+      try {
+        const params = new URLSearchParams();
+        params.set('decade', String(start));
+        const chunkSize = state.chunkSize || EXPLORE_CHUNK_SIZE;
+        params.set('limit', String(chunkSize));
+        if (state.shown.size) {
+          params.set('exclude', Array.from(state.shown).join(','));
+        }
+
+        const resp = await fetch(`/api/explore/random?${params.toString()}`, { signal: ctrl.signal });
+        if (!resp.ok) throw new Error(await resp.text().catch(() => `HTTP ${resp.status}`));
+        const data = await resp.json();
+        if (inFlight === ctrl) inFlight = null;
+
+        const rawChunk = Array.isArray(data.items) ? data.items : [];
+        const deduped = [];
+        for (const rec of rawChunk) {
+          const key = rec && rec.albumKey ? rec.albumKey : '';
+          if (!key) continue;
+          if (state.shown.has(key)) continue;
+          state.shown.add(key);
+          deduped.push(rec);
+        }
+
+        const newAlbums = groupAlbums(deduped, { preserveOrder: true });
+        if (switching && !state.albums.length) {
+          albumsEl.innerHTML = '';
+        }
+
+        if (newAlbums.length) {
+          state.albums.push(...newAlbums);
+          albumGroups = state.albums.slice();
+          renderAlbums(newAlbums, { replace: false });
+          showExploreNotice('', 0);
+        } else if (state.albums.length) {
+          showExploreNotice('No more albums');
+          temporarilyDisableButton(triggerButton, 1800);
+        } else {
+          showExploreNotice('No albums found for this decade');
+        }
+
+        const totalRemaining = Number.isFinite(Number(data.total)) ? Number(data.total) : null;
+        if (totalRemaining !== null) {
+          const remainingAfter = Math.max(0, totalRemaining - deduped.length);
+          state.remainingEstimate = remainingAfter;
+        }
+
+        currentEndpoint = '/api/explore/random';
+        currentParams = { decade: String(start) };
+        currentLimit = chunkSize;
+        updateExploreCountDisplay(state);
+        pagerEl.hidden = true;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        errorEl.hidden = false;
+        errorEl.textContent = `Explore error: ${err.message || err}`;
+        showExploreNotice('', 0);
+      } finally {
+        if (inFlight === ctrl) inFlight = null;
+        state.loading = false;
+        setDecadeButtonLoading(triggerButton, false);
+        updateExploreCountDisplay(state);
+      }
     }
 
     // Build decade chips and toggle
@@ -1037,7 +1227,8 @@ function validateAudio(url, timeoutMs = 5000) {
       for(const d of decades){
         const b = document.createElement('button');
         b.textContent = d + 's';
-        b.addEventListener('click', () => runExplore(d));
+        b.dataset.decade = String(d);
+        b.addEventListener('click', () => handleExploreDecade(d, b));
         decadesEl.appendChild(b);
       }
     }
@@ -1058,6 +1249,9 @@ function validateAudio(url, timeoutMs = 5000) {
       if (!artist) return;
       lastArtist = artist;
       lastQ = '';
+      exploreActiveDecade = null;
+      if (decadesEl) decadesEl.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+      showExploreNotice('', 0);
       hideLanding();
       errorEl.hidden = true;
       errorEl.textContent = '';
@@ -1093,6 +1287,9 @@ function validateAudio(url, timeoutMs = 5000) {
       if(!query){ showLanding(); return; }
       lastQ = query;
       lastArtist = '';
+      exploreActiveDecade = null;
+      if (decadesEl) decadesEl.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+      showExploreNotice('', 0);
       hideLanding();
       errorEl.hidden = true;
       errorEl.textContent = '';
@@ -1147,21 +1344,13 @@ function validateAudio(url, timeoutMs = 5000) {
     clearEl.addEventListener('click', () => { searchEl.value=''; artistEl.value=''; showLanding(); });
 
     prevEl.addEventListener('click', async () => {
-      if (currentEndpoint === '/api/explore' && exploreState.activeDecade !== null) {
-        const nextOffset = Math.max(0, exploreState.offset - ALBUMS_PER_PAGE);
-        if (nextOffset !== exploreState.offset) {
-          await runExplore(exploreState.activeDecade, { offset: nextOffset });
-        }
+      if (currentEndpoint === '/api/explore/random') {
         return;
       }
       if (albumPage>0){ albumPage--; renderAlbumPage(); }
     });
     nextEl.addEventListener('click', async () => {
-      if (currentEndpoint === '/api/explore' && exploreState.activeDecade !== null) {
-        const nextOffset = exploreState.offset + ALBUMS_PER_PAGE;
-        if (nextOffset < exploreState.total) {
-          await runExplore(exploreState.activeDecade, { offset: nextOffset });
-        }
+      if (currentEndpoint === '/api/explore/random') {
         return;
       }
       const maxPage = Math.max(1, Math.ceil((albumGroups.length||0) / ALBUMS_PER_PAGE));
