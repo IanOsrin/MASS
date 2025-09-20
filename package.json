@@ -1,6 +1,7 @@
 {
   "name": "thegallo-api",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
   "main": "server.js",
   "scripts": {
@@ -19,7 +20,8 @@
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "morgan": "^1.10.1",
-    "tough-cookie": "^5.1.2"
+    "tough-cookie": "^5.1.2",
+    "undici": "^6.21.3"
   },
   "engines": {
     "node": ">=18"
