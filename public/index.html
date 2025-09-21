@@ -244,6 +244,8 @@
     // Grouped albums & album-page state
     let albumGroups = [];
     let albumPage = 0;
+    let currentMode = 'landing';
+    let isRestoring = false;
 
     // Single audio UI state
     let currentBtn=null, currentRow=null, currentSrc='';
@@ -343,10 +345,110 @@
       return typeof s === 'string' && s.trim().length > 0;
         }
 
+    function fmtTime(sec){
+      const value = Number(sec);
+      if (!Number.isFinite(value) || value <= 0) return '0:00';
+      const clamped = Math.max(0, value);
+      const minutes = Math.floor(clamped / 60);
+      const seconds = Math.floor(clamped % 60);
+      return `${minutes}:${String(seconds).padStart(2,'0')}`;
+        }
+
     function abortInFlight(){ if(inFlight){ inFlight.abort(); inFlight=null; } }
+
+    function snapshotState(overrides = {}){
+      return {
+        groups: albumGroups.slice(),
+        page: albumPage,
+        rawItems: rawItems.slice(),
+        rawTotalFound,
+        rawNextOffset,
+        lastQ,
+        searchValue: searchEl ? searchEl.value : '',
+        mode: currentMode,
+        ...overrides
+      };
+        }
+
+    function applySnapshot(snapshot){
+      if (!snapshot) return;
+      albumGroups = Array.isArray(snapshot.groups) ? snapshot.groups.slice() : [];
+      rawItems = Array.isArray(snapshot.rawItems) ? snapshot.rawItems.slice() : [];
+      rawTotalFound = typeof snapshot.rawTotalFound === 'number' ? snapshot.rawTotalFound : rawItems.length;
+      rawNextOffset = typeof snapshot.rawNextOffset === 'number' ? snapshot.rawNextOffset : rawItems.length;
+      albumPage = typeof snapshot.page === 'number' ? snapshot.page : 0;
+      lastQ = typeof snapshot.lastQ === 'string' ? snapshot.lastQ : '';
+      currentMode = snapshot.mode || 'search';
+      if (searchEl && typeof snapshot.searchValue === 'string') {
+        searchEl.value = snapshot.searchValue;
+      }
+      hideLanding();
+      errorEl.hidden = true;
+        }
+
+    function restorePreviousSearch(){
+      if (!prevSearch) return;
+      const restore = prevSearch;
+      prevSearch = null;
+
+      const source = restore.snapshot || restore.paging || restore.original;
+      if (source) {
+        const snapshot = { ...source };
+        if (restore.type === 'search' && typeof restore.term === 'string') {
+          snapshot.lastQ = restore.term;
+          snapshot.searchValue = restore.term;
+        }
+        isRestoring = true;
+        applySnapshot(snapshot);
+        renderAlbumPage();
+
+        const needsRefetch = albumGroups.length <= 1 && ((restore.type === 'search' && typeof restore.term === 'string' && restore.term.trim()) || (restore.type === 'explore' && restore.start));
+        if (needsRefetch) {
+          if (restore.type === 'search') {
+            if (searchEl) searchEl.value = restore.term;
+            run(restore.term);
+            return;
+          } else if (restore.type === 'explore') {
+            const startYear = Number(restore.start) || 0;
+            if (startYear) {
+              runExplore(startYear);
+              return;
+            }
+          }
+          isRestoring = false;
+          return;
+        }
+
+        isRestoring = false;
+        return;
+      }
+
+      if (restore.type === 'explore' && restore.start) {
+        const startYear = Number(restore.start) || 0;
+        if (startYear) {
+          isRestoring = true;
+          runExplore(startYear);
+          return;
+        }
+      }
+
+      if (restore.type === 'search' && typeof restore.term === 'string' && restore.term.trim()) {
+        if (searchEl) searchEl.value = restore.term;
+        isRestoring = true;
+        run(restore.term);
+        return;
+      }
+        }
 
     // Show placeholder graphic from /img/* until user searches
     function showLanding(){
+      currentMode = 'landing';
+      prevSearch = null;
+      rawItems = [];
+      rawTotalFound = 0;
+      rawNextOffset = 0;
+      albumGroups = [];
+      albumPage = 0;
       // Clear albums UI
       albumsEl.innerHTML = '';
       albumsEl.classList.remove('single-album');
@@ -671,12 +773,16 @@
 
         const btnPlay = document.createElement('button');
         btnPlay.className = 'btn small';
-        btnPlay.textContent = 'Validating…';
-        btnPlay.disabled = true;
         const src = t.mp3 ? (t.mp3.startsWith('http') ? `/api/container?u=${encodeURIComponent(t.mp3)}` : t.mp3) : '';
         li._src = src;
         li._btn = btnPlay;
-        if (src) validateAudio(li, src);
+        if (src) {
+          btnPlay.textContent = '▶ Play';
+          btnPlay.disabled = false;
+        } else {
+          btnPlay.textContent = 'No audio';
+          btnPlay.disabled = true;
+        }
         btnPlay.addEventListener('click', () => handlePlay(btnPlay, li, src));
         controls.appendChild(btnPlay);
 
@@ -859,38 +965,6 @@
       });
     }
 
-    function validateAudio(row, src) {
-      const test = new Audio();
-      test.preload = 'metadata';
-
-      let finished = false;
-      const finish = (ok, dur=0) => {
-        if (finished) return;
-        finished = true;
-        clearTimeout(timer);
-        try { test.src = ''; } catch {}
-
-        if (ok && isFinite(dur) && dur > 0) {
-          row._valid = true;
-          row._duration = dur;
-          if (row._time) row._time.textContent = '0:00 / ' + fmtTime(dur);
-          if (row._seek) { row._seek.value = 0; }
-          if (row._btn) { row._btn.disabled = false; row._btn.textContent = '▶ Play'; }
-        } else {
-          row._valid = false;
-          if (row._btn) { row._btn.disabled = true; row._btn.textContent = 'Invalid'; }
-          if (row._time) row._time.textContent = '0:00 / 0:00';
-        }
-      };
-
-      const timer = setTimeout(() => finish(false), 8000);
-      test.addEventListener('loadedmetadata', () => finish(true, test.duration));
-      test.addEventListener('error',          () => finish(false));
-      test.addEventListener('stalled',        () => finish(false));
-      test.addEventListener('abort',          () => finish(false));
-
-      test.src = src;
-    }
     function updateProgressUI(){
       if (!currentRow) return;
       const seek = currentRow._seek, time = currentRow._time;
@@ -965,12 +1039,23 @@
         }
 
     async function runExplore(startYear){
-      prevSearch = { type: "explore", start: startYear, original: { groups: albumGroups.slice(), page: albumPage } };
+      const restoringThisRun = isRestoring;
+      if (!isRestoring) {
+        if (albumGroups.length || rawItems.length) {
+          const snapshot = snapshotState();
+          prevSearch = { type: snapshot.mode || currentMode, start: startYear, snapshot };
+        } else {
+          prevSearch = null;
+        }
+      }
       showBusy(`Loading ${startYear}s…`);
       hideLanding();
       // small guard
       const start = Number(startYear)||0;
-      if(!start) return;
+      if(!start){
+        if (restoringThisRun) isRestoring = false;
+        return;
+      }
       const end = start + 9;
       const params = new URLSearchParams();
       params.set('start', String(start));
@@ -1001,6 +1086,7 @@
         rawTotalFound = Number(j.total || rawItems.length);
         rawNextOffset = 0;
         albumGroups = groupAlbums(rawItems).filter(album => (album.picture || '').trim());
+        currentMode = 'explore';
         if (!albumGroups.length) {
           errorEl.hidden = false;
           errorEl.textContent = `No albums with artwork found for the ${start}s.`;
@@ -1014,7 +1100,10 @@
         rawTotalFound = albumGroups.length;
         albumPage = 0;
         renderAlbumPage();
-      } finally { hideBusy(); }
+      } finally {
+        hideBusy();
+        if (restoringThisRun) isRestoring = false;
+      }
         }
 
     // Build decade chips and toggle
@@ -1042,8 +1131,22 @@
       });
         }
     function run(q){
-      if(!q){ showLanding(); return; } // keep everything else untouched; only search when user types
-      prevSearch = { type: "search", term: q, paging: { groups: albumGroups.slice(), page: albumPage } };
+      if(!q){
+        showLanding();
+        if (isRestoring) isRestoring = false;
+        return;
+      } // keep everything else untouched; only search when user types
+      const restoringThisRun = isRestoring;
+      if (!isRestoring) {
+        const hasPrevious = albumGroups.length || rawItems.length;
+        if (hasPrevious) {
+          const previousTerm = lastQ;
+          const snapshot = snapshotState({ lastQ: previousTerm, searchValue: previousTerm });
+          prevSearch = { type: snapshot.mode || currentMode, term: previousTerm, snapshot };
+        } else {
+          prevSearch = null;
+        }
+      }
       lastQ = q;
       albumsEl.classList.remove('single-album');
       hideLanding();
@@ -1056,6 +1159,7 @@
 
           albumGroups = groupAlbums(rawItems);
           albumPage = 0;
+          currentMode = 'search';
           renderAlbumPage();
         })
         .catch(err => {
@@ -1063,7 +1167,10 @@
           errorEl.hidden = false;
           errorEl.textContent = `Search error: ${err.message || err}`;
         })
-        .finally(() => hideBusy());
+        .finally(() => {
+          hideBusy();
+          if (restoringThisRun) isRestoring = false;
+        });
         }
 
     goEl.addEventListener('click', () => { const q = searchEl.value.trim(); run(q); });
