@@ -22,6 +22,7 @@
     .albums{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;}
     .albums.single-album{display:flex;flex-direction:column;align-items:center;gap:24px;}
     .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;overflow:hidden;}
+    .card.no-audio{border-color:#b9383a;box-shadow:0 0 0 1px rgba(185,56,58,0.45);}
 
     /* Cover: small, centered square; never bleeds */
     .cover-wrap{position:relative;width:var(--cover-size);height:var(--cover-size);border-radius:10px;overflow:hidden;border:1px solid var(--border);background:#101215;margin:0 auto;}
@@ -39,6 +40,8 @@
     .btn.small{padding:6px 8px;font-size:13px;}
     .btn.icon{width:34px;display:inline-flex;align-items:center;justify-content:center;}
     .btn-accent{background:var(--accent);border-color:var(--accent);color:#0b1210;font-weight:700;}
+    .btn-error{background:#b9383a;border-color:#b9383a;color:#fff;}
+    .btn-error:disabled{opacity:0.9;}
 
     
     .back-row{display:flex;justify-content:center;margin-bottom:12px;}
@@ -342,7 +345,7 @@
         }
 
     function hasValidMp3(s){
-      return typeof s === 'string' && s.trim().length > 0;
+      return canValidateAudioSrc(s);
         }
 
     function fmtTime(sec){
@@ -352,6 +355,143 @@
       const minutes = Math.floor(clamped / 60);
       const seconds = Math.floor(clamped % 60);
       return `${minutes}:${String(seconds).padStart(2,'0')}`;
+        }
+
+    const AUDIO_VALIDATE_TIMEOUT = 9000;
+    function canValidateAudioSrc(src){
+      if (typeof src !== 'string') return false;
+      const trimmed = src.trim();
+      if (!trimmed) return false;
+      if (trimmed.startsWith('/')) return true;
+      if (/^https?:\/\//i.test(trimmed)) return true;
+      if (/^[^:?#]+\.(mp3|m4a|aac|wav|ogg|flac)$/i.test(trimmed)) return true;
+      return false;
+        }
+
+    async function validateAudio(row, src){
+      const btn = row && row._btn;
+      const card = row && row._card;
+      if (!btn) return;
+      const token = Symbol('audio-validate');
+      row._validationToken = token;
+
+      const applyIfCurrent = (fn) => {
+        if (row._validationToken !== token) return false;
+        fn();
+        return true;
+      };
+
+      const finalizeCard = (isValid) => {
+        if (!card) return;
+        let pending = Number(card.dataset.pendingTracks || '0');
+        if (pending > 0) pending -= 1;
+        card.dataset.pendingTracks = String(pending);
+        if (isValid) {
+          const valid = Number(card.dataset.validTracks || '0') + 1;
+          card.dataset.validTracks = String(valid);
+        }
+        syncCardAudioState(card);
+      };
+
+      const setInvalid = (label) => {
+        const applied = applyIfCurrent(() => {
+          btn.disabled = true;
+          btn.textContent = label || 'Unavailable';
+          btn.classList.add('btn-error');
+          btn.classList.remove('btn-accent');
+          btn.title = label || 'Audio unavailable';
+          row._valid = false;
+        });
+        if (applied) finalizeCard(false);
+      };
+
+      const setValid = () => {
+        const applied = applyIfCurrent(() => {
+          btn.disabled = false;
+          btn.textContent = '▶ Play';
+          btn.classList.remove('btn-error');
+          btn.removeAttribute('title');
+          row._valid = true;
+        });
+        if (applied) finalizeCard(true);
+      };
+
+      if (!canValidateAudioSrc(src)) {
+        if (card) card.dataset.hasAudioCandidates = 'true';
+        setInvalid('Invalid link');
+        return;
+      }
+
+      applyIfCurrent(() => {
+        btn.disabled = true;
+        btn.textContent = 'Checking…';
+        btn.classList.remove('btn-error');
+        btn.title = 'Validating audio…';
+        if (card) {
+          card.dataset.hasAudioCandidates = 'true';
+          const pending = Number(card.dataset.pendingTracks || '0') + 1;
+          card.dataset.pendingTracks = String(pending);
+          syncCardAudioState(card);
+        }
+      });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), AUDIO_VALIDATE_TIMEOUT);
+      let response;
+      try {
+        response = await fetch(src, {
+          method: 'GET',
+          headers: { Range: 'bytes=0-0' },
+          signal: controller.signal
+        });
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (err && err.name === 'AbortError') {
+          setInvalid('Timeout');
+        } else {
+          setInvalid('Unavailable');
+        }
+        return;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      try {
+        if (!response || !response.ok) {
+          setInvalid(`HTTP ${response ? response.status : 'error'}`);
+          return;
+        }
+        const type = (response.headers.get('content-type') || '').toLowerCase();
+        const len = response.headers.get('content-length');
+        if (response.body && typeof response.body.cancel === 'function') {
+          try { response.body.cancel(); } catch (_) {}
+        }
+        if (len === '0') {
+          setInvalid('Empty audio');
+          return;
+        }
+        if (type && !/(audio|mpeg|mp3|ogg|wav|flac)/i.test(type)) {
+          setInvalid('Unexpected content');
+          return;
+        }
+        setValid();
+      } catch (err) {
+        setInvalid('Unavailable');
+      }
+        }
+
+    function syncCardAudioState(card){
+      if (!card) return;
+      const hasCandidates = card.dataset.hasAudioCandidates === 'true';
+      const valid = Number(card.dataset.validTracks || '0');
+      const pending = Number(card.dataset.pendingTracks || '0');
+      if (valid > 0) {
+        card.classList.remove('no-audio');
+        if (card.title === 'No playable audio available') card.removeAttribute('title');
+      } else if (!hasCandidates || pending === 0) {
+        card.classList.add('no-audio');
+        if (!card.title) card.title = 'No playable audio available';
+      }
         }
 
     function abortInFlight(){ if(inFlight){ inFlight.abort(); inFlight=null; } }
@@ -594,12 +734,14 @@
           return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
         });
 
+        const hasPlayable = playableTracks.length > 0;
         groups.push({
           catalogue: g.catalogue,
           title: displayTitle,
           artist: g.artist,
           picture: g.picture,
-          tracks: tracksForDisplay
+          tracks: tracksForDisplay,
+          hasPlayable
         });
       }
 
@@ -714,9 +856,21 @@
       document.body.classList.remove('no-scroll');
         }
 
-    function openTracksModal(album){
+    function openTracksModal(album, sourceCard=null){
       // Ensure only one window open: close any existing
       closeTracksModal();
+      const albumCard = sourceCard || null;
+      if (albumCard) {
+        albumCard.dataset.validTracks = '0';
+        albumCard.dataset.pendingTracks = '0';
+        if (albumCard.dataset.hasAudioCandidates === 'true') {
+          albumCard.classList.remove('no-audio');
+          if (albumCard.title === 'No playable audio available') albumCard.removeAttribute('title');
+        } else {
+          albumCard.classList.add('no-audio');
+          if (!albumCard.title) albumCard.title = 'No playable audio available';
+        }
+      }
 
       // Fill header
       modalTitle.textContent = album.title || '(no album)';
@@ -773,17 +927,31 @@
 
         const btnPlay = document.createElement('button');
         btnPlay.className = 'btn small';
-        const src = t.mp3 ? (t.mp3.startsWith('http') ? `/api/container?u=${encodeURIComponent(t.mp3)}` : t.mp3) : '';
-        li._src = src;
+        const rawSrc = t.mp3 ? t.mp3 : '';
+        const normalizedSrc = rawSrc.startsWith('http') ? `/api/container?u=${encodeURIComponent(rawSrc)}` : rawSrc;
+        const canPlay = canValidateAudioSrc(normalizedSrc);
+        const playableSrc = canPlay ? normalizedSrc : '';
+        li._src = playableSrc;
         li._btn = btnPlay;
-        if (src) {
-          btnPlay.textContent = '▶ Play';
-          btnPlay.disabled = false;
+        li._card = albumCard;
+        if (canPlay) {
+          btnPlay.textContent = 'Checking…';
+          btnPlay.disabled = true;
+          btnPlay.classList.remove('btn-error');
+          btnPlay.removeAttribute('title');
+          validateAudio(li, playableSrc);
+        } else if (rawSrc) {
+          btnPlay.textContent = 'Invalid audio';
+          btnPlay.disabled = true;
+          btnPlay.classList.add('btn-error');
+          btnPlay.title = 'Invalid audio link';
         } else {
           btnPlay.textContent = 'No audio';
           btnPlay.disabled = true;
+          btnPlay.classList.add('btn-error');
+          btnPlay.title = 'Audio missing';
         }
-        btnPlay.addEventListener('click', () => handlePlay(btnPlay, li, src));
+        btnPlay.addEventListener('click', () => handlePlay(btnPlay, li, li._src));
         controls.appendChild(btnPlay);
 
         const hasInfo = Boolean(
@@ -890,6 +1058,19 @@
       slice.forEach(album => {
         const card = document.createElement('div');
         card.className = 'card';
+        const candidateTracks = Array.isArray(album.tracks) ? album.tracks.filter(track => hasValidMp3(track.mp3)) : [];
+        const hasPlayable = album && album.hasPlayable;
+        const hasCandidates = hasPlayable !== undefined ? hasPlayable : candidateTracks.length > 0;
+        card.dataset.hasAudioCandidates = hasCandidates ? 'true' : 'false';
+        card.dataset.validTracks = '0';
+        card.dataset.pendingTracks = '0';
+        if (hasCandidates) {
+          card.classList.remove('no-audio');
+          card.removeAttribute('title');
+        } else {
+          card.classList.add('no-audio');
+          card.title = 'No playable audio available';
+        }
 
         if (totalAlbums === 1 && prevSearch) {
           const backWrap = document.createElement('div');
@@ -923,7 +1104,7 @@
               if (searchEl) searchEl.value = term;
               run(term);
             } else {
-              openTracksModal(album);
+              openTracksModal(album, card);
             }
           };
           wrap.addEventListener('click', triggerSearch);
@@ -958,7 +1139,7 @@
         const toggle = document.createElement('button');
         toggle.className = 'btn small';
         toggle.textContent = `Show Tracks (${album.tracks.length})`;
-        toggle.addEventListener('click', () => openTracksModal(album));
+        toggle.addEventListener('click', () => openTracksModal(album, card));
         card.appendChild(toggle);
 
         albumsEl.appendChild(card);
