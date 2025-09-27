@@ -9,6 +9,11 @@
       --bg:#0f0f12; --fg:#f5f6f7; --muted:#a7abb3; --card:#17181c; --accent:#62f5a9; --border:#24262c;
       --cover-size: 140px; /* smaller, tidy covers */
       --overlay: rgba(0,0,0,.6);
+      --btn-gradient-start:#3a7bd5;
+      --btn-gradient-end:#00d2ff;
+      --btn-text:#06121f;
+      --btn-shadow:rgba(58,123,213,0.25);
+      --btn-shadow-hover:rgba(58,123,213,0.35);
         }
     html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;}
     header{padding:12px 18px;border-bottom:1px solid var(--border);position:sticky;top:0;background:linear-gradient(180deg,rgba(15,15,18,0.98),rgba(15,15,18,0.9));backdrop-filter:saturate(180%) blur(8px);z-index:10;}
@@ -16,12 +21,13 @@
     .header-logo{flex-shrink:0;max-height:96px;filter:drop-shadow(0 6px 12px rgba(0,0,0,0.25));}
     .searchbar{flex:1;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;}
     .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:16px;outline:none;}
-    .searchbar button{background:var(--accent);color:#0b1210;border:none;border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer;}
+    .searchbar button{border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer;}
 
     main{max-width:1100px;margin:20px auto;padding:0 16px 40px;}
     .albums{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;}
     .albums.single-album{display:flex;flex-direction:column;align-items:center;gap:24px;}
     .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;overflow:hidden;}
+    .card.pending-audio{opacity:0.8;}
     .card.no-audio{border-color:#b9383a;box-shadow:0 0 0 1px rgba(185,56,58,0.45);}
 
     /* Cover: small, centered square; never bleeds */
@@ -36,28 +42,27 @@
     .albums.single-album .muted{font-size:16px;}
     .badge{border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:11px;color:var(--muted);}
 
-    .btn{background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:8px 10px;cursor:pointer;}
+    .btn{border-radius:10px;padding:8px 10px;cursor:pointer;font-weight:600;}
     .btn.small{padding:6px 8px;font-size:13px;}
     .btn.icon{width:34px;display:inline-flex;align-items:center;justify-content:center;}
-    .btn-accent{background:var(--accent);border-color:var(--accent);color:#0b1210;font-weight:700;}
-    .btn-error{background:#b9383a;border-color:#b9383a;color:#fff;}
-    .btn-error:disabled{opacity:0.9;}
+    .btn-accent{font-weight:700;filter:brightness(1.08);}
+    .btn-error{background:#b9383a;border:none;color:#fff;box-shadow:0 6px 16px rgba(185,56,58,0.35);}
+    .btn-error:hover{transform:none !important;box-shadow:0 6px 12px rgba(185,56,58,0.4) !important;}
+    .btn-error:disabled{opacity:0.9;box-shadow:none;}
 
     
     .back-row{display:flex;justify-content:center;margin-bottom:12px;}
 .toolbar{display:flex;align-items:center;justify-content:space-between;margin:10px 0;}
     .pager{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:18px;}
-    .pager button{background:transparent;color:#f5f6f7;border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;}
+    .pager button{border-radius:10px;padding:10px 12px;cursor:pointer;}
     .count{text-align:center;color:var(--muted);margin:6px 0 10px;font-size:14px;}
     .error{background:#2b1517;border:1px solid #5a2327;color:#ffb1b8;padding:10px 12px;border-radius:10px;}
 
     .explore-wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;min-width:220px;}
     .decade-buttons{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end;max-width:380px;}
     .decade-buttons[hidden]{display:none;}
-    .decade-buttons button{background:#22252b;border:1px solid var(--border);color:var(--fg);border-radius:999px;padding:6px 10px;cursor:pointer;font-size:13px;}
-    #explore{background:linear-gradient(135deg,#3a7bd5,#00d2ff);color:#06121f;padding:10px 20px;border-radius:14px;font-weight:700;font-size:15px;border:none;cursor:pointer;box-shadow:0 6px 18px rgba(58,123,213,0.25);transition:transform 0.15s ease,box-shadow 0.15s ease;white-space:nowrap;}
-    #explore:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(58,123,213,0.35);}
-    #explore:active{transform:translateY(0);box-shadow:0 5px 14px rgba(58,123,213,0.25);}
+    .decade-buttons button{border-radius:999px;padding:6px 10px;cursor:pointer;font-size:13px;}
+    #explore{padding:10px 20px;border-radius:14px;font-weight:700;font-size:15px;white-space:nowrap;}
 
     /* Landing placeholder */
     .landing{display:flex;align-items:center;justify-content:center;min-height:40vh;}
@@ -73,10 +78,12 @@
     .modal h2{margin:0;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .modal .sub{color:var(--muted);font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
     .modal .spacer{flex:1;}
-    .modal .close{border:1px solid var(--border);background:transparent;border-radius:10px;color:var(--fg);padding:8px 10px;cursor:pointer;}
+    .modal .close{border-radius:10px;padding:8px 10px;cursor:pointer;}
     .modal .content{padding:12px;overflow:auto;}
     .tracks{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;}
     .track{background:#1f1f23;padding:8px 10px;border-radius:8px;display:flex;flex-direction:column;gap:6px;}
+    .track.loading{opacity:0.75;}
+    .track.loading .btn.small{pointer-events:none;}
     .track-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
     .track-title{display:flex;flex-direction:column;flex:1;min-width:0;}
     .track .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -94,7 +101,7 @@
     .info-modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 20px;width:min(480px,92vw);max-height:80vh;overflow:auto;box-shadow:0 18px 48px rgba(0,0,0,.4);}
     .info-modal header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;}
     .info-modal h3{margin:0;font-size:18px;}
-    .info-modal .info-close{border:1px solid var(--border);background:transparent;color:var(--fg);border-radius:8px;padding:6px 10px;cursor:pointer;}
+    .info-modal .info-close{border-radius:8px;padding:6px 10px;cursor:pointer;}
     .info-modal dl{margin:0;display:grid;grid-template-columns:minmax(120px,auto) 1fr;gap:10px 14px;font-size:14px;}
     .info-modal dt{font-weight:600;color:var(--muted);}
     .info-modal dd{margin:0;}
@@ -110,7 +117,43 @@
       70%{transform:scale(1);box-shadow:0 0 0 10px rgba(98,245,169,0);}
       100%{transform:scale(.9);box-shadow:0 0 0 0 rgba(98,245,169,0);}
         }
-    button:disabled{opacity:.6;cursor:not-allowed;}
+    .btn,
+    .searchbar button,
+    .pager button,
+    .decade-buttons button,
+    .modal .close,
+    .info-modal .info-close,
+    #explore {
+      background:linear-gradient(135deg,var(--btn-gradient-start),var(--btn-gradient-end));
+      color:var(--btn-text);
+      border:none;
+      box-shadow:0 6px 18px var(--btn-shadow);
+      transition:transform 0.15s ease,box-shadow 0.15s ease,opacity 0.15s ease;
+    }
+
+    .btn:hover,
+    .searchbar button:hover,
+    .pager button:hover,
+    .decade-buttons button:hover,
+    .modal .close:hover,
+    .info-modal .info-close:hover,
+    #explore:hover {
+      transform:translateY(-1px);
+      box-shadow:0 8px 20px var(--btn-shadow-hover);
+    }
+
+    .btn:active,
+    .searchbar button:active,
+    .pager button:active,
+    .decade-buttons button:active,
+    .modal .close:active,
+    .info-modal .info-close:active,
+    #explore:active {
+      transform:translateY(0);
+      box-shadow:0 5px 14px var(--btn-shadow);
+    }
+
+    button:disabled{opacity:.6;cursor:not-allowed;transform:none !important;box-shadow:none !important;}
 
   </style>
 </head>
@@ -253,6 +296,13 @@
     // Single audio UI state
     let currentBtn=null, currentRow=null, currentSrc='';
 
+    // Audio validation caches
+    const audioProbeCache = new Map(); // src -> { ok, reason, ts }
+    const albumAudioState = new Map(); // albumKey -> { status, promise?, ts }
+    const AUDIO_PROBE_TTL = 10 * 60 * 1000;
+    let renderQueued = false;
+    const queueTask = typeof queueMicrotask === 'function' ? queueMicrotask : (fn) => Promise.resolve().then(fn);
+
     // Field helper mappings (adjust here if exact names differ)
     function fCatalogue(f){
       return f['Album Catalogue Number'] || f['Album Catalog Number'] || f['Album Catalogue No'] || f['Catalogue'] || '';
@@ -357,7 +407,9 @@
       return `${minutes}:${String(seconds).padStart(2,'0')}`;
         }
 
-    const AUDIO_VALIDATE_TIMEOUT = 9000;
+    const AUDIO_VALIDATE_TIMEOUT = 12000;
+    const AUDIO_VALIDATE_MAX_RETRIES = 2;
+    function delay(ms){ return new Promise((resolve) => setTimeout(resolve, ms)); }
     function canValidateAudioSrc(src){
       if (typeof src !== 'string') return false;
       const trimmed = src.trim();
@@ -365,6 +417,191 @@
       if (trimmed.startsWith('/')) return true;
       if (/^https?:\/\//i.test(trimmed)) return true;
       if (/^[^:?#]+\.(mp3|m4a|aac|wav|ogg|flac)$/i.test(trimmed)) return true;
+      return false;
+        }
+
+    function resolvePlayableSrc(rawSrc){
+      const src = typeof rawSrc === 'string' ? rawSrc.trim() : '';
+      if (!src) return '';
+      if (src.startsWith('/api/container?')) return src;
+      if (/^https?:\/\//i.test(src)) return `/api/container?u=${encodeURIComponent(src)}`;
+      return src;
+        }
+
+    function scheduleAlbumRender(){
+      if (renderQueued) return;
+      renderQueued = true;
+      queueTask(() => {
+        renderQueued = false;
+        renderAlbumPage();
+      });
+        }
+
+    function isFresh(entry){
+      if (!entry || typeof entry.ts !== 'number') return false;
+      return (Date.now() - entry.ts) < AUDIO_PROBE_TTL;
+        }
+
+    async function probeAudioSource(src, attempt = 0){
+      const key = String(src || '').trim();
+      if (!key) {
+        const outcome = { ok: false, reason: 'Invalid link', ts: Date.now() };
+        return outcome;
+      }
+      const cached = audioProbeCache.get(key);
+      if (cached && isFresh(cached)) return cached;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), AUDIO_VALIDATE_TIMEOUT);
+      let response;
+      let outcome;
+      try {
+        response = await fetch(src, {
+          method: 'GET',
+          headers: { Range: 'bytes=0-4095' },
+          signal: controller.signal,
+          cache: 'no-store'
+        });
+      } catch (err) {
+        outcome = { ok: false, reason: err?.name === 'AbortError' ? 'Timeout' : 'Unavailable', ts: Date.now() };
+        clearTimeout(timeoutId);
+        if (outcome.reason === 'Timeout' && attempt < AUDIO_VALIDATE_MAX_RETRIES) {
+          await delay(600 * (attempt + 1));
+          return probeAudioSource(src, attempt + 1);
+        }
+        audioProbeCache.set(key, outcome);
+        return outcome;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      let buffer;
+      try {
+        if (!response || !response.ok) {
+          outcome = { ok: false, reason: `HTTP ${response ? response.status : 'error'}`, ts: Date.now() };
+        } else {
+          const type = (response.headers.get('content-type') || '').toLowerCase();
+          const len = response.headers.get('content-length');
+          if (len === '0') {
+            outcome = { ok: false, reason: 'Empty audio', ts: Date.now() };
+          } else if (type && !/(audio|mpeg|mp3|ogg|wav|flac)/i.test(type)) {
+            outcome = { ok: false, reason: 'Unexpected content', ts: Date.now() };
+          } else {
+            buffer = await response.arrayBuffer();
+            if (!buffer || buffer.byteLength === 0) {
+              outcome = { ok: false, reason: 'Empty audio', ts: Date.now() };
+            } else {
+              const bytes = new Uint8Array(buffer);
+              if (!looksLikeAudio(bytes, type)) {
+                outcome = { ok: false, reason: 'Unexpected content', ts: Date.now() };
+              } else {
+                outcome = { ok: true, ts: Date.now(), type, length: len ? Number(len) : undefined };
+              }
+            }
+          }
+        }
+      } catch (err) {
+        outcome = { ok: false, reason: 'Unavailable', ts: Date.now() };
+      } finally {
+        if (response && response.body && typeof response.body.cancel === 'function') {
+          try { response.body.cancel(); } catch (_) {}
+        }
+      }
+
+      if (!outcome.ok && outcome.reason === 'Timeout' && attempt < AUDIO_VALIDATE_MAX_RETRIES) {
+        await delay(600 * (attempt + 1));
+        return probeAudioSource(src, attempt + 1);
+      }
+      audioProbeCache.set(key, outcome);
+      return outcome;
+        }
+
+    function looksLikeAudio(bytes, type){
+      if (!bytes || !bytes.length) return false;
+      const first = bytes[0];
+      const second = bytes.length > 1 ? bytes[1] : 0;
+      const third = bytes.length > 2 ? bytes[2] : 0;
+      const fourth = bytes.length > 3 ? bytes[3] : 0;
+      const head = String.fromCharCode(first, second, third, fourth);
+      const nextHead = bytes.length >= 8 ? String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]) : '';
+
+      const startsWith = (prefix) => head.startsWith(prefix);
+
+      if (startsWith('ID3')) return true;
+      if (startsWith('OggS')) return true;
+      if (startsWith('fLaC')) return true;
+      if (startsWith('RIFF')) return true;
+      if (startsWith('FORM')) return true; // AIFF/AIFF-C
+      if (head.startsWith('ftyp') || nextHead === 'ftyp') return true; // MP4/M4A
+
+      if (first === 0xFF && (second & 0xE0) === 0xE0) return true; // MPEG frame sync
+      if (first === 0xAD && second === 0xAF) return true; // ADPCM
+
+      // Common non-audio signatures
+      if (first === 0x3C /* < */ || first === 0x7B /* { */ || first === 0x5B /* [ */) return false;
+      if (head.toLowerCase().startsWith('http')) return false;
+
+      if (type && /(audio|mpeg|mp3|ogg|wav|flac|aac)/i.test(type)) return true;
+
+      return false;
+        }
+
+    function ensureAlbumAudioValidation(album){
+      if (!album) return;
+      const key = album.key || makeAlbumKey(album.catalogue, album.title, album.artist);
+      album.key = key;
+      const existing = albumAudioState.get(key);
+      if (existing) {
+        if (existing.status === 'pending') return;
+        if ((existing.status === 'valid' || existing.status === 'invalid') && isFresh(existing)) return;
+      }
+
+      const validator = runAlbumAudioValidation(album);
+      album._pendingValidation = true;
+      albumAudioState.set(key, { status: 'pending', promise: validator });
+      validator
+        .then((ok) => {
+          albumAudioState.set(key, { status: ok ? 'valid' : 'invalid', ts: Date.now() });
+          album._pendingValidation = false;
+          scheduleAlbumRender();
+        })
+        .catch((err) => {
+          console.warn('[MASS] Album audio validation failed', err);
+          albumAudioState.set(key, { status: 'invalid', ts: Date.now(), error: err });
+          album._pendingValidation = false;
+          scheduleAlbumRender();
+        });
+        }
+
+    function primeAlbumAudioValidation(albums){
+      if (!Array.isArray(albums) || !albums.length) return;
+      for (const album of albums) {
+        if (!album) continue;
+        const key = album.key || makeAlbumKey(album.catalogue, album.title, album.artist);
+        album.key = key;
+        ensureAlbumAudioValidation(album);
+      }
+        }
+
+    async function runAlbumAudioValidation(album){
+      const tracks = Array.isArray(album.tracks) ? album.tracks : [];
+      if (!tracks.length) return false;
+      const sources = [];
+      const seen = new Set();
+      for (const track of tracks) {
+        const src = resolvePlayableSrc(track && track.mp3);
+        if (!canValidateAudioSrc(src)) return false;
+        if (seen.has(src)) continue;
+        seen.add(src);
+        sources.push(src);
+      }
+      if (!sources.length) return false;
+      for (const src of sources) {
+        const outcome = await probeAudioSource(src);
+        if (outcome && outcome.ok) {
+          return true;
+        }
+      }
       return false;
         }
 
@@ -422,61 +659,37 @@
         return;
       }
 
-      applyIfCurrent(() => {
+      if (card) card.dataset.hasAudioCandidates = 'true';
+
+      const key = typeof src === 'string' ? src.trim() : '';
+      const cachedOutcome = key ? audioProbeCache.get(key) : null;
+      if (cachedOutcome && isFresh(cachedOutcome) && cachedOutcome.reason !== 'Timeout') {
+        if (cachedOutcome.ok) {
+          setValid();
+        } else {
+          setInvalid(cachedOutcome.reason || 'Unavailable');
+        }
+        return;
+      }
+
+      const applied = applyIfCurrent(() => {
         btn.disabled = true;
         btn.textContent = 'Checking…';
         btn.classList.remove('btn-error');
         btn.title = 'Validating audio…';
         if (card) {
-          card.dataset.hasAudioCandidates = 'true';
           const pending = Number(card.dataset.pendingTracks || '0') + 1;
           card.dataset.pendingTracks = String(pending);
           syncCardAudioState(card);
         }
       });
+      if (!applied) return;
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), AUDIO_VALIDATE_TIMEOUT);
-      let response;
-      try {
-        response = await fetch(src, {
-          method: 'GET',
-          headers: { Range: 'bytes=0-0' },
-          signal: controller.signal
-        });
-      } catch (err) {
-        clearTimeout(timeoutId);
-        if (err && err.name === 'AbortError') {
-          setInvalid('Timeout');
-        } else {
-          setInvalid('Unavailable');
-        }
-        return;
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      try {
-        if (!response || !response.ok) {
-          setInvalid(`HTTP ${response ? response.status : 'error'}`);
-          return;
-        }
-        const type = (response.headers.get('content-type') || '').toLowerCase();
-        const len = response.headers.get('content-length');
-        if (response.body && typeof response.body.cancel === 'function') {
-          try { response.body.cancel(); } catch (_) {}
-        }
-        if (len === '0') {
-          setInvalid('Empty audio');
-          return;
-        }
-        if (type && !/(audio|mpeg|mp3|ogg|wav|flac)/i.test(type)) {
-          setInvalid('Unexpected content');
-          return;
-        }
+      const outcome = await probeAudioSource(src);
+      if (outcome.ok) {
         setValid();
-      } catch (err) {
-        setInvalid('Unavailable');
+      } else {
+        setInvalid(outcome.reason || 'Unavailable');
       }
         }
 
@@ -519,6 +732,7 @@
       albumPage = typeof snapshot.page === 'number' ? snapshot.page : 0;
       lastQ = typeof snapshot.lastQ === 'string' ? snapshot.lastQ : '';
       currentMode = snapshot.mode || 'search';
+      primeAlbumAudioValidation(albumGroups);
       if (searchEl && typeof snapshot.searchValue === 'string') {
         searchEl.value = snapshot.searchValue;
       }
@@ -589,6 +803,8 @@
       rawNextOffset = 0;
       albumGroups = [];
       albumPage = 0;
+      audioProbeCache.clear();
+      albumAudioState.clear();
       // Clear albums UI
       albumsEl.innerHTML = '';
       albumsEl.classList.remove('single-album');
@@ -642,18 +858,24 @@
         }
     function keyTitle(s){ return normTitle(s).toLowerCase(); }
 
+    function makeAlbumKey(catalogue, title, artist){
+      const cat = String(catalogue || '').trim();
+      if (cat) return `cat:${cat.toLowerCase()}`;
+      const normT = normTitle(title || '').toLowerCase();
+      const normA = normTitle(artist || '').toLowerCase();
+      return `title:${normT}|artist:${normA}`;
+        }
+
     function groupAlbums(items){
       const byCat = new Map();
 
-      
-      let albumIdCounter = 0;
-for(const rec of items){
+      for (const rec of items) {
         const f = rec.fields || {};
         const cat = fCatalogue(f) || '__NO_CAT__';
         const title = normTitle(fTitle(f) || '(no album)');
         const artist= normTitle(fArtist(f) || '');
         const trackArtist = normTitle(f['Track Artist'] || f['Tape Files::Track Artist'] || '');
-        const pic   = fPicture(f) || '';
+        const pic   = (fPicture(f) || '').trim();
         const track = normTitle(f[F_TRACK] || '');
         const mp3   = fMp3(f) || '';
         const genre = normTitle(f[F_GENRE] || '');
@@ -707,10 +929,15 @@ for(const rec of items){
 
       const groups = [];
       for(const g of byCat.values()){
-        // playable tracks only
+        const trimmedPicture = (g.picture || '').trim();
+        if (!trimmedPicture) continue;
+
+        if (!g.tracks.length) continue;
+
         const playableTracks = g.tracks.filter(t => hasValidMp3(t.mp3));
-        const tracksForDisplay = (playableTracks.length ? playableTracks : g.tracks).map(track => ({ ...track }));
-        if (!tracksForDisplay.length) continue;
+        if (!playableTracks.length) continue;
+
+        const tracksForDisplay = playableTracks.map(track => ({ ...track }));
 
         // Ignore title candidates that equal any track name (prevents “Sunday Afternoon” issue)
         const trackKeys = new Set(g.tracks.map(t => keyTitle(t.name)));
@@ -736,14 +963,16 @@ for(const rec of items){
           return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
         });
 
-        const hasPlayable = playableTracks.length > 0;
+        const albumKey = makeAlbumKey(g.catalogue, displayTitle, g.artist);
+        const hasPlayable = true;
         groups.push({
           catalogue: g.catalogue,
           title: displayTitle,
           artist: g.artist,
-          picture: g.picture,
+          picture: trimmedPicture,
           tracks: tracksForDisplay,
-          hasPlayable
+          hasPlayable,
+          key: albumKey
         });
       }
 
@@ -929,10 +1158,9 @@ for(const rec of items){
 
         const btnPlay = document.createElement('button');
         btnPlay.className = 'btn small';
-        const rawSrc = t.mp3 ? t.mp3 : '';
-        const normalizedSrc = rawSrc.startsWith('http') ? `/api/container?u=${encodeURIComponent(rawSrc)}` : rawSrc;
-        const canPlay = canValidateAudioSrc(normalizedSrc);
-        const playableSrc = canPlay ? normalizedSrc : '';
+        const playableCandidate = resolvePlayableSrc(t.mp3);
+        const canPlay = canValidateAudioSrc(playableCandidate);
+        const playableSrc = canPlay ? playableCandidate : '';
         li._src = playableSrc;
         li._btn = btnPlay;
         li._card = albumCard;
@@ -942,7 +1170,7 @@ for(const rec of items){
           btnPlay.classList.remove('btn-error');
           btnPlay.removeAttribute('title');
           validateAudio(li, playableSrc);
-        } else if (rawSrc) {
+        } else if (t.mp3) {
           btnPlay.textContent = 'Invalid audio';
           btnPlay.disabled = true;
           btnPlay.classList.add('btn-error');
@@ -1037,27 +1265,106 @@ for(const rec of items){
     /* ================= Rendering albums (cards) ================= */
     function renderAlbumPage(){
       albumsEl.innerHTML = '';
-      const totalAlbums = albumGroups.length;
-      countEl.textContent = totalAlbums ? `Albums: ${totalAlbums}` : (lastQ ? 'No albums' : '');
 
-      if (totalAlbums === 1) {
+      const validAlbums = [];
+      const pendingQueue = [];
+      let pendingAlbums = 0;
+
+      for (const album of albumGroups) {
+        if (!album) continue;
+        const key = album.key || makeAlbumKey(album.catalogue, album.title, album.artist);
+        album.key = key;
+        const state = albumAudioState.get(key);
+        if (!state) {
+          ensureAlbumAudioValidation(album);
+          pendingAlbums += 1;
+          pendingQueue.push(album);
+          continue;
+        }
+        if (state.status === 'pending') {
+          album._pendingValidation = true;
+          pendingAlbums += 1;
+          pendingQueue.push(album);
+          continue;
+        }
+        if (state.status === 'valid') {
+          if (isFresh(state)) {
+            album._pendingValidation = false;
+            validAlbums.push(album);
+          } else {
+            albumAudioState.delete(key);
+            ensureAlbumAudioValidation(album);
+            pendingAlbums += 1;
+            pendingQueue.push(album);
+          }
+          continue;
+        }
+        if (state.status === 'invalid') {
+          if (!isFresh(state)) {
+            albumAudioState.delete(key);
+            ensureAlbumAudioValidation(album);
+            pendingAlbums += 1;
+            pendingQueue.push(album);
+          }
+        }
+      }
+
+      pendingAlbums = pendingQueue.length;
+
+      const displayAlbums = validAlbums.concat(pendingQueue);
+      const totalAlbums = displayAlbums.length;
+      const availableAlbums = albumGroups.length || totalAlbums;
+
+      if (availableAlbums > 0) {
+        errorEl.hidden = true;
+      } else if (pendingAlbums === 0 && albumGroups.length > 0) {
+        errorEl.hidden = false;
+        errorEl.textContent = 'No albums with complete audio and artwork are available right now.';
+      } else if (pendingAlbums > 0) {
+        errorEl.hidden = true;
+      }
+
+      if (totalAlbums === 0) {
+        albumsEl.classList.remove('single-album');
+      }
+
+      if (totalAlbums === 0 && pendingAlbums > 0) {
+        countEl.textContent = 'Validating audio…';
+      } else {
+        countEl.textContent = availableAlbums ? `Albums: ${availableAlbums}` : (lastQ ? 'No albums' : '');
+      }
+
+      const totalPool = Math.max(availableAlbums, displayAlbums.length);
+      const maxPage = Math.max(1, Math.ceil(Math.max(totalPool, 1) / ALBUMS_PER_PAGE));
+      albumPage = Math.min(albumPage, maxPage - 1);
+      pagerEl.hidden = totalPool <= ALBUMS_PER_PAGE;
+      pageInfo.textContent = `Page ${albumPage + 1} / ${maxPage}`;
+      prevEl.disabled = albumPage <= 0;
+      nextEl.disabled = albumPage >= maxPage - 1 && rawItems.length >= rawTotalFound;
+
+      if (totalAlbums === 0 && pendingAlbums > 0) {
+        const wait = document.createElement('div');
+        wait.className = 'muted';
+        wait.textContent = 'Validating audio availability…';
+        albumsEl.appendChild(wait);
+        return;
+      }
+
+      if (totalAlbums === 0) {
+        return;
+      }
+
+      const start = albumPage * ALBUMS_PER_PAGE;
+      const end = Math.min(start + ALBUMS_PER_PAGE, totalAlbums);
+      const pageAlbums = displayAlbums.slice(start, end);
+
+      if (pageAlbums.length === 1) {
         albumsEl.classList.add('single-album');
       } else {
         albumsEl.classList.remove('single-album');
       }
 
-      const maxPage = Math.max(1, Math.ceil(Math.max(totalAlbums, 1) / ALBUMS_PER_PAGE));
-      pagerEl.hidden = totalAlbums <= ALBUMS_PER_PAGE;
-      albumPage = Math.min(albumPage, maxPage - 1);
-      pageInfo.textContent = `Page ${albumPage + 1} / ${maxPage}`;
-      prevEl.disabled = albumPage <= 0;
-      nextEl.disabled = albumPage >= maxPage - 1 && rawItems.length >= rawTotalFound;
-
-      const start = albumPage * ALBUMS_PER_PAGE;
-      const end = Math.min(start + ALBUMS_PER_PAGE, totalAlbums);
-      const slice = albumGroups.slice(start, end);
-
-      slice.forEach(album => {
+      pageAlbums.forEach(album => {
         const card = document.createElement('div');
         card.className = 'card';
         const candidateTracks = Array.isArray(album.tracks) ? album.tracks.filter(track => hasValidMp3(track.mp3)) : [];
@@ -1065,13 +1372,18 @@ for(const rec of items){
         const hasCandidates = hasPlayable !== undefined ? hasPlayable : candidateTracks.length > 0;
         card.dataset.hasAudioCandidates = hasCandidates ? 'true' : 'false';
         card.dataset.validTracks = '0';
-        card.dataset.pendingTracks = '0';
+        card.dataset.pendingTracks = album._pendingValidation ? '1' : '0';
         if (hasCandidates) {
           card.classList.remove('no-audio');
           card.removeAttribute('title');
         } else {
           card.classList.add('no-audio');
           card.title = 'No playable audio available';
+        }
+
+        if (album._pendingValidation) {
+          card.classList.add('pending-audio');
+          if (!card.title) card.title = 'Validating audio availability…';
         }
 
         if (totalAlbums === 1 && prevSearch) {
@@ -1160,19 +1472,59 @@ for(const rec of items){
 
     function handlePlay(btn, row, src){
       if (!src) return;
-      if (currentSrc === src && !player.paused) { player.pause(); updateButtonsForStop(); return; }
-      if (currentSrc !== src) { player.src = src; currentSrc = src; }
-      player.play().then(() => {
+      if (currentSrc === src && !player.paused) {
+        player.pause();
         updateButtonsForStop();
-        currentBtn = btn; currentRow = row; updateProgressUI();
-        currentRow.classList.add('playing');
-        currentBtn.textContent = '⏸ Pause';
-        currentBtn.classList.add('btn-accent');
-      }).catch(err => console.warn('Playback error:', err));
+        return;
+      }
+
+      if (currentSrc !== src) {
+        player.src = src;
+      }
+      currentSrc = src;
+
+      updateButtonsForStop();
+
+      currentBtn = btn;
+      currentRow = row;
+      if (currentRow) {
+        currentRow.classList.remove('playing');
+        currentRow.classList.add('loading');
+      }
+      btn.disabled = true;
+      btn.textContent = 'Loading…';
+      btn.classList.add('btn-accent');
+      btn.classList.remove('btn-error');
+
+      player.play()
+        .then(() => {
+          updateButtonsForStop();
+          currentBtn = btn;
+          currentRow = row;
+          if (currentRow) {
+            currentRow.classList.remove('loading');
+            currentRow.classList.add('playing');
+          }
+          btn.disabled = false;
+          btn.textContent = '⏸ Pause';
+          btn.classList.add('btn-accent');
+          updateProgressUI();
+        })
+        .catch((err) => {
+          console.warn('Playback error:', err);
+          updateButtonsForStop();
+        });
         }
     function updateButtonsForStop(){
-      if (currentRow) currentRow.classList.remove('playing');
-      if (currentBtn) { currentBtn.textContent = '▶ Play'; currentBtn.classList.remove('btn-accent'); }
+      if (currentRow) {
+        currentRow.classList.remove('playing');
+        currentRow.classList.remove('loading');
+      }
+      if (currentBtn) {
+        currentBtn.disabled = false;
+        currentBtn.textContent = '▶ Play';
+        currentBtn.classList.remove('btn-accent');
+      }
       currentBtn = null; currentRow = null;
         }
     player.addEventListener('ended', () => {
@@ -1211,6 +1563,7 @@ for(const rec of items){
         const returnedOffset = Number(j.offset || 0);
         rawNextOffset = returnedOffset + newItems.length;
         albumGroups = groupAlbums(rawItems);
+        primeAlbumAudioValidation(albumGroups);
         return newItems.length > 0;
       } finally {
         hideBusy();
@@ -1269,17 +1622,21 @@ for(const rec of items){
         rawTotalFound = Number(j.total || rawItems.length);
         rawNextOffset = 0;
         albumGroups = groupAlbums(rawItems).filter(album => (album.picture || '').trim());
+        primeAlbumAudioValidation(albumGroups);
         currentMode = 'explore';
         if (!albumGroups.length) {
           errorEl.hidden = false;
-          errorEl.textContent = `No albums with artwork found for the ${start}s.`;
+          errorEl.textContent = `No albums with complete audio and artwork found for the ${start}s.`;
           rawItems = [];
           rawTotalFound = 0;
           renderAlbumPage();
           return;
         }
         shuffleInPlace(albumGroups);
-        if (albumGroups.length > ALBUMS_PER_PAGE) albumGroups = albumGroups.slice(0, ALBUMS_PER_PAGE);
+        if (albumGroups.length > ALBUMS_PER_PAGE) {
+          albumGroups = albumGroups.slice(0, ALBUMS_PER_PAGE);
+        }
+        rawItems = albumGroups;
         rawTotalFound = albumGroups.length;
         albumPage = 0;
         renderAlbumPage();
@@ -1341,6 +1698,7 @@ for(const rec of items){
           rawNextOffset = Number(json?.offset || 0) + rawItems.length;
 
           albumGroups = groupAlbums(rawItems);
+          primeAlbumAudioValidation(albumGroups);
           albumPage = 0;
           currentMode = 'search';
           renderAlbumPage();

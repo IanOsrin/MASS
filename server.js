@@ -1,11 +1,24 @@
-import { config as loadEnv } from 'dotenv';
-import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { fetch } from 'undici';
 const { AbortController } = globalThis;
+
+let loadEnv = () => ({ parsed: {}, skipped: true });
+try {
+  ({ config: loadEnv } = await import('dotenv'));
+} catch (err) {
+  console.warn('[MASS] Optional dependency dotenv not found; continue without .env file support');
+}
+
+let express;
+try {
+  ({ default: express } = await import('express'));
+} catch (err) {
+  console.error('[MASS] Missing dependency express. Run "npm install" to install server packages.');
+  process.exit(1);
+}
 
 loadEnv();
 
