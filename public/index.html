@@ -49,6 +49,7 @@
     .btn-error{background:#b9383a;border:none;color:#fff;box-shadow:0 6px 16px rgba(185,56,58,0.35);}
     .btn-error:hover{transform:none !important;box-shadow:0 6px 12px rgba(185,56,58,0.4) !important;}
     .btn-error:disabled{opacity:0.9;box-shadow:none;}
+    .btn.info-more{font-size:18px;line-height:1;padding:4px 8px;display:flex;align-items:center;justify-content:center;}
 
     
     .back-row{display:flex;justify-content:center;margin-bottom:12px;}
@@ -409,6 +410,11 @@
 
     const AUDIO_VALIDATE_TIMEOUT = 12000;
     const AUDIO_VALIDATE_MAX_RETRIES = 2;
+    const MAX_AUDIO_PROBES_PER_ALBUM = 2;
+    const MAX_ALBUMS_TO_PRIME = ALBUMS_PER_PAGE * 2;
+    const MAX_CONCURRENT_AUDIO_PROBES = 6;
+    let activeAudioProbes = 0;
+    const audioProbeWaiters = [];
     function delay(ms){ return new Promise((resolve) => setTimeout(resolve, ms)); }
     function canValidateAudioSrc(src){
       if (typeof src !== 'string') return false;
@@ -442,6 +448,19 @@
       return (Date.now() - entry.ts) < AUDIO_PROBE_TTL;
         }
 
+    async function acquireProbeSlot(){
+      if (activeAudioProbes >= MAX_CONCURRENT_AUDIO_PROBES) {
+        await new Promise((resolve) => audioProbeWaiters.push(resolve));
+      }
+      activeAudioProbes += 1;
+    }
+
+    function releaseProbeSlot(){
+      activeAudioProbes = Math.max(0, activeAudioProbes - 1);
+      const next = audioProbeWaiters.shift();
+      if (next) next();
+    }
+
     async function probeAudioSource(src, attempt = 0){
       const key = String(src || '').trim();
       if (!key) {
@@ -455,6 +474,7 @@
       const timeoutId = setTimeout(() => controller.abort(), AUDIO_VALIDATE_TIMEOUT);
       let response;
       let outcome;
+      await acquireProbeSlot();
       try {
         response = await fetch(src, {
           method: 'GET',
@@ -464,17 +484,18 @@
         });
       } catch (err) {
         outcome = { ok: false, reason: err?.name === 'AbortError' ? 'Timeout' : 'Unavailable', ts: Date.now() };
-        clearTimeout(timeoutId);
         if (outcome.reason === 'Timeout' && attempt < AUDIO_VALIDATE_MAX_RETRIES) {
           await delay(600 * (attempt + 1));
+          releaseProbeSlot();
+          clearTimeout(timeoutId);
           return probeAudioSource(src, attempt + 1);
         }
         audioProbeCache.set(key, outcome);
         return outcome;
       } finally {
         clearTimeout(timeoutId);
+        releaseProbeSlot();
       }
-
       let buffer;
       try {
         if (!response || !response.ok) {
@@ -573,13 +594,16 @@
         });
         }
 
-    function primeAlbumAudioValidation(albums){
-      if (!Array.isArray(albums) || !albums.length) return;
+    function primeAlbumAudioValidation(albums, limit = MAX_ALBUMS_TO_PRIME){
+      if (!Array.isArray(albums) || !albums.length || limit <= 0) return;
+      let processed = 0;
       for (const album of albums) {
         if (!album) continue;
         const key = album.key || makeAlbumKey(album.catalogue, album.title, album.artist);
         album.key = key;
         ensureAlbumAudioValidation(album);
+        processed += 1;
+        if (processed >= limit) break;
       }
         }
 
@@ -594,15 +618,11 @@
         if (seen.has(src)) continue;
         seen.add(src);
         sources.push(src);
+        if (sources.length >= MAX_AUDIO_PROBES_PER_ALBUM) break;
       }
       if (!sources.length) return false;
-      for (const src of sources) {
-        const outcome = await probeAudioSource(src);
-        if (outcome && outcome.ok) {
-          return true;
-        }
-      }
-      return false;
+      const results = await Promise.all(sources.map((src) => probeAudioSource(src)));
+      return results.some((outcome) => outcome && outcome.ok);
         }
 
     async function validateAudio(row, src){
@@ -1199,8 +1219,9 @@
         if (hasInfo) {
           const infoBtn = document.createElement('button');
           infoBtn.type = 'button';
-          infoBtn.className = 'btn small';
-          infoBtn.textContent = 'Info';
+          infoBtn.className = 'btn small info-more';
+          infoBtn.setAttribute('aria-label', 'More info');
+          infoBtn.innerHTML = '<span aria-hidden="true">⋮</span>';
           infoBtn.addEventListener('click', () => openTrackInfoModal(t, infoBtn));
           controls.appendChild(infoBtn);
         }
