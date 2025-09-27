@@ -631,7 +631,7 @@
       if (!btn) return;
       const token = Symbol('audio-validate');
       row._validationToken = token;
-      const { autoPlay = false } = options;
+      const { optimistic = false } = options;
 
       const applyIfCurrent = (fn) => {
         if (row._validationToken !== token) return false;
@@ -653,21 +653,27 @@
 
       const setInvalid = (label) => {
         const applied = applyIfCurrent(() => {
+          if (optimistic && currentRow === row && currentSrc === src) {
+            player.pause();
+            updateButtonsForStop();
+          }
           btn.disabled = true;
           btn.textContent = label || 'Unavailable';
           btn.classList.add('btn-error');
           btn.classList.remove('btn-accent');
           btn.title = label || 'Audio unavailable';
           row._valid = false;
-          row._pendingPlay = false;
+          row._validated = true;
         });
         if (applied) finalizeCard(false);
       };
 
       const setValid = () => {
         const applied = applyIfCurrent(() => {
+          if (!(currentRow === row && !player.paused)) {
+            btn.textContent = '▶ Play';
+          }
           btn.disabled = false;
-          btn.textContent = '▶ Play';
           btn.classList.remove('btn-error');
           btn.removeAttribute('title');
           row._valid = true;
@@ -689,22 +695,19 @@
       if (cachedOutcome && isFresh(cachedOutcome) && cachedOutcome.reason !== 'Timeout') {
         if (cachedOutcome.ok) {
           setValid();
-          if (autoPlay && row._pendingPlay && row._btn && row._src) {
-            row._pendingPlay = false;
-            handlePlay(row._btn, row, row._src);
-          }
         } else {
           setInvalid(cachedOutcome.reason || 'Unavailable');
         }
-        row._validating = false;
         return;
       }
 
       const applied = applyIfCurrent(() => {
-        btn.disabled = true;
-        btn.textContent = 'Checking…';
+        if (!optimistic) {
+          btn.disabled = true;
+          btn.textContent = 'Checking…';
+          btn.title = 'Validating audio…';
+        }
         btn.classList.remove('btn-error');
-        btn.title = 'Validating audio…';
         row._validating = true;
         if (card) {
           const pending = Number(card.dataset.pendingTracks || '0') + 1;
@@ -717,10 +720,6 @@
       const outcome = await probeAudioSource(src);
       if (outcome.ok) {
         setValid();
-        if (autoPlay && row._pendingPlay && row._btn && row._src) {
-          row._pendingPlay = false;
-          handlePlay(row._btn, row, row._src);
-        }
       } else {
         setInvalid(outcome.reason || 'Unavailable');
       }
@@ -1200,7 +1199,6 @@
         li._card = albumCard;
         li._validated = false;
         li._valid = null;
-        li._pendingPlay = false;
         li._validating = false;
         if (canPlay) {
           btnPlay.textContent = '▶ Play';
@@ -1220,20 +1218,19 @@
         }
         btnPlay.addEventListener('click', async () => {
           if (!li._src) return;
-          if (li._valid === true) {
-            handlePlay(btnPlay, li, li._src);
-            return;
-          }
           if (li._valid === false) {
             btnPlay.textContent = 'Unavailable';
             btnPlay.disabled = true;
             btnPlay.classList.add('btn-error');
             return;
           }
-          if (li._validating) return;
-          li._pendingPlay = true;
+
+          handlePlay(btnPlay, li, li._src);
+
+          if (li._valid === true || li._validating) return;
+
           li._validating = true;
-          validateAudio(li, li._src, { autoPlay: true }).finally(() => {
+          validateAudio(li, li._src, { optimistic: true }).finally(() => {
             li._validating = false;
           });
         });
@@ -1528,7 +1525,6 @@
 
     function handlePlay(btn, row, src){
       if (!src) return;
-      if (row) row._pendingPlay = false;
       if (currentSrc === src && !player.paused) {
         player.pause();
         updateButtonsForStop();
