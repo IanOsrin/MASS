@@ -625,12 +625,13 @@
       return results.some((outcome) => outcome && outcome.ok);
         }
 
-    async function validateAudio(row, src){
+    async function validateAudio(row, src, options = {}){
       const btn = row && row._btn;
       const card = row && row._card;
       if (!btn) return;
       const token = Symbol('audio-validate');
       row._validationToken = token;
+      const { autoPlay = false } = options;
 
       const applyIfCurrent = (fn) => {
         if (row._validationToken !== token) return false;
@@ -658,6 +659,7 @@
           btn.classList.remove('btn-accent');
           btn.title = label || 'Audio unavailable';
           row._valid = false;
+          row._pendingPlay = false;
         });
         if (applied) finalizeCard(false);
       };
@@ -669,6 +671,7 @@
           btn.classList.remove('btn-error');
           btn.removeAttribute('title');
           row._valid = true;
+          row._validated = true;
         });
         if (applied) finalizeCard(true);
       };
@@ -686,9 +689,14 @@
       if (cachedOutcome && isFresh(cachedOutcome) && cachedOutcome.reason !== 'Timeout') {
         if (cachedOutcome.ok) {
           setValid();
+          if (autoPlay && row._pendingPlay && row._btn && row._src) {
+            row._pendingPlay = false;
+            handlePlay(row._btn, row, row._src);
+          }
         } else {
           setInvalid(cachedOutcome.reason || 'Unavailable');
         }
+        row._validating = false;
         return;
       }
 
@@ -697,6 +705,7 @@
         btn.textContent = 'Checking…';
         btn.classList.remove('btn-error');
         btn.title = 'Validating audio…';
+        row._validating = true;
         if (card) {
           const pending = Number(card.dataset.pendingTracks || '0') + 1;
           card.dataset.pendingTracks = String(pending);
@@ -708,9 +717,14 @@
       const outcome = await probeAudioSource(src);
       if (outcome.ok) {
         setValid();
+        if (autoPlay && row._pendingPlay && row._btn && row._src) {
+          row._pendingPlay = false;
+          handlePlay(row._btn, row, row._src);
+        }
       } else {
         setInvalid(outcome.reason || 'Unavailable');
       }
+      row._validating = false;
         }
 
     function syncCardAudioState(card){
@@ -1184,12 +1198,15 @@
         li._src = playableSrc;
         li._btn = btnPlay;
         li._card = albumCard;
+        li._validated = false;
+        li._valid = null;
+        li._pendingPlay = false;
+        li._validating = false;
         if (canPlay) {
-          btnPlay.textContent = 'Checking…';
-          btnPlay.disabled = true;
+          btnPlay.textContent = '▶ Play';
+          btnPlay.disabled = false;
           btnPlay.classList.remove('btn-error');
           btnPlay.removeAttribute('title');
-          validateAudio(li, playableSrc);
         } else if (t.mp3) {
           btnPlay.textContent = 'Invalid audio';
           btnPlay.disabled = true;
@@ -1201,7 +1218,25 @@
           btnPlay.classList.add('btn-error');
           btnPlay.title = 'Audio missing';
         }
-        btnPlay.addEventListener('click', () => handlePlay(btnPlay, li, li._src));
+        btnPlay.addEventListener('click', async () => {
+          if (!li._src) return;
+          if (li._valid === true) {
+            handlePlay(btnPlay, li, li._src);
+            return;
+          }
+          if (li._valid === false) {
+            btnPlay.textContent = 'Unavailable';
+            btnPlay.disabled = true;
+            btnPlay.classList.add('btn-error');
+            return;
+          }
+          if (li._validating) return;
+          li._pendingPlay = true;
+          li._validating = true;
+          validateAudio(li, li._src, { autoPlay: true }).finally(() => {
+            li._validating = false;
+          });
+        });
         controls.appendChild(btnPlay);
 
         const hasInfo = Boolean(
@@ -1493,6 +1528,7 @@
 
     function handlePlay(btn, row, src){
       if (!src) return;
+      if (row) row._pendingPlay = false;
       if (currentSrc === src && !player.paused) {
         player.pause();
         updateButtonsForStop();
