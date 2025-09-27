@@ -413,8 +413,11 @@
     const MAX_AUDIO_PROBES_PER_ALBUM = 2;
     const MAX_ALBUMS_TO_PRIME = ALBUMS_PER_PAGE * 2;
     const MAX_CONCURRENT_AUDIO_PROBES = 6;
+    const AUDIO_PRELOAD_LIMIT = 4;
     let activeAudioProbes = 0;
     const audioProbeWaiters = [];
+    const audioPreloadCache = new Map();
+    const audioPreloadOrder = [];
     function delay(ms){ return new Promise((resolve) => setTimeout(resolve, ms)); }
     function canValidateAudioSrc(src){
       if (typeof src !== 'string') return false;
@@ -459,6 +462,52 @@
       activeAudioProbes = Math.max(0, activeAudioProbes - 1);
       const next = audioProbeWaiters.shift();
       if (next) next();
+    }
+
+    function releasePreloadedSrc(src){
+      if (!src) return;
+      const audio = audioPreloadCache.get(src);
+      if (audio) {
+        try {
+          audio.src = '';
+          audio.load();
+        } catch {}
+        audioPreloadCache.delete(src);
+      }
+      const idx = audioPreloadOrder.indexOf(src);
+      if (idx !== -1) audioPreloadOrder.splice(idx, 1);
+    }
+
+    function preloadAudioSrc(src){
+      if (!src || audioPreloadCache.has(src)) return;
+      try {
+        const audio = new Audio();
+        audio.preload = 'auto';
+        audio.src = src;
+        try { audio.load(); } catch {}
+        audioPreloadCache.set(src, audio);
+        audioPreloadOrder.push(src);
+      } catch {}
+      while (audioPreloadOrder.length > AUDIO_PRELOAD_LIMIT) {
+        const stale = audioPreloadOrder.shift();
+        releasePreloadedSrc(stale);
+      }
+    }
+
+    function findNextPlayableRow(row){
+      if (!row) return null;
+      let pointer = row.nextElementSibling;
+      while (pointer) {
+        if (pointer._src) return pointer;
+        pointer = pointer.nextElementSibling;
+      }
+      return null;
+    }
+
+    function scheduleNextTrackPreload(row){
+      const nextRow = findNextPlayableRow(row);
+      if (!nextRow || !nextRow._src || audioPreloadCache.has(nextRow._src)) return;
+      preloadAudioSrc(nextRow._src);
     }
 
     async function probeAudioSource(src, attempt = 0){
@@ -664,6 +713,7 @@
           btn.title = label || 'Audio unavailable';
           row._valid = false;
           row._validated = true;
+          releasePreloadedSrc(src);
         });
         if (applied) finalizeCard(false);
       };
@@ -1562,6 +1612,7 @@
           btn.textContent = '⏸ Pause';
           btn.classList.add('btn-accent');
           updateProgressUI();
+          scheduleNextTrackPreload(currentRow);
         })
         .catch((err) => {
           console.warn('Playback error:', err);
