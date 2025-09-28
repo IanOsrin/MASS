@@ -15,10 +15,12 @@
   "dependencies": {
     "axios": "^1.12.2",
     "axios-cookiejar-support": "^6.0.4",
+    "bcryptjs": "^3.0.2",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "tough-cookie": "^5.1.2",
     "undici": "^7"
