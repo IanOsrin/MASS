@@ -465,6 +465,110 @@ async function savePlaylists(playlists) {
   }
 }
 
+function normalizeTrackPayload(raw = {}) {
+  const recordId = typeof raw.recordId === 'string' ? raw.recordId.trim() : '';
+  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+  const albumTitle = typeof raw.albumTitle === 'string' ? raw.albumTitle.trim() : '';
+  const albumArtist = typeof raw.albumArtist === 'string' ? raw.albumArtist.trim() : '';
+  const catalogue = typeof raw.catalogue === 'string' ? raw.catalogue.trim() : '';
+  const trackArtist = typeof raw.trackArtist === 'string' ? raw.trackArtist.trim() : '';
+  const mp3 = typeof raw.mp3 === 'string' ? raw.mp3.trim() : '';
+  const resolvedSrc = typeof raw.resolvedSrc === 'string' ? raw.resolvedSrc.trim() : '';
+  let seq = raw.seq;
+  if (typeof seq === 'string') {
+    const parsed = Number(seq.trim());
+    seq = Number.isFinite(parsed) ? parsed : null;
+  } else if (typeof seq === 'number') {
+    seq = Number.isFinite(seq) ? seq : null;
+  } else {
+    seq = null;
+  }
+  const artwork = typeof raw.artwork === 'string' ? raw.artwork.trim() : '';
+  const audioField = typeof raw.audioField === 'string' ? raw.audioField.trim() : '';
+  const artworkField = typeof raw.artworkField === 'string' ? raw.artworkField.trim() : '';
+  return {
+    recordId,
+    name,
+    albumTitle,
+    albumArtist,
+    catalogue,
+    trackArtist,
+    mp3,
+    resolvedSrc,
+    seq,
+    artwork,
+    audioField,
+    artworkField
+  };
+}
+
+function trackDuplicateKey(payload) {
+  if (!payload) return '';
+  if (payload.recordId) return `id:${payload.recordId}`;
+  if (payload.name && payload.albumTitle && payload.albumArtist) {
+    return `meta:${payload.name}|${payload.albumTitle}|${payload.albumArtist}`;
+  }
+  return '';
+}
+
+function trackDuplicateKeyFromEntry(entry = {}) {
+  const recordId = typeof entry.trackRecordId === 'string' ? entry.trackRecordId.trim() : '';
+  const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+  const albumTitle = typeof entry.albumTitle === 'string' ? entry.albumTitle.trim() : '';
+  const albumArtist = typeof entry.albumArtist === 'string' ? entry.albumArtist.trim() : '';
+  return trackDuplicateKey({ recordId, name, albumTitle, albumArtist });
+}
+
+function summarizeTrackPayload(payload = {}) {
+  return {
+    recordId: payload.recordId || null,
+    name: payload.name || '',
+    albumTitle: payload.albumTitle || '',
+    albumArtist: payload.albumArtist || '',
+    seq: Number.isFinite(payload.seq) ? payload.seq : null
+  };
+}
+
+function buildTrackEntry(payload, addedAt) {
+  return {
+    id: randomUUID(),
+    trackRecordId: payload.recordId || null,
+    name: payload.name,
+    albumTitle: payload.albumTitle,
+    albumArtist: payload.albumArtist,
+    catalogue: payload.catalogue,
+    trackArtist: payload.trackArtist,
+    mp3: payload.mp3,
+    resolvedSrc: payload.resolvedSrc,
+    seq: Number.isFinite(payload.seq) ? payload.seq : null,
+    artwork: payload.artwork,
+    audioField: payload.audioField,
+    artworkField: payload.artworkField,
+    addedAt
+  };
+}
+
+function findDuplicateTrack(playlist, payload) {
+  if (!playlist || !payload) return null;
+  const tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+  for (const existing of tracks) {
+    if (!existing) continue;
+    const existingRecordId = typeof existing.trackRecordId === 'string' ? existing.trackRecordId : '';
+    if (payload.recordId && existingRecordId && existingRecordId === payload.recordId) {
+      return existing;
+    }
+    if (payload.name && payload.albumTitle && payload.albumArtist) {
+      const sameName = (existing.name || '') === payload.name;
+      const sameAlbum = (existing.albumTitle || '') === payload.albumTitle;
+      const sameArtist = (existing.albumArtist || '') === payload.albumArtist;
+      if (sameName && sameAlbum && sameArtist) {
+        return existing;
+      }
+    }
+  }
+  return null;
+}
+
 async function requireUser(req, res) {
   const user = await authenticateRequest(req);
   if (!user) {
@@ -626,13 +730,9 @@ app.post('/api/playlists/:playlistId/tracks', async (req, res) => {
       return;
     }
 
-    const payload = req.body?.track || {};
-    const recordId = typeof payload.recordId === 'string' ? payload.recordId.trim() : '';
-    const name = typeof payload.name === 'string' ? payload.name.trim() : '';
-    const albumTitle = typeof payload.albumTitle === 'string' ? payload.albumTitle.trim() : '';
-    const albumArtist = typeof payload.albumArtist === 'string' ? payload.albumArtist.trim() : '';
+    const trackPayload = normalizeTrackPayload(req.body?.track || {});
 
-    if (!name) {
+    if (!trackPayload.name) {
       res.status(400).json({ ok: false, error: 'Track name required' });
       return;
     }
@@ -645,33 +745,17 @@ app.post('/api/playlists/:playlistId/tracks', async (req, res) => {
     }
 
     const playlist = playlists[index];
-    const duplicate = playlist.tracks?.find((t) => t && ((recordId && t.trackRecordId === recordId) || (t.name === name && t.albumTitle === albumTitle && t.albumArtist === albumArtist)));
+    const duplicate = findDuplicateTrack(playlist, trackPayload);
     if (duplicate) {
       res.status(200).json({ ok: true, playlist, track: duplicate, duplicate: true });
       return;
     }
 
-    const now = new Date().toISOString();
-    const entry = {
-      id: randomUUID(),
-      trackRecordId: recordId || null,
-      name,
-      albumTitle,
-      albumArtist,
-      catalogue: typeof payload.catalogue === 'string' ? payload.catalogue.trim() : '',
-      trackArtist: typeof payload.trackArtist === 'string' ? payload.trackArtist.trim() : '',
-      mp3: typeof payload.mp3 === 'string' ? payload.mp3.trim() : '',
-      resolvedSrc: typeof payload.resolvedSrc === 'string' ? payload.resolvedSrc.trim() : '',
-      seq: typeof payload.seq === 'number' && Number.isFinite(payload.seq) ? payload.seq : null,
-      artwork: typeof payload.artwork === 'string' ? payload.artwork.trim() : '',
-      audioField: typeof payload.audioField === 'string' ? payload.audioField.trim() : '',
-      artworkField: typeof payload.artworkField === 'string' ? payload.artworkField.trim() : '',
-      addedAt: now
-    };
+    const entry = buildTrackEntry(trackPayload, new Date().toISOString());
 
     playlist.tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
     playlist.tracks.push(entry);
-    playlist.updatedAt = now;
+    playlist.updatedAt = entry.addedAt;
 
     playlists[index] = playlist;
     await savePlaylists(playlists);
@@ -680,6 +764,92 @@ app.post('/api/playlists/:playlistId/tracks', async (req, res) => {
   } catch (err) {
     console.error('[MASS] Add track to playlist failed:', err);
     res.status(500).json({ ok: false, error: 'Failed to add track' });
+  }
+});
+
+app.post('/api/playlists/:playlistId/tracks/bulk', async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  try {
+    const playlistId = req.params?.playlistId;
+    if (!playlistId) {
+      res.status(400).json({ ok: false, error: 'Playlist ID required' });
+      return;
+    }
+
+    const rawTracks = Array.isArray(req.body?.tracks) ? req.body.tracks : [];
+    if (!rawTracks.length) {
+      res.status(400).json({ ok: false, error: 'At least one track required' });
+      return;
+    }
+
+    const normalizedTracks = rawTracks.map((track) => normalizeTrackPayload(track || {}));
+    const playlists = await loadPlaylists();
+    const index = playlists.findIndex((p) => p && p.id === playlistId && p.userId === user.recordId);
+    if (index === -1) {
+      res.status(404).json({ ok: false, error: 'Playlist not found' });
+      return;
+    }
+
+    const playlist = playlists[index];
+    playlist.tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+
+    const dedupeKeys = new Set();
+    for (const existing of playlist.tracks) {
+      const key = trackDuplicateKeyFromEntry(existing);
+      if (key) dedupeKeys.add(key);
+    }
+
+    const addedEntries = [];
+    const duplicates = [];
+    const skipped = [];
+
+    for (const trackPayload of normalizedTracks) {
+      if (!trackPayload.name) {
+        skipped.push({ ...summarizeTrackPayload(trackPayload), reason: 'invalid_name' });
+        continue;
+      }
+
+      const key = trackDuplicateKey(trackPayload);
+      if (key && dedupeKeys.has(key)) {
+        duplicates.push({ ...summarizeTrackPayload(trackPayload), reason: 'already_exists' });
+        continue;
+      }
+
+      const duplicate = findDuplicateTrack(playlist, trackPayload);
+      if (duplicate) {
+        duplicates.push({ ...summarizeTrackPayload(trackPayload), reason: 'already_exists' });
+        if (key) dedupeKeys.add(key);
+        continue;
+      }
+
+      const entry = buildTrackEntry(trackPayload, new Date().toISOString());
+      playlist.tracks.push(entry);
+      addedEntries.push(entry);
+      if (key) dedupeKeys.add(key);
+    }
+
+    if (addedEntries.length) {
+      playlist.updatedAt = new Date().toISOString();
+      playlists[index] = playlist;
+      await savePlaylists(playlists);
+    }
+
+    const status = addedEntries.length ? 201 : 200;
+    res.status(status).json({
+      ok: true,
+      playlist,
+      addedCount: addedEntries.length,
+      duplicateCount: duplicates.length,
+      skippedCount: skipped.length,
+      added: addedEntries,
+      duplicates,
+      skipped
+    });
+  } catch (err) {
+    console.error('[MASS] Bulk add tracks to playlist failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to add tracks' });
   }
 });
 

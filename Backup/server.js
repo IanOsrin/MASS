@@ -1,11 +1,28 @@
-import { config as loadEnv } from 'dotenv';
-import express from 'express';
 import path from 'node:path';
+import fs from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { fetch } from 'undici';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 const { AbortController } = globalThis;
+
+let loadEnv = () => ({ parsed: {}, skipped: true });
+try {
+  ({ config: loadEnv } = await import('dotenv'));
+} catch (err) {
+  console.warn('[MASS] Optional dependency dotenv not found; continue without .env file support');
+}
+
+let express;
+try {
+  ({ default: express } = await import('express'));
+} catch (err) {
+  console.error('[MASS] Missing dependency express. Run "npm install" to install server packages.');
+  process.exit(1);
+}
 
 loadEnv();
 
@@ -17,6 +34,7 @@ process.on('uncaughtException', (err) => {
 });
 
 const app = express();
+app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +47,18 @@ const FM_PASS = process.env.FM_PASS;
 const FM_LAYOUT = process.env.FM_LAYOUT || 'API_Album_Songs';
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
+const FM_USERS_LAYOUT = process.env.FM_USERS_LAYOUT || 'API_Users';
+
+const AUTH_SECRET = process.env.AUTH_SECRET || 'development-secret-change-me';
+if (!process.env.AUTH_SECRET) {
+  console.warn('[MASS] AUTH_SECRET not set; falling back to insecure development secret');
+}
+const AUTH_COOKIE_NAME = 'mass_session';
+const AUTH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const AUTH_COOKIE_SECURE = process.env.AUTH_COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production';
+const DATA_DIR = path.join(__dirname, 'data');
+const PLAYLISTS_PATH = path.join(DATA_DIR, 'playlists.json');
+const DEFAULT_AUDIO_FIELDS = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
 
 if (!FM_HOST || !FM_DB || !FM_USER || !FM_PASS) {
   console.warn('[MASS] Missing .env values; expected FM_HOST, FM_DB, FM_USER, FM_PASS');
@@ -184,6 +214,739 @@ async function fmGetAbsolute(u, { signal } = {}) {
   }
   return res;
 }
+
+async function fmCreateRecord(layout, fieldData) {
+  await ensureToken();
+  const url = `${fmBase}/layouts/${encodeURIComponent(layout)}/records`;
+  const makeHeaders = () => ({
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${fmToken}`
+  });
+
+  let res = await safeFetch(url, {
+    method: 'POST',
+    headers: makeHeaders(),
+    body: JSON.stringify({ fieldData })
+  });
+
+  if (res.status === 401) {
+    await fmLogin();
+    res = await safeFetch(url, {
+      method: 'POST',
+      headers: makeHeaders(),
+      body: JSON.stringify({ fieldData })
+    });
+  }
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.messages?.[0]?.message || 'FM error';
+    const code = json?.messages?.[0]?.code;
+    throw new Error(`FM create failed: ${msg} (${code ?? 'n/a'})`);
+  }
+  return json?.response || null;
+}
+
+async function fmGetRecordById(layout, recordId) {
+  if (!recordId) return null;
+  await ensureToken();
+  const url = `${fmBase}/layouts/${encodeURIComponent(layout)}/records/${encodeURIComponent(recordId)}`;
+  const makeHeaders = () => ({
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${fmToken}`
+  });
+
+  let res = await safeFetch(url, { method: 'GET', headers: makeHeaders() });
+
+  if (res.status === 401) {
+    await fmLogin();
+    res = await safeFetch(url, { method: 'GET', headers: makeHeaders() });
+  }
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return null;
+  }
+  return json?.response?.data?.[0] || null;
+}
+
+async function fmFindRecords(layout, queries, { limit = 1, offset = 1 } = {}) {
+  const r = await fmPost(`/layouts/${encodeURIComponent(layout)}/_find`, {
+    query: queries,
+    limit,
+    offset
+  });
+  const json = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const msg = json?.messages?.[0]?.message || 'FM error';
+    const code = json?.messages?.[0]?.code;
+    return { ok: false, status: r.status, msg, code, data: [], total: 0 };
+  }
+  const data = json?.response?.data || [];
+  const total = json?.response?.dataInfo?.foundCount ?? data.length;
+  return { ok: true, data, total };
+}
+
+function normalizeEmail(email) {
+  if (typeof email !== 'string') return '';
+  return email.trim().toLowerCase();
+}
+
+async function findUserByEmail(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+  const result = await fmFindRecords(FM_USERS_LAYOUT, [{ Email: `==${normalized}` }], { limit: 1, offset: 1 });
+  if (!result.ok || result.data.length === 0) return null;
+  const entry = result.data[0];
+  const fields = entry.fieldData || {};
+  return {
+    recordId: entry.recordId,
+    email: normalizeEmail(fields.Email || normalized),
+    passwordHash: fields.PasswordHash || ''
+  };
+}
+
+async function createUserRecord(email, passwordHash) {
+  const normalized = normalizeEmail(email);
+  const response = await fmCreateRecord(FM_USERS_LAYOUT, {
+    Email: normalized,
+    PasswordHash: passwordHash,
+    CreatedAt: new Date().toISOString()
+  });
+  return {
+    recordId: response?.recordId,
+    email: normalized
+  };
+}
+
+function cookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: AUTH_COOKIE_SECURE,
+    maxAge: AUTH_COOKIE_MAX_AGE,
+    path: '/'
+  };
+}
+
+function setAuthCookie(res, token) {
+  if (res.cookie) {
+    res.cookie(AUTH_COOKIE_NAME, token, cookieOptions());
+    return;
+  }
+  const opts = cookieOptions();
+  const parts = [`${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}`];
+  parts.push(`Max-Age=${Math.floor(opts.maxAge / 1000)}`);
+  parts.push('Path=/');
+  parts.push('HttpOnly');
+  if (opts.secure) parts.push('Secure');
+  parts.push('SameSite=Lax');
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function clearAuthCookie(res) {
+  const opts = cookieOptions();
+  if (res.clearCookie) {
+    res.clearCookie(AUTH_COOKIE_NAME, { ...opts, maxAge: 0 });
+    return;
+  }
+  const parts = [`${AUTH_COOKIE_NAME}=`, 'Max-Age=0', 'Path=/', 'HttpOnly'];
+  if (opts.secure) parts.push('Secure');
+  parts.push('SameSite=Lax');
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function getCookies(req) {
+  const header = req.headers?.cookie;
+  if (!header) return {};
+  const out = {};
+  const pieces = header.split(';');
+  for (const piece of pieces) {
+    const part = piece.trim();
+    if (!part) continue;
+    const idx = part.indexOf('=');
+    if (idx === -1) continue;
+    const key = part.slice(0, idx);
+    const value = part.slice(idx + 1);
+    out[key] = decodeURIComponent(value);
+  }
+  return out;
+}
+
+function readAuthToken(req) {
+  const cookies = getCookies(req);
+  return cookies[AUTH_COOKIE_NAME] || null;
+}
+
+function issueToken(payload) {
+  return jwt.sign(payload, AUTH_SECRET, { expiresIn: '7d' });
+}
+
+async function getUserFromTokenPayload(payload) {
+  const recordId = payload?.sub;
+  if (!recordId) return null;
+  const record = await fmGetRecordById(FM_USERS_LAYOUT, recordId);
+  if (!record) return null;
+  const fields = record.fieldData || {};
+  const email = normalizeEmail(fields.Email || payload?.email || '');
+  if (!email) return null;
+  return { recordId, email };
+}
+
+async function authenticateRequest(req) {
+  const token = readAuthToken(req);
+  if (!token) return null;
+  try {
+    const payload = jwt.verify(token, AUTH_SECRET);
+    return await getUserFromTokenPayload(payload);
+  } catch (err) {
+    if (err?.name !== 'TokenExpiredError') {
+      console.warn('[MASS] Auth token verification failed:', err?.message || err);
+    }
+    return null;
+  }
+}
+
+function validateEmail(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return { ok: false, reason: 'Email required' };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+    return { ok: false, reason: 'Invalid email address' };
+  }
+  return { ok: true, email: normalized };
+}
+
+function validatePassword(password) {
+  if (typeof password !== 'string' || password.trim().length < 8) {
+    return { ok: false, reason: 'Password must be at least 8 characters' };
+  }
+  if (password.length > 200) {
+    return { ok: false, reason: 'Password too long' };
+  }
+  return { ok: true };
+}
+
+async function ensureDataDir() {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+  } catch (err) {
+    console.warn('[MASS] Failed to ensure data directory exists:', err);
+  }
+}
+
+async function loadPlaylists() {
+  try {
+    const raw = await fs.readFile(PLAYLISTS_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+    return [];
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      await ensureDataDir();
+      await fs.writeFile(PLAYLISTS_PATH, '[]', 'utf8');
+      return [];
+    }
+    console.warn('[MASS] Failed to read playlists file:', err);
+    return [];
+  }
+}
+
+async function savePlaylists(playlists) {
+  try {
+    await ensureDataDir();
+    const payload = JSON.stringify(Array.isArray(playlists) ? playlists : [], null, 2);
+    const tempPath = `${PLAYLISTS_PATH}.tmp`;
+    await fs.writeFile(tempPath, payload, 'utf8');
+    await fs.rename(tempPath, PLAYLISTS_PATH);
+  } catch (err) {
+    console.error('[MASS] Failed to write playlists file:', err);
+    throw err;
+  }
+}
+
+function normalizeTrackPayload(raw = {}) {
+  const recordId = typeof raw.recordId === 'string' ? raw.recordId.trim() : '';
+  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+  const albumTitle = typeof raw.albumTitle === 'string' ? raw.albumTitle.trim() : '';
+  const albumArtist = typeof raw.albumArtist === 'string' ? raw.albumArtist.trim() : '';
+  const catalogue = typeof raw.catalogue === 'string' ? raw.catalogue.trim() : '';
+  const trackArtist = typeof raw.trackArtist === 'string' ? raw.trackArtist.trim() : '';
+  const mp3 = typeof raw.mp3 === 'string' ? raw.mp3.trim() : '';
+  const resolvedSrc = typeof raw.resolvedSrc === 'string' ? raw.resolvedSrc.trim() : '';
+  let seq = raw.seq;
+  if (typeof seq === 'string') {
+    const parsed = Number(seq.trim());
+    seq = Number.isFinite(parsed) ? parsed : null;
+  } else if (typeof seq === 'number') {
+    seq = Number.isFinite(seq) ? seq : null;
+  } else {
+    seq = null;
+  }
+  const artwork = typeof raw.artwork === 'string' ? raw.artwork.trim() : '';
+  const audioField = typeof raw.audioField === 'string' ? raw.audioField.trim() : '';
+  const artworkField = typeof raw.artworkField === 'string' ? raw.artworkField.trim() : '';
+  return {
+    recordId,
+    name,
+    albumTitle,
+    albumArtist,
+    catalogue,
+    trackArtist,
+    mp3,
+    resolvedSrc,
+    seq,
+    artwork,
+    audioField,
+    artworkField
+  };
+}
+
+function trackDuplicateKey(payload) {
+  if (!payload) return '';
+  if (payload.recordId) return `id:${payload.recordId}`;
+  if (payload.name && payload.albumTitle && payload.albumArtist) {
+    return `meta:${payload.name}|${payload.albumTitle}|${payload.albumArtist}`;
+  }
+  return '';
+}
+
+function trackDuplicateKeyFromEntry(entry = {}) {
+  const recordId = typeof entry.trackRecordId === 'string' ? entry.trackRecordId.trim() : '';
+  const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+  const albumTitle = typeof entry.albumTitle === 'string' ? entry.albumTitle.trim() : '';
+  const albumArtist = typeof entry.albumArtist === 'string' ? entry.albumArtist.trim() : '';
+  return trackDuplicateKey({ recordId, name, albumTitle, albumArtist });
+}
+
+function summarizeTrackPayload(payload = {}) {
+  return {
+    recordId: payload.recordId || null,
+    name: payload.name || '',
+    albumTitle: payload.albumTitle || '',
+    albumArtist: payload.albumArtist || '',
+    seq: Number.isFinite(payload.seq) ? payload.seq : null
+  };
+}
+
+function buildTrackEntry(payload, addedAt) {
+  return {
+    id: randomUUID(),
+    trackRecordId: payload.recordId || null,
+    name: payload.name,
+    albumTitle: payload.albumTitle,
+    albumArtist: payload.albumArtist,
+    catalogue: payload.catalogue,
+    trackArtist: payload.trackArtist,
+    mp3: payload.mp3,
+    resolvedSrc: payload.resolvedSrc,
+    seq: Number.isFinite(payload.seq) ? payload.seq : null,
+    artwork: payload.artwork,
+    audioField: payload.audioField,
+    artworkField: payload.artworkField,
+    addedAt
+  };
+}
+
+function findDuplicateTrack(playlist, payload) {
+  if (!playlist || !payload) return null;
+  const tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+  for (const existing of tracks) {
+    if (!existing) continue;
+    const existingRecordId = typeof existing.trackRecordId === 'string' ? existing.trackRecordId : '';
+    if (payload.recordId && existingRecordId && existingRecordId === payload.recordId) {
+      return existing;
+    }
+    if (payload.name && payload.albumTitle && payload.albumArtist) {
+      const sameName = (existing.name || '') === payload.name;
+      const sameAlbum = (existing.albumTitle || '') === payload.albumTitle;
+      const sameArtist = (existing.albumArtist || '') === payload.albumArtist;
+      if (sameName && sameAlbum && sameArtist) {
+        return existing;
+      }
+    }
+  }
+  return null;
+}
+
+async function requireUser(req, res) {
+  const user = await authenticateRequest(req);
+  if (!user) {
+    res.status(401).json({ ok: false, error: 'Authentication required' });
+    return null;
+  }
+  return user;
+}
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const emailRaw = req.body?.email;
+    const passwordRaw = req.body?.password;
+    const emailCheck = validateEmail(emailRaw);
+    if (!emailCheck.ok) {
+      res.status(400).json({ ok: false, error: emailCheck.reason });
+      return;
+    }
+    const passwordCheck = validatePassword(passwordRaw);
+    if (!passwordCheck.ok) {
+      res.status(400).json({ ok: false, error: passwordCheck.reason });
+      return;
+    }
+
+    const existing = await findUserByEmail(emailCheck.email);
+    if (existing) {
+      res.status(409).json({ ok: false, error: 'Account already exists' });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(passwordRaw, 12);
+    const user = await createUserRecord(emailCheck.email, passwordHash);
+    if (!user.recordId) {
+      throw new Error('FileMaker returned no recordId');
+    }
+
+    const token = issueToken({ sub: user.recordId, email: user.email });
+    setAuthCookie(res, token);
+    res.status(201).json({ ok: true, user: { email: user.email } });
+  } catch (err) {
+    console.error('[MASS] Registration failed:', err);
+    res.status(500).json({ ok: false, error: 'Registration failed' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const emailRaw = req.body?.email;
+    const passwordRaw = req.body?.password;
+    const emailCheck = validateEmail(emailRaw);
+    if (!emailCheck.ok) {
+      res.status(400).json({ ok: false, error: emailCheck.reason });
+      return;
+    }
+    const passwordCheck = validatePassword(passwordRaw);
+    if (!passwordCheck.ok) {
+      res.status(400).json({ ok: false, error: passwordCheck.reason });
+      return;
+    }
+
+    const user = await findUserByEmail(emailCheck.email);
+    if (!user?.passwordHash) {
+      res.status(401).json({ ok: false, error: 'Invalid credentials' });
+      return;
+    }
+
+    const match = await bcrypt.compare(passwordRaw, user.passwordHash);
+    if (!match) {
+      res.status(401).json({ ok: false, error: 'Invalid credentials' });
+      return;
+    }
+
+    const token = issueToken({ sub: user.recordId, email: user.email });
+    setAuthCookie(res, token);
+    res.json({ ok: true, user: { email: user.email } });
+  } catch (err) {
+    console.error('[MASS] Login failed:', err);
+    res.status(500).json({ ok: false, error: 'Login failed' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  clearAuthCookie(res);
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  try {
+    const user = await authenticateRequest(req);
+    res.json({ ok: true, user: user ? { email: user.email } : null });
+  } catch (err) {
+    console.error('[MASS] Session check failed:', err);
+    res.status(500).json({ ok: false, error: 'Session check failed' });
+  }
+});
+
+app.get('/api/playlists', async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  try {
+    const playlists = await loadPlaylists();
+    const mine = playlists.filter((p) => p && p.userId === user.recordId);
+    res.json({ ok: true, playlists: mine });
+  } catch (err) {
+    console.error('[MASS] Fetch playlists failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to load playlists' });
+  }
+});
+
+app.post('/api/playlists', async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  try {
+    const nameRaw = req.body?.name;
+    const name = typeof nameRaw === 'string' ? nameRaw.trim() : '';
+    if (!name) {
+      res.status(400).json({ ok: false, error: 'Playlist name required' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const playlists = await loadPlaylists();
+    const collision = playlists.find((p) => p && p.userId === user.recordId && typeof p.name === 'string' && p.name.toLowerCase() === name.toLowerCase());
+    if (collision) {
+      res.status(409).json({ ok: false, error: 'You already have a playlist with that name', playlist: collision });
+      return;
+    }
+
+    const playlist = {
+      id: randomUUID(),
+      userId: user.recordId,
+      userEmail: user.email,
+      name,
+      tracks: [],
+      createdAt: now,
+      updatedAt: now
+    };
+
+    playlists.push(playlist);
+    await savePlaylists(playlists);
+
+    res.status(201).json({ ok: true, playlist });
+  } catch (err) {
+    console.error('[MASS] Create playlist failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to create playlist' });
+  }
+});
+
+app.post('/api/playlists/:playlistId/tracks', async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  try {
+    const playlistId = req.params?.playlistId;
+    if (!playlistId) {
+      res.status(400).json({ ok: false, error: 'Playlist ID required' });
+      return;
+    }
+
+    const trackPayload = normalizeTrackPayload(req.body?.track || {});
+
+    if (!trackPayload.name) {
+      res.status(400).json({ ok: false, error: 'Track name required' });
+      return;
+    }
+
+    const playlists = await loadPlaylists();
+    const index = playlists.findIndex((p) => p && p.id === playlistId && p.userId === user.recordId);
+    if (index === -1) {
+      res.status(404).json({ ok: false, error: 'Playlist not found' });
+      return;
+    }
+
+    const playlist = playlists[index];
+    const duplicate = findDuplicateTrack(playlist, trackPayload);
+    if (duplicate) {
+      res.status(200).json({ ok: true, playlist, track: duplicate, duplicate: true });
+      return;
+    }
+
+    const entry = buildTrackEntry(trackPayload, new Date().toISOString());
+
+    playlist.tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+    playlist.tracks.push(entry);
+    playlist.updatedAt = entry.addedAt;
+
+    playlists[index] = playlist;
+    await savePlaylists(playlists);
+
+    res.status(201).json({ ok: true, playlist, track: entry });
+  } catch (err) {
+    console.error('[MASS] Add track to playlist failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to add track' });
+  }
+});
+
+app.post('/api/playlists/:playlistId/tracks/bulk', async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  try {
+    const playlistId = req.params?.playlistId;
+    if (!playlistId) {
+      res.status(400).json({ ok: false, error: 'Playlist ID required' });
+      return;
+    }
+
+    const rawTracks = Array.isArray(req.body?.tracks) ? req.body.tracks : [];
+    if (!rawTracks.length) {
+      res.status(400).json({ ok: false, error: 'At least one track required' });
+      return;
+    }
+
+    const normalizedTracks = rawTracks.map((track) => normalizeTrackPayload(track || {}));
+    const playlists = await loadPlaylists();
+    const index = playlists.findIndex((p) => p && p.id === playlistId && p.userId === user.recordId);
+    if (index === -1) {
+      res.status(404).json({ ok: false, error: 'Playlist not found' });
+      return;
+    }
+
+    const playlist = playlists[index];
+    playlist.tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+
+    const dedupeKeys = new Set();
+    for (const existing of playlist.tracks) {
+      const key = trackDuplicateKeyFromEntry(existing);
+      if (key) dedupeKeys.add(key);
+    }
+
+    const addedEntries = [];
+    const duplicates = [];
+    const skipped = [];
+
+    for (const trackPayload of normalizedTracks) {
+      if (!trackPayload.name) {
+        skipped.push({ ...summarizeTrackPayload(trackPayload), reason: 'invalid_name' });
+        continue;
+      }
+
+      const key = trackDuplicateKey(trackPayload);
+      if (key && dedupeKeys.has(key)) {
+        duplicates.push({ ...summarizeTrackPayload(trackPayload), reason: 'already_exists' });
+        continue;
+      }
+
+      const duplicate = findDuplicateTrack(playlist, trackPayload);
+      if (duplicate) {
+        duplicates.push({ ...summarizeTrackPayload(trackPayload), reason: 'already_exists' });
+        if (key) dedupeKeys.add(key);
+        continue;
+      }
+
+      const entry = buildTrackEntry(trackPayload, new Date().toISOString());
+      playlist.tracks.push(entry);
+      addedEntries.push(entry);
+      if (key) dedupeKeys.add(key);
+    }
+
+    if (addedEntries.length) {
+      playlist.updatedAt = new Date().toISOString();
+      playlists[index] = playlist;
+      await savePlaylists(playlists);
+    }
+
+    const status = addedEntries.length ? 201 : 200;
+    res.status(status).json({
+      ok: true,
+      playlist,
+      addedCount: addedEntries.length,
+      duplicateCount: duplicates.length,
+      skippedCount: skipped.length,
+      added: addedEntries,
+      duplicates,
+      skipped
+    });
+  } catch (err) {
+    console.error('[MASS] Bulk add tracks to playlist failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to add tracks' });
+  }
+});
+
+app.delete('/api/playlists/:playlistId', async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  try {
+    const playlistId = req.params?.playlistId;
+    if (!playlistId) {
+      res.status(400).json({ ok: false, error: 'Playlist ID required' });
+      return;
+    }
+
+    const playlists = await loadPlaylists();
+    const index = playlists.findIndex((p) => p && p.id === playlistId && p.userId === user.recordId);
+    if (index === -1) {
+      res.status(404).json({ ok: false, error: 'Playlist not found' });
+      return;
+    }
+
+    const [deleted] = playlists.splice(index, 1);
+    await savePlaylists(playlists);
+
+    res.json({ ok: true, playlist: deleted || null });
+  } catch (err) {
+    console.error('[MASS] Delete playlist failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to delete playlist' });
+  }
+});
+
+app.get('/api/track/:recordId/container', async (req, res) => {
+  try {
+    const recordId = (req.params?.recordId || '').toString().trim();
+    if (!recordId) {
+      res.status(400).json({ ok: false, error: 'Record ID required' });
+      return;
+    }
+
+    const layout = (req.query?.layout || FM_LAYOUT || '').toString().trim() || FM_LAYOUT;
+    const requestedField = (req.query?.field || '').toString().trim();
+    const candidateParam = (req.query?.candidates || '').toString().trim();
+    const candidates = candidateParam
+      ? candidateParam.split(',').map((value) => value.trim()).filter(Boolean)
+      : [];
+
+    const record = await fmGetRecordById(layout, recordId);
+    if (!record) {
+      res.status(404).json({ ok: false, error: 'Record not found' });
+      return;
+    }
+
+    const fieldData = record.fieldData || {};
+
+    const getFieldValue = (fieldName) => {
+      if (!fieldName) return '';
+      if (!Object.prototype.hasOwnProperty.call(fieldData, fieldName)) return '';
+      const raw = fieldData[fieldName];
+      if (raw === undefined || raw === null) return '';
+      const str = typeof raw === 'string' ? raw.trim() : String(raw).trim();
+      return str;
+    };
+
+    let chosenField = requestedField;
+    let containerUrl = getFieldValue(chosenField);
+
+    const tryCandidates = (list) => {
+      for (const candidate of list) {
+        const value = getFieldValue(candidate);
+        if (value) {
+          chosenField = candidate;
+          containerUrl = value;
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (!containerUrl && candidates.length) {
+      tryCandidates(candidates);
+    }
+
+    if (!containerUrl) {
+      tryCandidates(DEFAULT_AUDIO_FIELDS);
+    }
+
+    if (!containerUrl) {
+      res.status(404).json({ ok: false, error: 'Container data not found' });
+      return;
+    }
+
+    res.json({ ok: true, url: containerUrl, field: chosenField || requestedField || '' });
+  } catch (err) {
+    console.error('[MASS] Container refresh failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to refresh container' });
+  }
+});
 
 /* ========= Static site ========= */
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -347,8 +1110,17 @@ app.get('/api/container', async (req, res) => {
     }
 
     if (!upstream.ok && upstream.status !== 206 && upstream.status !== 304) {
-      const detail = `Upstream error: ${upstream.status}`;
-      res.status(upstream.status).send(detail);
+      console.warn('[MASS] Container fetch failed', {
+        status: upstream.status,
+        requiresAuth,
+        url: upstreamUrl.slice(0, 200)
+      });
+      if (upstream.status === 404) {
+        res.status(404).json({ error: 'not_found', status: 404, url: upstreamUrl });
+      } else {
+        const detail = `Upstream error: ${upstream.status}`;
+        res.status(upstream.status).send(detail);
+      }
       return;
     }
 
@@ -567,6 +1339,17 @@ app.get('/api/album', async (req, res) => {
     return res.status(500).json({ error: 'Album lookup failed', status: 500, detail });
   }
 });
+
+if (FM_HOST && FM_DB && FM_USER && FM_PASS) {
+  try {
+    await ensureToken();
+    console.log('[MASS] FileMaker token primed');
+  } catch (err) {
+    console.warn('[MASS] Initial FileMaker login failed:', err?.message || err);
+  }
+} else {
+  console.warn('[MASS] Skipping initial FileMaker login; missing FM environment variables');
+}
 
 app.listen(PORT, HOST, () => {
   console.log(`[MASS] listening on http://${HOST}:${PORT}`);
