@@ -24,11 +24,11 @@
     .searchbar button{border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer;}
 
     main{max-width:1100px;margin:20px auto;padding:0 16px 40px;}
-    .layout-grid{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;}
-    .playlist-column{flex:0 0 320px;max-width:320px;width:100%;display:flex;flex-direction:column;gap:16px;position:relative;order:2;}
+    .layout-grid{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;}
+    .playlist-column{flex:0 0 260px;max-width:260px;width:100%;display:flex;flex-direction:column;gap:14px;position:relative;order:2;}
     .playlist-column[hidden]{display:none !important;}
-    .content-column{flex:1 1 520px;min-width:260px;display:flex;flex-direction:column;gap:16px;width:100%;order:1;}
-    .playlist-actions{display:flex;align-items:center;gap:8px;}
+    .content-column{flex:1 1 560px;min-width:260px;display:flex;flex-direction:column;gap:16px;width:100%;order:1;}
+    .playlist-actions{display:flex;align-items:center;gap:6px;}
     @media (max-width:900px){
       .layout-grid{flex-direction:column;}
       .playlist-column{max-width:100%;order:initial;}
@@ -86,40 +86,70 @@
     .auth-switch button:disabled{opacity:.6;cursor:not-allowed;}
     #authError{margin-top:12px;}
 
-    .playlists-panel{padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--card);display:flex;flex-direction:column;gap:12px;}
+    .playlists-panel{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:flex;flex-direction:column;gap:10px;}
     .playlists-panel[hidden]{display:none;}
     .playlists-header{display:flex;align-items:center;gap:12px;justify-content:space-between;}
-    .playlists-header h2{margin:0;font-size:18px;}
-    .playlists-list{display:flex;flex-wrap:wrap;gap:10px;}
-    .playlist-pill{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#1b1c20;cursor:pointer;min-width:160px;transition:transform .15s ease,box-shadow .15s ease;}
+    .playlists-header h2{margin:0;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);}
+    .playlists-list{display:flex;flex-direction:column;gap:8px;}
+    .playlist-pill{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#1b1c20;cursor:pointer;min-width:0;transition:transform .15s ease,box-shadow .15s ease;font-size:12px;}
     .playlist-pill:hover{transform:translateY(-1px);box-shadow:0 10px 20px rgba(0,0,0,.25);}
     .playlist-pill.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(98,245,169,.4);}
-    .playlist-pill .name{font-weight:600;}
-    .playlist-pill .meta{color:var(--muted);font-size:12px;}
-    .playlist-empty{color:var(--muted);font-size:14px;}
-    .playlist-create{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-    .playlist-create input{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--fg);flex:1;min-width:180px;}
-    .playlist-create button{padding:10px 14px;border-radius:10px;cursor:pointer;}
+    .playlist-pill .name{font-weight:600;font-size:13px;}
+    .playlist-pill .meta{color:var(--muted);font-size:11px;}
+    .playlist-empty{color:var(--muted);font-size:12px;}
+    .playlist-create{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+    .playlist-create input{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--fg);flex:1;min-width:160px;font-size:13px;}
+    .playlist-create button{padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;}
 
-    .playlist-tracks{padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--card);display:flex;flex-direction:column;gap:12px;}
+    .playlist-tracks{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:flex;flex-direction:column;gap:10px;}
     .playlist-tracks[hidden]{display:none;}
     .playlist-tracks .playlists-header{margin-bottom:0;}
     .playlist-tracks .playlists-header h2{font-size:18px;}
     .playlist-tracks .muted{font-size:13px;}
     .playlist-tracks .tracks{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none;}
-    .playlist-track{display:flex;gap:10px;padding:10px;border-radius:10px;background:#1d1f24;border:1px solid var(--border);align-items:flex-start;}
+    .playlist-track{display:flex;gap:8px;padding:8px;border-radius:10px;background:#1d1f24;border:1px solid var(--border);align-items:flex-start;}
     .playlist-track.playing{outline:1px solid var(--accent);background:#202427;}
     .playlist-thumb{width:44px;height:44px;border-radius:8px;overflow:hidden;flex-shrink:0;background:#0e1014;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);}
     .playlist-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
     .playlist-track-content{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0;}
-    .playlist-track .track-top{display:flex;gap:10px;align-items:flex-start;}
-    .playlist-track .track-title{flex:1;min-width:0;}
-    .playlist-track .track-title .name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .playlist-track .track-title .artist{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .playlist-track .controls{display:flex;gap:6px;}
-    .playlist-track .progress{margin-top:4px;}
+    .playlist-track .track-top{display:flex;gap:8px;align-items:flex-start;}
+    .playlist-track .play-control{display:flex;align-items:center;margin-right:6px;}
+    .playlist-track .play-control .btn.small{padding:5px 8px;font-size:11px;}
+    .playlist-track .play-control{display:flex;align-items:center;margin-right:4px;}
+    .playlist-track .play-control .btn.small{padding:5px 8px;font-size:11px;}
+    .playlist-track .track-title{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+    .playlist-track .track-title .name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .playlist-track .track-title .artist{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .playlist-track .btn.small{padding:5px 8px;font-size:11px;}
+    .playlist-track .progress{margin-top:2px;}
+    .playlist-track .progress .seek{width:150px;}
+    .playlist-track .progress .time{font-size:11px;}
+    .playlist-track-meta-buttons{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;}
+    .playlist-track-meta-buttons .btn.small{padding:4px 6px;font-size:10px;}
     .playlist-tracks.collapsed .tracks{display:none;}
     .playlist-tracks.collapsed .playlist-empty{display:none;}
+    .playlist-tracks.only-current .tracks{display:none;}
+    .playlist-tracks.only-current .playlist-empty{display:none;}
+    .playlist-tracks.only-current .now-playing-placeholder{display:none;}
+
+    .now-playing{padding:12px;border:1px solid var(--border);border-radius:12px;background:#1d1f24;display:flex;flex-direction:column;gap:10px;}
+    .now-playing[hidden]{display:none !important;}
+    .now-playing-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+    .now-playing-header .label{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
+    .now-playing-body{display:flex;align-items:center;gap:10px;}
+    .now-playing-thumb{width:44px;height:44px;border-radius:8px;overflow:hidden;flex-shrink:0;background:#0e1014;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);}
+    .now-playing-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+    .now-playing-meta{display:flex;flex-direction:column;gap:2px;min-width:0;}
+    .now-playing-title{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .now-playing-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .now-playing-source{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .now-playing-controls{display:flex;align-items:center;gap:8px;}
+    .now-playing-meta-buttons{display:flex;flex-direction:column;align-items:flex-start;gap:4px;}
+    .now-playing-meta-buttons .btn.small{padding:5px 8px;font-size:11px;}
+    .now-playing-status{font-size:11px;color:var(--muted);}
+    .now-playing-controls .btn.small{padding:6px 10px;font-size:12px;}
+    .now-playing.collapsed .now-playing-body,
+    .now-playing.collapsed .now-playing-controls{display:none;}
 
     /* Landing placeholder */
     .landing{display:flex;align-items:center;justify-content:center;min-height:40vh;}
@@ -252,6 +282,25 @@
           </form>
           <div id="playlistsEmpty" class="playlist-empty" hidden>No playlists yet. Create one to start saving tracks.</div>
         </section>
+        <section id="nowPlayingCard" class="now-playing" hidden>
+          <div class="now-playing-header">
+            <span class="label">Now Playing</span>
+            <button id="nowPlayingCollapse" type="button" class="btn small">Hide info</button>
+          </div>
+          <div class="now-playing-body">
+            <div id="nowPlayingThumb" class="now-playing-thumb">--</div>
+            <div class="now-playing-meta">
+              <div id="nowPlayingTitle" class="now-playing-title">Track</div>
+              <div id="nowPlayingSubtitle" class="now-playing-sub">Artist</div>
+              <div id="nowPlayingSource" class="now-playing-source"></div>
+            </div>
+          </div>
+          <div class="now-playing-controls">
+            <span id="nowPlayingStatus" class="now-playing-status">Paused</span>
+            <div id="nowPlayingMetaButtons" class="now-playing-meta-buttons"></div>
+            <button id="nowPlayingToggle" type="button" class="btn small">Play</button>
+          </div>
+        </section>
         <section id="playlistTracksSection" class="playlist-tracks" hidden>
           <div class="playlists-header">
             <h2 id="playlistTracksTitle">Playlist</h2>
@@ -373,6 +422,14 @@
     const playlistsEmpty = document.getElementById('playlistsEmpty');
     const playlistCreateForm = document.getElementById('playlistCreateForm');
     const playlistNameInput = document.getElementById('playlistNameInput');
+    const nowPlayingCard = document.getElementById('nowPlayingCard');
+    const nowPlayingThumb = document.getElementById('nowPlayingThumb');
+    const nowPlayingTitle = document.getElementById('nowPlayingTitle');
+    const nowPlayingSubtitle = document.getElementById('nowPlayingSubtitle');
+    const nowPlayingSource = document.getElementById('nowPlayingSource');
+    const nowPlayingStatus = document.getElementById('nowPlayingStatus');
+    const nowPlayingToggleButton = document.getElementById('nowPlayingToggle');
+    const nowPlayingCollapseButton = document.getElementById('nowPlayingCollapse');
     const playlistTracksSection = document.getElementById('playlistTracksSection');
     const playlistTracksTitle = document.getElementById('playlistTracksTitle');
     const playlistTracksMeta = document.getElementById('playlistTracksMeta');
@@ -411,6 +468,8 @@
     let playlistsLoading = false;
     let activePlaylistId = null;
     let playlistTracksCollapsed = false;
+    let nowPlayingInfo = { meta: null, isPlaying: false };
+    let nowPlayingCollapsed = false;
 
     // Config
     const ALBUMS_PER_PAGE = 9;
@@ -516,12 +575,111 @@
       renderPlaylistsPanel();
     }
 
+    function getMetaFromRow(row){
+      if (!row) return null;
+      const base = row._meta ? { ...row._meta } : null;
+      if (!base) return null;
+      if (base.playlistId && !base.playlistName) {
+        const pl = playlists.find((p) => p && p.id === base.playlistId);
+        if (pl) base.playlistName = pl.name || '';
+      }
+      base.src = row._src || '';
+      return base;
+    }
+
+    function updateNowPlayingUI(){
+      if (!nowPlayingCard) return;
+      const meta = nowPlayingInfo.meta;
+      if (!meta) {
+        nowPlayingCard.hidden = true;
+        return;
+      }
+
+      nowPlayingCard.hidden = false;
+      nowPlayingCard.classList.toggle('collapsed', nowPlayingCollapsed);
+
+      if (nowPlayingTitle) nowPlayingTitle.textContent = meta.trackName || 'Track';
+      if (nowPlayingSubtitle) nowPlayingSubtitle.textContent = meta.trackArtist || meta.albumArtist || '';
+
+      if (nowPlayingSource) {
+        const parts = [];
+        if (meta.playlistName) parts.push(`Playlist • ${meta.playlistName}`);
+        if (meta.albumTitle) parts.push(meta.playlistName ? meta.albumTitle : `Album • ${meta.albumTitle}`);
+        nowPlayingSource.textContent = parts.join(' • ');
+      }
+
+      if (nowPlayingStatus) nowPlayingStatus.textContent = nowPlayingInfo.isPlaying ? 'Playing' : 'Paused';
+
+      if (nowPlayingToggleButton) {
+        nowPlayingToggleButton.textContent = nowPlayingInfo.isPlaying ? 'Pause' : 'Play';
+        nowPlayingToggleButton.disabled = !meta.src;
+      }
+
+      if (nowPlayingCollapseButton) {
+        nowPlayingCollapseButton.textContent = nowPlayingCollapsed ? 'Show info' : 'Hide info';
+      }
+
+      if (nowPlayingThumb) {
+        nowPlayingThumb.innerHTML = '';
+        if (meta.picture) {
+          const raw = String(meta.picture || '');
+          const artSrc = raw.startsWith('/api/container?') || /^https?:/i.test(raw)
+            ? raw
+            : `/api/container?u=${encodeURIComponent(raw)}`;
+          const img = document.createElement('img');
+          img.src = artSrc;
+          img.alt = 'Artwork';
+          img.onerror = () => { nowPlayingThumb.innerHTML = 'No art'; };
+          nowPlayingThumb.appendChild(img);
+        } else {
+          nowPlayingThumb.textContent = 'No art';
+        }
+      }
+    }
+
+    function setNowPlayingFromRow(row, isPlaying){
+      const meta = getMetaFromRow(row);
+      if (!meta) {
+        nowPlayingInfo.meta = null;
+        nowPlayingInfo.isPlaying = false;
+      } else {
+        if (!nowPlayingInfo.meta) nowPlayingCollapsed = false;
+        nowPlayingInfo.meta = meta;
+        nowPlayingInfo.isPlaying = !!isPlaying;
+      }
+      updateNowPlayingUI();
+      syncPlaylistOnlyCurrent();
+    }
+
+    function markNowPlayingInactive(){
+      if (nowPlayingInfo.meta) {
+        nowPlayingInfo.isPlaying = false;
+        updateNowPlayingUI();
+        syncPlaylistOnlyCurrent();
+      }
+    }
+
+    function clearNowPlaying(){
+      nowPlayingInfo.meta = null;
+      nowPlayingInfo.isPlaying = false;
+      nowPlayingCollapsed = false;
+      updateNowPlayingUI();
+      syncPlaylistOnlyCurrent();
+    }
+
+    function syncPlaylistOnlyCurrent(){
+      if (!playlistTracksSection) return;
+      const should = Boolean(nowPlayingInfo.meta && nowPlayingInfo.isPlaying && nowPlayingInfo.meta.playlistId === activePlaylistId);
+      playlistTracksSection.classList.toggle('only-current', should);
+    }
+
     function clearPlaylists(){
       playlists = [];
       playlistsLoaded = false;
       playlistsLoading = false;
       activePlaylistId = null;
       playlistTracksCollapsed = false;
+      clearNowPlaying();
       renderPlaylistsPanel();
     }
 
@@ -549,6 +707,7 @@
         } else if (!activePlaylistId || !playlists.some((p) => p && p.id === activePlaylistId)) {
           activePlaylistId = playlists[0]?.id || null;
         }
+        playlistTracksCollapsed = false;
         renderPlaylistsPanel();
         return playlists;
       } catch (err) {
@@ -717,6 +876,7 @@
       }
 
       renderPlaylistTracks();
+      updateNowPlayingUI();
     }
 
     function renderPlaylistTracks(){
@@ -762,8 +922,11 @@
       }
 
       if (togglePlaylistTracksButton) {
-        togglePlaylistTracksButton.hidden = false;
-        togglePlaylistTracksButton.textContent = playlistTracksCollapsed ? 'Show tracks' : 'Hide tracks';
+        const hideToggle = count === 0;
+        togglePlaylistTracksButton.hidden = hideToggle;
+        if (!hideToggle) {
+          togglePlaylistTracksButton.textContent = playlistTracksCollapsed ? 'Show tracks' : 'Hide tracks';
+        }
       }
 
       if (playlistTracksList) {
@@ -803,10 +966,8 @@
             titleWrap.appendChild(artistLine);
           }
 
-          top.appendChild(titleWrap);
-
-          const controls = document.createElement('div');
-          controls.className = 'controls';
+          const playControl = document.createElement('div');
+          playControl.className = 'play-control';
           const btnPlay = document.createElement('button');
           btnPlay.className = 'btn small';
           const srcCandidate = track?.resolvedSrc || track?.mp3 || '';
@@ -819,6 +980,7 @@
           li._valid = null;
           li._validated = false;
           li._validating = false;
+          if (track?.id) li.dataset.trackId = track.id;
 
           if (playableSrc) {
             btnPlay.textContent = '▶ Play';
@@ -838,8 +1000,9 @@
             handlePlay(btnPlay, li, li._src);
           });
 
-          controls.appendChild(btnPlay);
-          top.appendChild(controls);
+          playControl.appendChild(btnPlay);
+          top.appendChild(playControl);
+          top.appendChild(titleWrap);
           contentWrap.appendChild(top);
 
           const metaLine = [track?.albumTitle, track?.albumArtist].filter(Boolean).join(' • ');
@@ -848,6 +1011,33 @@
             metaEl.className = 'muted';
             metaEl.textContent = metaLine;
             contentWrap.appendChild(metaEl);
+          }
+
+          const metaButtonsWrap = document.createElement('div');
+          metaButtonsWrap.className = 'playlist-track-meta-buttons';
+
+          if (track.producer) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn small';
+            btn.textContent = 'Producer';
+            btn.addEventListener('click', () => openTrackInfoModal(track, btn));
+            metaButtonsWrap.appendChild(btn);
+          }
+
+          const composerValues = [track.composer1, track.composer2, track.composer3, track.composer4];
+          if (Array.isArray(track.composers)) composerValues.push(...track.composers);
+          if (composerValues.filter(Boolean).length) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn small';
+            btn.textContent = 'Composer';
+            btn.addEventListener('click', () => openTrackInfoModal(track, btn));
+            metaButtonsWrap.appendChild(btn);
+          }
+
+          if (metaButtonsWrap.childNodes.length) {
+            contentWrap.appendChild(metaButtonsWrap);
           }
 
           const progWrap = document.createElement('div');
@@ -902,6 +1092,24 @@
 
           li.appendChild(thumbWrap);
           li.appendChild(contentWrap);
+          const baseMeta = { ...track };
+          baseMeta.trackName = track?.name || `Track ${idx + 1}`;
+          baseMeta.trackArtist = track?.trackArtist || track?.albumArtist || '';
+          baseMeta.albumTitle = track?.albumTitle || '';
+          baseMeta.albumArtist = track?.albumArtist || '';
+          baseMeta.playlistId = playlist.id;
+          baseMeta.playlistName = playlist.name || '';
+          baseMeta.picture = track?.artwork || '';
+          baseMeta.source = 'playlist';
+          baseMeta.catalogue = track?.catalogue || '';
+          baseMeta.playlistTrackId = track?.id || '';
+          baseMeta.producer = track?.producer || '';
+          baseMeta.composer1 = track?.composer1 || '';
+          baseMeta.composer2 = track?.composer2 || '';
+          baseMeta.composer3 = track?.composer3 || '';
+          baseMeta.composer4 = track?.composer4 || '';
+          baseMeta.composers = track?.composers || [];
+          li._meta = baseMeta;
           playlistTracksList.appendChild(li);
 
           if (
@@ -923,6 +1131,7 @@
               btnPlay.textContent = '▶ Play';
               btnPlay.classList.remove('btn-accent');
             }
+            setNowPlayingFromRow(li, previousPlaylistState.playing);
           }
         });
 
@@ -951,6 +1160,7 @@
         playlistTracksEmpty.hidden = playlistTracksCollapsed || count > 0;
         playlistTracksEmpty.textContent = 'No tracks in this playlist yet.';
       }
+      syncPlaylistOnlyCurrent();
     }
 
     async function deletePlaylistOnServer(id){
@@ -996,6 +1206,12 @@
         activePlaylistId = playlists[0]?.id || null;
       } else {
         activePlaylistId = null;
+      }
+      if (nowPlayingInfo.meta && nowPlayingInfo.meta.playlistId === playlist.id) {
+        try { player.pause(); } catch {}
+        updateButtonsForStop();
+        currentSrc = '';
+        clearNowPlaying();
       }
       playlistTracksCollapsed = false;
       renderPlaylistsPanel();
@@ -2135,6 +2351,18 @@
         li._src = playableSrc;
         li._btn = btnPlay;
         li._card = albumCard;
+        li._playlist = null;
+        const baseMetaAlbum = { ...t };
+        baseMetaAlbum.trackName = t.name || `Track ${idx + 1}`;
+        baseMetaAlbum.trackArtist = t.trackArtist || album.artist || '';
+        baseMetaAlbum.albumTitle = album.title || '';
+        baseMetaAlbum.albumArtist = album.artist || '';
+        baseMetaAlbum.playlistId = null;
+        baseMetaAlbum.playlistName = '';
+        baseMetaAlbum.picture = album.picture || '';
+        baseMetaAlbum.source = 'album';
+        baseMetaAlbum.catalogue = album.catalogue || '';
+        li._meta = baseMetaAlbum;
         li._validated = false;
         li._valid = null;
         li._validating = false;
@@ -2317,7 +2545,57 @@
     if (togglePlaylistTracksButton) {
       togglePlaylistTracksButton.addEventListener('click', () => {
         playlistTracksCollapsed = !playlistTracksCollapsed;
+        if (playlistTracksCollapsed && playlistTracksSection) playlistTracksSection.classList.remove('only-current');
         renderPlaylistTracks();
+      });
+    }
+    if (nowPlayingCollapseButton) {
+      nowPlayingCollapseButton.addEventListener('click', () => {
+        nowPlayingCollapsed = !nowPlayingCollapsed;
+        updateNowPlayingUI();
+      });
+    }
+    if (nowPlayingToggleButton) {
+      nowPlayingToggleButton.addEventListener('click', () => {
+        if (!nowPlayingInfo.meta) return;
+        const meta = nowPlayingInfo.meta;
+        if (player.paused) {
+          if (!currentRow && meta.playlistId && meta.playlistTrackId && playlistTracksList) {
+            const candidate = playlistTracksList.querySelector(`[data-track-id="${meta.playlistTrackId}"]`);
+            if (candidate) {
+              currentRow = candidate;
+              currentBtn = candidate._btn || null;
+            }
+          }
+          if (meta.src && player.src !== meta.src) {
+            player.src = meta.src;
+            currentSrc = meta.src;
+            player.currentTime = 0;
+          }
+          player.play()
+            .then(() => {
+              if (currentRow) {
+                setNowPlayingFromRow(currentRow, true);
+                if (currentRow._btn) {
+                  currentBtn = currentRow._btn;
+                  currentBtn.disabled = false;
+                  currentBtn.textContent = '⏸ Pause';
+                  currentBtn.classList.add('btn-accent');
+                }
+                currentRow.classList.remove('loading');
+                currentRow.classList.add('playing');
+                updateProgressUI();
+              } else {
+                setNowPlayingFromRow({ _meta: meta, _src: meta.src }, true);
+              }
+            })
+            .catch((err) => {
+              console.warn('Resume playback failed:', err);
+              window.alert('Unable to resume playback.');
+            });
+        } else {
+          player.pause();
+        }
       });
     }
 
@@ -2547,6 +2825,7 @@
       currentSrc = src;
 
       updateButtonsForStop();
+      setNowPlayingFromRow(row, false);
 
       currentBtn = btn;
       currentRow = row;
@@ -2573,10 +2852,12 @@
           btn.classList.add('btn-accent');
           updateProgressUI();
           scheduleNextTrackPreload(currentRow);
+          setNowPlayingFromRow(row, true);
         })
         .catch((err) => {
           console.warn('Playback error:', err);
           updateButtonsForStop();
+          markNowPlayingInactive();
         });
         }
     function updateButtonsForStop(){
@@ -2590,13 +2871,14 @@
         currentBtn.classList.remove('btn-accent');
       }
       currentBtn = null; currentRow = null;
+      markNowPlayingInactive();
         }
     player.addEventListener('ended', () => {
       if (currentRow && currentRow.nextElementSibling && currentRow.nextElementSibling._src) {
         const nextLi = currentRow.nextElementSibling;
         handlePlay(nextLi._btn, nextLi, nextLi._src);
       } else {
-        updateButtonsForStop(); currentSrc=''; updateProgressUI();
+        updateButtonsForStop(); currentSrc=''; updateProgressUI(); markNowPlayingInactive();
       }
         });
     player.addEventListener('timeupdate', () => { updateProgressUI(); });
@@ -2607,7 +2889,11 @@
         currentBtn.classList.remove('btn-accent');
         if (currentRow) currentRow.classList.remove('playing');
       }
+      markNowPlayingInactive();
         });
+    player.addEventListener('play', () => {
+      if (currentRow) setNowPlayingFromRow(currentRow, true);
+    });
 
     /* ================= Lazy-load FM rows ================= */
     async function loadMore(q){
