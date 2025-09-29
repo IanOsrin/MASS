@@ -1089,6 +1089,17 @@ app.get('/api/album', async (req, res) => {
   }
 });
 
+if (FM_HOST && FM_DB && FM_USER && FM_PASS) {
+  try {
+    await ensureToken();
+    console.log('[MASS] FileMaker token primed');
+  } catch (err) {
+    console.warn('[MASS] Initial FileMaker login failed:', err?.message || err);
+  }
+} else {
+  console.warn('[MASS] Skipping initial FileMaker login; missing FM environment variables');
+}
+
 app.listen(PORT, HOST, () => {
   console.log(`[MASS] listening on http://${HOST}:${PORT}`);
 });

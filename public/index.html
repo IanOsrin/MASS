@@ -146,6 +146,9 @@
     .now-playing-controls{display:flex;align-items:center;gap:8px;}
     .now-playing-meta-buttons{display:flex;flex-direction:column;align-items:flex-start;gap:4px;}
     .now-playing-meta-buttons .btn.small{padding:5px 8px;font-size:11px;}
+    .now-playing-meta-list{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-top:2px;}
+    .now-playing-meta-line{color:#dcdcdc;line-height:1.3;}
+    .now-playing-meta-line strong{color:#fff;font-weight:600;margin-right:4px;}
     .now-playing-status{font-size:11px;color:var(--muted);}
     .now-playing-controls .btn.small{padding:6px 10px;font-size:12px;}
     .now-playing.collapsed .now-playing-body,
@@ -428,6 +431,7 @@
     const nowPlayingSubtitle = document.getElementById('nowPlayingSubtitle');
     const nowPlayingSource = document.getElementById('nowPlayingSource');
     const nowPlayingStatus = document.getElementById('nowPlayingStatus');
+    const nowPlayingMetaButtons = document.getElementById('nowPlayingMetaButtons');
     const nowPlayingToggleButton = document.getElementById('nowPlayingToggle');
     const nowPlayingCollapseButton = document.getElementById('nowPlayingCollapse');
     const playlistTracksSection = document.getElementById('playlistTracksSection');
@@ -591,6 +595,7 @@
       if (!nowPlayingCard) return;
       const meta = nowPlayingInfo.meta;
       if (!meta) {
+        if (nowPlayingMetaButtons) nowPlayingMetaButtons.innerHTML = '';
         nowPlayingCard.hidden = true;
         return;
       }
@@ -606,6 +611,33 @@
         if (meta.playlistName) parts.push(`Playlist • ${meta.playlistName}`);
         if (meta.albumTitle) parts.push(meta.playlistName ? meta.albumTitle : `Album • ${meta.albumTitle}`);
         nowPlayingSource.textContent = parts.join(' • ');
+      }
+
+      if (nowPlayingMetaButtons) {
+        nowPlayingMetaButtons.innerHTML = '';
+        const infoButton = document.createElement('button');
+        infoButton.type = 'button';
+        infoButton.className = 'btn small info-more';
+        infoButton.setAttribute('aria-label', 'More track info');
+        infoButton.innerHTML = '<span aria-hidden="true">⋮</span>';
+        infoButton.addEventListener('click', () => openTrackInfoModal(meta, infoButton));
+        nowPlayingMetaButtons.appendChild(infoButton);
+
+        const details = collectTrackMetadata(meta);
+        if (details.length) {
+          const list = document.createElement('div');
+          list.className = 'now-playing-meta-list';
+          details.forEach(({ label, value }) => {
+            const line = document.createElement('div');
+            line.className = 'now-playing-meta-line';
+            const key = document.createElement('strong');
+            key.textContent = `${label}:`;
+            line.appendChild(key);
+            line.appendChild(document.createTextNode(` ${value}`));
+            list.appendChild(line);
+          });
+          nowPlayingMetaButtons.appendChild(list);
+        }
       }
 
       if (nowPlayingStatus) nowPlayingStatus.textContent = nowPlayingInfo.isPlaying ? 'Playing' : 'Paused';
@@ -2181,18 +2213,14 @@
       trackInfoFocusables = [];
         }
 
-    function openTrackInfoModal(track, trigger) {
-      if (!track) return;
-      closeTrackInfoModal({ suppressFocus: true });
-      trackInfoReturnFocus = trigger || null;
-
+    function collectTrackMetadata(track){
+      if (!track) return [];
       const entries = [];
       const pushEntry = (label, value) => {
         if (value === undefined || value === null) return;
         const text = String(value).trim();
         if (text) entries.push({ label, value: text });
       };
-
       pushEntry('Producer', track.producer);
       pushEntry('Track Artist', track.trackArtist);
       const composerPartsSet = new Set([
@@ -2213,6 +2241,15 @@
       pushEntry('Language', track.language);
       pushEntry('Genre', track.genre);
       pushEntry('ISRC', track.isrc);
+      return entries;
+        }
+
+    function openTrackInfoModal(track, trigger) {
+      if (!track) return;
+      closeTrackInfoModal({ suppressFocus: true });
+      trackInfoReturnFocus = trigger || null;
+
+      const entries = collectTrackMetadata(track);
 
       if (entries.length) {
         const dl = document.createElement('dl');
