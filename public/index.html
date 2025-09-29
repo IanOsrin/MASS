@@ -91,7 +91,7 @@
     .playlists-header{display:flex;align-items:center;gap:12px;justify-content:space-between;}
     .playlists-header h2{margin:0;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);}
     .playlists-list{display:flex;flex-direction:column;gap:8px;}
-    .playlist-pill{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#1b1c20;cursor:pointer;min-width:0;transition:transform .15s ease,box-shadow .15s ease;font-size:12px;}
+    .playlist-pill{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#1b1c20;color:#f5f5f5;cursor:pointer;min-width:0;transition:transform .15s ease,box-shadow .15s ease;font-size:12px;}
     .playlist-pill:hover{transform:translateY(-1px);box-shadow:0 10px 20px rgba(0,0,0,.25);}
     .playlist-pill.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(98,245,169,.4);}
     .playlist-pill .name{font-weight:600;font-size:13px;}
@@ -150,6 +150,8 @@
     .now-playing-meta-line{color:#dcdcdc;line-height:1.3;}
     .now-playing-meta-line strong{color:#fff;font-weight:600;margin-right:4px;}
     .now-playing-status{font-size:11px;color:var(--muted);}
+    .now-playing-progress{width:100%;height:6px;background:#262830;border-radius:4px;overflow:hidden;position:relative;margin-top:6px;}
+    .now-playing-progress .fill{position:absolute;inset:0;background:linear-gradient(90deg,var(--accent),#6bd3ff);width:0%;border-radius:4px;transition:width .1s linear;}
     .now-playing-controls .btn.small{padding:6px 10px;font-size:12px;}
     .now-playing.collapsed .now-playing-body,
     .now-playing.collapsed .now-playing-controls{display:none;}
@@ -303,6 +305,9 @@
             <div id="nowPlayingMetaButtons" class="now-playing-meta-buttons"></div>
             <button id="nowPlayingToggle" type="button" class="btn small">Play</button>
           </div>
+          <div class="now-playing-progress">
+            <div id="nowPlayingProgressFill" class="fill"></div>
+          </div>
         </section>
         <section id="playlistTracksSection" class="playlist-tracks" hidden>
           <div class="playlists-header">
@@ -434,6 +439,7 @@
     const nowPlayingMetaButtons = document.getElementById('nowPlayingMetaButtons');
     const nowPlayingToggleButton = document.getElementById('nowPlayingToggle');
     const nowPlayingCollapseButton = document.getElementById('nowPlayingCollapse');
+    const nowPlayingProgressFill = document.getElementById('nowPlayingProgressFill');
     const playlistTracksSection = document.getElementById('playlistTracksSection');
     const playlistTracksTitle = document.getElementById('playlistTracksTitle');
     const playlistTracksMeta = document.getElementById('playlistTracksMeta');
@@ -595,6 +601,7 @@
       if (!nowPlayingCard) return;
       const meta = nowPlayingInfo.meta;
       if (!meta) {
+        if (nowPlayingProgressFill) nowPlayingProgressFill.style.width = '0%';
         if (nowPlayingMetaButtons) nowPlayingMetaButtons.innerHTML = '';
         nowPlayingCard.hidden = true;
         return;
@@ -609,7 +616,8 @@
       if (nowPlayingSource) {
         const parts = [];
         if (meta.playlistName) parts.push(`Playlist • ${meta.playlistName}`);
-        if (meta.albumTitle) parts.push(meta.playlistName ? meta.albumTitle : `Album • ${meta.albumTitle}`);
+        if (meta.albumTitle) parts.push(meta.playlistName ? `Album • ${meta.albumTitle}` : meta.albumTitle);
+        if (meta.catalogue) parts.push(`#${meta.catalogue}`);
         nowPlayingSource.textContent = parts.join(' • ');
       }
 
@@ -645,6 +653,10 @@
       if (nowPlayingToggleButton) {
         nowPlayingToggleButton.textContent = nowPlayingInfo.isPlaying ? 'Pause' : 'Play';
         nowPlayingToggleButton.disabled = !meta.src;
+      }
+
+      if (nowPlayingProgressFill) {
+        nowPlayingProgressFill.style.width = '0%';
       }
 
       if (nowPlayingCollapseButton) {
@@ -880,16 +892,11 @@
           if (pl.id === activePlaylistId) pill.classList.add('active');
           pill.dataset.playlistId = pl.id || '';
 
-          const nameEl = document.createElement('span');
-          nameEl.className = 'name';
-          nameEl.textContent = pl.name || 'Untitled playlist';
-          const metaEl = document.createElement('span');
-          metaEl.className = 'meta';
           const count = Array.isArray(pl.tracks) ? pl.tracks.length : 0;
-          metaEl.textContent = count ? `${count} track${count === 1 ? '' : 's'}` : 'Empty';
+          const countLabel = count ? `${count} track${count === 1 ? '' : 's'}` : 'Empty';
+          const label = pl.name ? `${pl.name} • ${countLabel}` : countLabel;
+          pill.textContent = label;
 
-          pill.appendChild(nameEl);
-          pill.appendChild(metaEl);
           pill.addEventListener('click', () => {
             if (pl.id === activePlaylistId) setActivePlaylist(null);
             else setActivePlaylist(pl.id);
@@ -943,8 +950,10 @@
 
       if (playlistTracksTitle) playlistTracksTitle.textContent = playlist.name || 'Playlist';
       if (playlistTracksMeta) {
-        const base = count ? `${count} track${count === 1 ? '' : 's'}` : 'No tracks yet';
-        playlistTracksMeta.textContent = playlistTracksCollapsed && count ? `${base} • hidden` : base;
+        const countText = count ? `${count} track${count === 1 ? '' : 's'}` : 'No tracks yet';
+        let display = countText;
+        if (playlistTracksCollapsed && count) display += ' • hidden';
+        playlistTracksMeta.textContent = display;
         playlistTracksMeta.hidden = false;
       }
 
@@ -1003,16 +1012,20 @@
           const btnPlay = document.createElement('button');
           btnPlay.className = 'btn small';
           const srcCandidate = track?.resolvedSrc || track?.mp3 || '';
+          const audioField = typeof track?.audioField === 'string' ? track.audioField.trim() : '';
+          const artworkField = typeof track?.artworkField === 'string' ? track.artworkField.trim() : '';
           const playableCandidate = resolvePlayableSrc(srcCandidate || track?.mp3 || '');
           const playableSrc = canValidateAudioSrc(playableCandidate) ? playableCandidate : '';
           li._src = playableSrc;
           li._btn = btnPlay;
           li._card = null;
           li._playlist = playlist.id;
+          li._audioField = audioField;
           li._valid = null;
           li._validated = false;
           li._validating = false;
           if (track?.id) li.dataset.trackId = track.id;
+          else if (track?.trackRecordId) li.dataset.trackId = track.trackRecordId;
 
           if (playableSrc) {
             btnPlay.textContent = '▶ Play';
@@ -1024,12 +1037,64 @@
             btnPlay.classList.add('btn-error');
           }
 
-          btnPlay.addEventListener('click', () => {
+          btnPlay.addEventListener('click', async () => {
             if (!li._src) {
               window.alert('This track has no playable audio source.');
               return;
             }
+            if (li._valid === false) {
+              btnPlay.textContent = 'Unavailable';
+              btnPlay.disabled = true;
+              btnPlay.classList.add('btn-error');
+              return;
+            }
+
+            if (li._playlist && track?.trackRecordId) {
+              const previousLabel = btnPlay.textContent;
+              btnPlay.disabled = true;
+              btnPlay.textContent = 'Refreshing…';
+              const oldKey = String(li._src || '').trim();
+              if (oldKey) audioProbeCache.delete(oldKey);
+              const refreshed = await refreshTrackContainerSource(li, {
+                recordId: track.trackRecordId,
+                audioField: audioField,
+                candidates: AUDIO_FIELD_CANDIDATES,
+                forceRefresh: true
+              });
+              btnPlay.disabled = false;
+              btnPlay.textContent = previousLabel;
+              if (refreshed?.notFound) {
+                li._src = '';
+                li._meta.src = '';
+                li._valid = false;
+                btnPlay.textContent = 'Unavailable';
+                btnPlay.disabled = true;
+                btnPlay.classList.add('btn-error');
+                return;
+              }
+              if (refreshed && refreshed.src) {
+                const newSrc = refreshed.src;
+                li._src = newSrc;
+                li._meta.src = newSrc;
+                if (refreshed.audioField) {
+                  li._audioField = refreshed.audioField;
+                  li._meta.audioField = refreshed.audioField;
+                }
+                if (track) {
+                  track.resolvedSrc = refreshed.src;
+                  track.mp3 = refreshed.rawUrl;
+                  if (refreshed.audioField) track.audioField = refreshed.audioField;
+                }
+              }
+            }
+
             handlePlay(btnPlay, li, li._src);
+
+            if (li._valid === true || li._validating) return;
+            li._validating = true;
+            validateAudio(li, li._src, { optimistic: true }).finally(() => {
+              li._validating = false;
+            });
           });
 
           playControl.appendChild(btnPlay);
@@ -1135,6 +1200,10 @@
           baseMeta.source = 'playlist';
           baseMeta.catalogue = track?.catalogue || '';
           baseMeta.playlistTrackId = track?.id || '';
+          baseMeta.trackRecordId = track?.trackRecordId || '';
+          baseMeta.audioField = audioField;
+          baseMeta.pictureField = artworkField;
+          baseMeta.src = playableSrc;
           baseMeta.producer = track?.producer || '';
           baseMeta.composer1 = track?.composer1 || '';
           baseMeta.composer2 = track?.composer2 || '';
@@ -1300,7 +1369,9 @@
         seq: Number.isFinite(track.seq) ? Number(track.seq) : null,
         mp3: track.mp3 || '',
         resolvedSrc: playableSrc || '',
-        artwork: album?.picture || ''
+        artwork: album?.picture || '',
+        audioField: track.mp3Field || track.audioField || '',
+        artworkField: album?.pictureField || track.pictureField || ''
       };
 
       try {
@@ -1438,13 +1509,29 @@
     const AUDIO_PROBE_TTL = 10 * 60 * 1000;
     let renderQueued = false;
     const queueTask = typeof queueMicrotask === 'function' ? queueMicrotask : (fn) => Promise.resolve().then(fn);
+    const containerCache = new Map(); // recordId|field -> cached container
 
     // Field helper mappings (adjust here if exact names differ)
+    const AUDIO_FIELD_CANDIDATES = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
+    const ARTWORK_FIELD_CANDIDATES = ['Artwork::Picture', 'Artwork Picture', 'Picture'];
+
+    function pickFieldValue(source, candidates){
+      if (!source) return { value: '', field: '' };
+      for (const candidate of candidates) {
+        if (!Object.prototype.hasOwnProperty.call(source, candidate)) continue;
+        const raw = source[candidate];
+        if (raw === undefined || raw === null) continue;
+        const str = typeof raw === 'string' ? raw.trim() : String(raw).trim();
+        if (str) return { value: str, field: candidate };
+      }
+      return { value: '', field: '' };
+        }
+
     function fCatalogue(f){
       return f['Album Catalogue Number'] || f['Album Catalog Number'] || f['Album Catalogue No'] || f['Catalogue'] || '';
         }
     function fPicture(f){
-      return f['Artwork::Picture'] || f['Picture'] || f['Artwork Picture'] || '';
+      return pickFieldValue(f, ARTWORK_FIELD_CANDIDATES).value;
         }
     const F_TRACK  = 'Track Name';
     const F_GENRE  = 'Local Genre';
@@ -1524,7 +1611,7 @@
       return f['Album Artist'] || f['Tape Files::Album Artist'] || f['Track Artist'] || f['Artist'] || '';
         }
     function fMp3(f){
-      return f['mp3'] || f['MP3'] || f['Audio File'] || f['Audio::mp3'] || '';
+      return pickFieldValue(f, AUDIO_FIELD_CANDIDATES).value;
         }
     function fLang(f){
       return f['Language'] || f['Language Code'] || '';
@@ -1629,6 +1716,89 @@
       }
     }
 
+    function updatePlaylistTrackEntry(meta, update){
+      if (!meta || !meta.playlistId || !meta.playlistTrackId) return;
+      const playlist = playlists.find((p) => p && p.id === meta.playlistId);
+      if (!playlist || !Array.isArray(playlist.tracks)) return;
+      const entry = playlist.tracks.find((t) => t && t.id === meta.playlistTrackId);
+      if (!entry) return;
+      if (update.resolvedSrc) {
+        entry.resolvedSrc = update.resolvedSrc;
+      }
+      if (update.rawUrl) {
+        entry.mp3 = update.rawUrl;
+      }
+      if (update.audioField) entry.audioField = update.audioField;
+    }
+
+        async function refreshTrackContainerSource(row, options = {}){
+      const meta = row?._meta || {};
+      const recordId = options.recordId || meta.trackRecordId || meta.recordId || '';
+      if (!recordId) return null;
+
+      const requestedField = options.audioField || meta.audioField || '';
+      const cacheKey = `${recordId}::${requestedField || 'default'}`;
+      const now = Date.now();
+      const CACHE_TTL = 30 * 60 * 1000;
+      const useCache = !options.forceRefresh;
+      const cached = useCache ? containerCache.get(cacheKey) : null;
+      if (cached && (now - cached.ts) < CACHE_TTL) {
+        if (cached.notFound) return { notFound: true };
+        if (row) {
+          row._src = cached.resolvedSrc;
+          if (row._meta) {
+            row._meta.src = cached.resolvedSrc;
+            if (cached.audioField) row._meta.audioField = cached.audioField;
+            updatePlaylistTrackEntry(row._meta, { rawUrl: cached.rawUrl, resolvedSrc: cached.resolvedSrc, audioField: cached.audioField });
+          }
+          row._lastContainerRefresh = now;
+        }
+        return { ...cached };
+      }
+
+      if (options.forceRefresh) {
+        containerCache.delete(cacheKey);
+      }
+
+      const params = new URLSearchParams();
+      if (requestedField) {
+        params.set('field', requestedField);
+      } else if (Array.isArray(options.candidates) && options.candidates.length) {
+        params.set('candidates', options.candidates.join(','));
+      }
+
+      try {
+        const query = params.toString();
+        const endpoint = query
+          ? `/api/track/${encodeURIComponent(recordId)}/container?${query}`
+          : `/api/track/${encodeURIComponent(recordId)}/container`;
+        const res = await fetch(endpoint, { headers: { 'Accept': 'application/json' } });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json?.url) {
+          return null;
+        }
+        const rawUrl = json.url;
+        const field = json?.field || requestedField || '';
+        const resolvedSrc = resolvePlayableSrc(rawUrl);
+
+        if (row) {
+          row._src = resolvedSrc;
+          if (row._meta) {
+            row._meta.src = resolvedSrc;
+            if (field) row._meta.audioField = field;
+            updatePlaylistTrackEntry(row._meta, { rawUrl, resolvedSrc, audioField: field });
+          }
+          row._lastContainerRefresh = now;
+        }
+
+        containerCache.set(cacheKey, { rawUrl, resolvedSrc, audioField: field, ts: now });
+        return { src: resolvedSrc, rawUrl, audioField: field };
+      } catch (err) {
+        console.warn('[MASS] Failed to refresh container source', err);
+        return null;
+      }
+    }
+
     function findNextPlayableRow(row){
       if (!row) return null;
       let pointer = row.nextElementSibling;
@@ -1664,7 +1834,8 @@
           method: 'GET',
           headers: { Range: 'bytes=0-4095' },
           signal: controller.signal,
-          cache: 'no-store'
+          cache: 'no-store',
+          credentials: 'include'
         });
       } catch (err) {
         outcome = { ok: false, reason: err?.name === 'AbortError' ? 'Timeout' : 'Unavailable', ts: Date.now() };
@@ -1683,6 +1854,9 @@
       let buffer;
       try {
         if (!response || !response.ok) {
+          if (response && response.status === 401) {
+            console.warn('[MASS] Audio probe received 401', src);
+          }
           outcome = { ok: false, reason: `HTTP ${response ? response.status : 'error'}`, ts: Date.now() };
         } else {
           const type = (response.headers.get('content-type') || '').toLowerCase();
@@ -1902,9 +2076,39 @@
       });
       if (!applied) return;
 
-      const outcome = await probeAudioSource(src);
+      let currentSrcKey = key;
+      let outcome = await probeAudioSource(src);
+
+      if (!outcome.ok && /401/.test(String(outcome.reason || '')) && row) {
+        const refreshed = await refreshTrackContainerSource(row, {
+          recordId: row._meta?.trackRecordId || row._meta?.recordId,
+          audioField: row._meta?.audioField || row._audioField || '',
+          candidates: AUDIO_FIELD_CANDIDATES,
+          forceRefresh: true
+        });
+        if (refreshed?.notFound) {
+          row._src = '';
+          setInvalid('Unavailable');
+          row._validating = false;
+          return;
+        }
+        if (refreshed && refreshed.src) {
+          const newSrc = refreshed.src;
+          currentSrcKey = String(newSrc || '').trim();
+          audioProbeCache.delete(key);
+          key = currentSrcKey;
+          src = newSrc;
+          outcome = await probeAudioSource(newSrc);
+        }
+      }
+
       if (outcome.ok) {
         setValid();
+        if (optimistic && currentRow === row && player.paused && row._src) {
+          queueTask(() => {
+            if (row._btn) handlePlay(row._btn, row, row._src);
+          });
+        }
       } else {
         setInvalid(outcome.reason || 'Unavailable');
       }
@@ -2093,9 +2297,13 @@
         const title = normTitle(fTitle(f) || '(no album)');
         const artist= normTitle(fArtist(f) || '');
         const trackArtist = normTitle(f['Track Artist'] || f['Tape Files::Track Artist'] || '');
-        const pic   = (fPicture(f) || '').trim();
+        const pictureInfo = pickFieldValue(f, ARTWORK_FIELD_CANDIDATES);
+        const pic   = String(pictureInfo.value || '').trim();
+        const pictureField = pictureInfo.field || '';
         const track = normTitle(f[F_TRACK] || '');
-        const mp3   = fMp3(f) || '';
+        const mp3Info = pickFieldValue(f, AUDIO_FIELD_CANDIDATES);
+        const mp3   = mp3Info.value || '';
+        const mp3Field = mp3Info.field || '';
         const genre = normTitle(f[F_GENRE] || '');
         const comps = composersFrom(f).map(value => normTitle(value || ''));
         const prod  = normTitle(f['Producer'] || '');
@@ -2110,7 +2318,9 @@
           byCat.set(cat, {
             catalogue: cat === '__NO_CAT__' ? '' : cat,
             titles: new Map(), // keyTitle -> {raw,count}
-            artist, picture: pic || '',
+            artist,
+            picture: pic || '',
+            pictureField: pictureField || '',
             tracks: []
           });
         }
@@ -2120,7 +2330,10 @@
         const entry = g.titles.get(kt) || { raw: title, count: 0 };
         entry.count += 1; g.titles.set(kt, entry);
 
-        if(!g.picture && pic) g.picture = pic;
+        if(!g.picture && pic) {
+          g.picture = pic;
+          g.pictureField = pictureField;
+        }
         if(!g.artist && artist) g.artist = artist;
 
         // keep all tracks for title logic; mp3 validity filtered later
@@ -2129,11 +2342,13 @@
           g.tracks.push({
             name: track,
             mp3,
+            mp3Field,
             genre,
             composers: comps,
             producer: prod,
             language: lang,
             trackArtist,
+            pictureField,
             composer1,
             composer2,
             composer3,
@@ -2189,6 +2404,7 @@
           title: displayTitle,
           artist: g.artist,
           picture: trimmedPicture,
+          pictureField: g.pictureField || '',
           tracks: tracksForDisplay,
           hasPlayable,
           key: albumKey
@@ -2389,6 +2605,7 @@
         li._btn = btnPlay;
         li._card = albumCard;
         li._playlist = null;
+        li._audioField = t.mp3Field || '';
         const baseMetaAlbum = { ...t };
         baseMetaAlbum.trackName = t.name || `Track ${idx + 1}`;
         baseMetaAlbum.trackArtist = t.trackArtist || album.artist || '';
@@ -2399,6 +2616,10 @@
         baseMetaAlbum.picture = album.picture || '';
         baseMetaAlbum.source = 'album';
         baseMetaAlbum.catalogue = album.catalogue || '';
+        baseMetaAlbum.audioField = t.mp3Field || '';
+        baseMetaAlbum.trackRecordId = t.recordId || '';
+        baseMetaAlbum.pictureField = album.pictureField || t.pictureField || '';
+        baseMetaAlbum.src = playableSrc;
         li._meta = baseMetaAlbum;
         li._validated = false;
         li._valid = null;
@@ -2845,6 +3066,9 @@
       const dur = player.duration, cur = player.currentTime;
       const pct = (dur && isFinite(dur)) ? Math.min(100, Math.max(0, (cur/dur)*100)) : 0;
       if (!(currentRow && currentRow._seeking)) { seek.value = String(pct); seek.style.setProperty('--fill', pct + '%'); }
+      if (nowPlayingProgressFill) {
+        nowPlayingProgressFill.style.width = pct + '%';
+      }
       time.textContent = fmtTime(cur) + ' / ' + fmtTime(dur);
         }
 
@@ -2893,10 +3117,15 @@
         })
         .catch((err) => {
           console.warn('Playback error:', err);
+          try {
+            player.removeAttribute('src');
+            player.load();
+          } catch {}
+          currentSrc = '';
           updateButtonsForStop();
           markNowPlayingInactive();
         });
-        }
+    }
     function updateButtonsForStop(){
       if (currentRow) {
         currentRow.classList.remove('playing');
@@ -2909,15 +3138,123 @@
       }
       currentBtn = null; currentRow = null;
       markNowPlayingInactive();
-        }
-    player.addEventListener('ended', () => {
-      if (currentRow && currentRow.nextElementSibling && currentRow.nextElementSibling._src) {
-        const nextLi = currentRow.nextElementSibling;
-        handlePlay(nextLi._btn, nextLi, nextLi._src);
-      } else {
-        updateButtonsForStop(); currentSrc=''; updateProgressUI(); markNowPlayingInactive();
+      if (nowPlayingProgressFill) {
+        nowPlayingProgressFill.style.width = '0%';
       }
-        });
+        }
+    function playNextTrackFromPlaylistMeta(meta){
+      if (!meta || !meta.playlistId) return false;
+      const playlist = playlists.find((p) => p && p.id === meta.playlistId);
+      if (!playlist) return false;
+      const tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+      if (!tracks.length) return false;
+
+      const currentIdx = tracks.findIndex((t) => {
+        if (!t) return false;
+        if (meta.playlistTrackId && t.id === meta.playlistTrackId) return true;
+        if (meta.trackRecordId && t.trackRecordId === meta.trackRecordId) return true;
+        return false;
+      });
+
+      let nextCandidate = null;
+      for (let i = currentIdx + 1; i < tracks.length; i++) {
+        const candidate = tracks[i];
+        if (!candidate) continue;
+        const raw = candidate.resolvedSrc || candidate.mp3 || '';
+        if (canValidateAudioSrc(resolvePlayableSrc(raw))) {
+          nextCandidate = candidate;
+          break;
+        }
+      }
+      if (!nextCandidate) return false;
+
+      if (activePlaylistId !== playlist.id) {
+        activePlaylistId = playlist.id;
+        playlistTracksCollapsed = false;
+        renderPlaylistsPanel();
+      } else if (!playlistTracksList || !playlistTracksList.children.length) {
+        renderPlaylistTracks();
+      }
+
+      if (!playlistTracksList) return false;
+
+      const selectors = [];
+      if (nextCandidate.id) selectors.push('[data-track-id="' + nextCandidate.id + '"]');
+      if (nextCandidate.trackRecordId) selectors.push('[data-track-id="' + nextCandidate.trackRecordId + '"]');
+
+      let nextRow = null;
+      for (const sel of selectors) {
+        nextRow = playlistTracksList.querySelector(sel);
+        if (nextRow) break;
+      }
+      if (!nextRow) {
+        nextRow = playlistTracksList.querySelector('.playlist-track');
+        while (nextRow && !nextRow._src) {
+          nextRow = findNextPlayableRow(nextRow);
+        }
+      }
+
+      if (nextRow && nextRow._btn && nextRow._src) {
+        handlePlay(nextRow._btn, nextRow, nextRow._src);
+        return true;
+      }
+      return false;
+        }
+
+    function playNextPlayableFrom(anchor){
+      if (!anchor) return false;
+      let candidate = findNextPlayableRow(anchor);
+      while (candidate && !candidate._src) {
+        candidate = findNextPlayableRow(candidate);
+      }
+      if (candidate && candidate._btn && candidate._src) {
+        handlePlay(candidate._btn, candidate, candidate._src);
+        return true;
+      }
+      return false;
+        }
+
+    player.addEventListener('ended', () => {
+      const nextLi = currentRow ? findNextPlayableRow(currentRow) : null;
+      if (nextLi && nextLi._btn && nextLi._src) {
+        handlePlay(nextLi._btn, nextLi, nextLi._src);
+        return;
+      }
+
+      // Fallback: attempt to locate the next playlist item if the DOM was re-rendered
+      if (!nextLi && nowPlayingInfo.meta?.playlistId && playlistTracksList) {
+        const selector = nowPlayingInfo.meta.playlistTrackId
+          ? `[data-track-id="${nowPlayingInfo.meta.playlistTrackId}"]`
+          : null;
+        let anchor = selector ? playlistTracksList.querySelector(selector) : null;
+        if (!anchor && currentRow && currentRow._playlist === nowPlayingInfo.meta.playlistId) {
+          anchor = currentRow;
+        }
+        if (!anchor) {
+          const first = playlistTracksList.querySelector('.playlist-track');
+          anchor = first || null;
+        }
+        if (anchor) {
+          let candidate = findNextPlayableRow(anchor);
+          while (candidate && !candidate._src) {
+            candidate = findNextPlayableRow(candidate);
+          }
+          if (candidate && candidate._btn && candidate._src) {
+            handlePlay(candidate._btn, candidate, candidate._src);
+            return;
+          }
+        }
+      }
+      if (playNextTrackFromPlaylistMeta(nowPlayingInfo.meta)) {
+        return;
+      }
+
+      updateButtonsForStop();
+      currentSrc = '';
+      updateProgressUI();
+      markNowPlayingInactive();
+      if (nowPlayingProgressFill) nowPlayingProgressFill.style.width = '0%';
+    });
     player.addEventListener('timeupdate', () => { updateProgressUI(); });
     player.addEventListener('loadedmetadata', () => { updateProgressUI(); });
     player.addEventListener('pause', () => {
@@ -2930,6 +3267,14 @@
         });
     player.addEventListener('play', () => {
       if (currentRow) setNowPlayingFromRow(currentRow, true);
+    });
+    player.addEventListener('error', () => {
+      const err = player.error;
+      if (err) {
+        console.warn('[MASS] Audio element error', { code: err.code, message: err.message });
+      } else {
+        console.warn('[MASS] Audio element encountered an unknown error');
+      }
     });
 
     /* ================= Lazy-load FM rows ================= */

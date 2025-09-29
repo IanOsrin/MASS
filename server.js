@@ -58,6 +58,7 @@ const AUTH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 const AUTH_COOKIE_SECURE = process.env.AUTH_COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production';
 const DATA_DIR = path.join(__dirname, 'data');
 const PLAYLISTS_PATH = path.join(DATA_DIR, 'playlists.json');
+const DEFAULT_AUDIO_FIELDS = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
 
 if (!FM_HOST || !FM_DB || !FM_USER || !FM_PASS) {
   console.warn('[MASS] Missing .env values; expected FM_HOST, FM_DB, FM_USER, FM_PASS');
@@ -455,7 +456,9 @@ async function savePlaylists(playlists) {
   try {
     await ensureDataDir();
     const payload = JSON.stringify(Array.isArray(playlists) ? playlists : [], null, 2);
-    await fs.writeFile(PLAYLISTS_PATH, payload, 'utf8');
+    const tempPath = `${PLAYLISTS_PATH}.tmp`;
+    await fs.writeFile(tempPath, payload, 'utf8');
+    await fs.rename(tempPath, PLAYLISTS_PATH);
   } catch (err) {
     console.error('[MASS] Failed to write playlists file:', err);
     throw err;
@@ -661,6 +664,8 @@ app.post('/api/playlists/:playlistId/tracks', async (req, res) => {
       resolvedSrc: typeof payload.resolvedSrc === 'string' ? payload.resolvedSrc.trim() : '',
       seq: typeof payload.seq === 'number' && Number.isFinite(payload.seq) ? payload.seq : null,
       artwork: typeof payload.artwork === 'string' ? payload.artwork.trim() : '',
+      audioField: typeof payload.audioField === 'string' ? payload.audioField.trim() : '',
+      artworkField: typeof payload.artworkField === 'string' ? payload.artworkField.trim() : '',
       addedAt: now
     };
 
@@ -703,6 +708,73 @@ app.delete('/api/playlists/:playlistId', async (req, res) => {
   } catch (err) {
     console.error('[MASS] Delete playlist failed:', err);
     res.status(500).json({ ok: false, error: 'Failed to delete playlist' });
+  }
+});
+
+app.get('/api/track/:recordId/container', async (req, res) => {
+  try {
+    const recordId = (req.params?.recordId || '').toString().trim();
+    if (!recordId) {
+      res.status(400).json({ ok: false, error: 'Record ID required' });
+      return;
+    }
+
+    const layout = (req.query?.layout || FM_LAYOUT || '').toString().trim() || FM_LAYOUT;
+    const requestedField = (req.query?.field || '').toString().trim();
+    const candidateParam = (req.query?.candidates || '').toString().trim();
+    const candidates = candidateParam
+      ? candidateParam.split(',').map((value) => value.trim()).filter(Boolean)
+      : [];
+
+    const record = await fmGetRecordById(layout, recordId);
+    if (!record) {
+      res.status(404).json({ ok: false, error: 'Record not found' });
+      return;
+    }
+
+    const fieldData = record.fieldData || {};
+
+    const getFieldValue = (fieldName) => {
+      if (!fieldName) return '';
+      if (!Object.prototype.hasOwnProperty.call(fieldData, fieldName)) return '';
+      const raw = fieldData[fieldName];
+      if (raw === undefined || raw === null) return '';
+      const str = typeof raw === 'string' ? raw.trim() : String(raw).trim();
+      return str;
+    };
+
+    let chosenField = requestedField;
+    let containerUrl = getFieldValue(chosenField);
+
+    const tryCandidates = (list) => {
+      for (const candidate of list) {
+        const value = getFieldValue(candidate);
+        if (value) {
+          chosenField = candidate;
+          containerUrl = value;
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (!containerUrl && candidates.length) {
+      tryCandidates(candidates);
+    }
+
+    if (!containerUrl) {
+      tryCandidates(DEFAULT_AUDIO_FIELDS);
+    }
+
+    if (!containerUrl) {
+      res.status(404).json({ ok: false, error: 'Container data not found' });
+      return;
+    }
+
+    res.json({ ok: true, url: containerUrl, field: chosenField || requestedField || '' });
+  } catch (err) {
+    console.error('[MASS] Container refresh failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to refresh container' });
   }
 });
 
@@ -868,8 +940,17 @@ app.get('/api/container', async (req, res) => {
     }
 
     if (!upstream.ok && upstream.status !== 206 && upstream.status !== 304) {
-      const detail = `Upstream error: ${upstream.status}`;
-      res.status(upstream.status).send(detail);
+      console.warn('[MASS] Container fetch failed', {
+        status: upstream.status,
+        requiresAuth,
+        url: upstreamUrl.slice(0, 200)
+      });
+      if (upstream.status === 404) {
+        res.status(404).json({ error: 'not_found', status: 404, url: upstreamUrl });
+      } else {
+        const detail = `Upstream error: ${upstream.status}`;
+        res.status(upstream.status).send(detail);
+      }
       return;
     }
 
