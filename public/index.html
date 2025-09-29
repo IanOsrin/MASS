@@ -246,6 +246,22 @@
     .playlist-track .track-name {
       flex: 1;
       min-width: 0;              /* required so text-overflow works inside flex */
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .playlist-track .track-name-artist {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .playlist-track .track-name-title {
+      font-size: 14px;
+      font-weight: 600;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1043,12 +1059,13 @@
 
           const seqLabel = Number.isFinite(track?.seq) ? `${track.seq}. ` : `${idx + 1}. `;
           const trackName = track?.name || `Track ${idx + 1}`;
-          const displayLabel = `${seqLabel}${trackName}`;
+          const artist = (track?.trackArtist || track?.albumArtist || '').trim();
 
           btnPlay.dataset.playLabel = '▶';
           btnPlay.dataset.pauseLabel = '⏸';
-          btnPlay.dataset.playAria = `Play ${trackName}`;
-          btnPlay.dataset.pauseAria = `Pause ${trackName}`;
+          const readable = artist ? `${artist} — ${trackName}` : trackName;
+          btnPlay.dataset.playAria = `Play ${readable}`;
+          btnPlay.dataset.pauseAria = `Pause ${readable}`;
 
           if (playableSrc) {
             btnPlay.textContent = btnPlay.dataset.playLabel;
@@ -1059,7 +1076,7 @@
             btnPlay.textContent = 'No audio';
             btnPlay.disabled = true;
             btnPlay.classList.add('btn-error');
-            btnPlay.setAttribute('aria-label', `Audio unavailable for ${trackName}`);
+            btnPlay.setAttribute('aria-label', `Audio unavailable for ${readable}`);
           }
 
           btnPlay.addEventListener('click', async () => {
@@ -1071,7 +1088,7 @@
               btnPlay.textContent = 'Unavailable';
               btnPlay.disabled = true;
               btnPlay.classList.add('btn-error');
-              btnPlay.setAttribute('aria-label', `Audio unavailable for ${trackName}`);
+              btnPlay.setAttribute('aria-label', `Audio unavailable for ${readable}`);
               return;
             }
 
@@ -1079,7 +1096,7 @@
               const previousLabel = btnPlay.textContent;
               btnPlay.disabled = true;
               btnPlay.textContent = 'Refreshing…';
-              btnPlay.setAttribute('aria-label', `Refreshing audio for ${trackName}`);
+              btnPlay.setAttribute('aria-label', `Refreshing audio for ${readable}`);
               const oldKey = String(li._src || '').trim();
               if (oldKey) audioProbeCache.delete(oldKey);
               const refreshed = await refreshTrackContainerSource(li, {
@@ -1104,7 +1121,7 @@
                 btnPlay.textContent = 'Unavailable';
                 btnPlay.disabled = true;
                 btnPlay.classList.add('btn-error');
-                btnPlay.setAttribute('aria-label', `Audio unavailable for ${trackName}`);
+                btnPlay.setAttribute('aria-label', `Audio unavailable for ${readable}`);
                 return;
               }
               if (refreshed && refreshed.src) {
@@ -1132,19 +1149,35 @@
             });
           });
 
-          const nameEl = document.createElement('span');
-          nameEl.className = 'track-name';
-          nameEl.textContent = displayLabel;
+          const wrapper = document.createElement('span');
+          wrapper.className = 'track-name';
 
-          const tooltipParts = [track?.trackArtist, track?.albumTitle, track?.albumArtist].filter((part) => typeof part === 'string' && part.trim());
+          if (artist) {
+            const artistLine = document.createElement('span');
+            artistLine.className = 'track-name-artist';
+            artistLine.textContent = `${seqLabel}${artist}`;
+            wrapper.appendChild(artistLine);
+
+            const titleLine = document.createElement('span');
+            titleLine.className = 'track-name-title';
+            titleLine.textContent = trackName;
+            wrapper.appendChild(titleLine);
+          } else {
+            const titleLine = document.createElement('span');
+            titleLine.className = 'track-name-title';
+            titleLine.textContent = `${seqLabel}${trackName}`;
+            wrapper.appendChild(titleLine);
+          }
+
+          const tooltipParts = [artist, track?.albumTitle, track?.albumArtist].filter((part) => typeof part === 'string' && part.trim());
           if (tooltipParts.length) {
             const tooltip = tooltipParts.join(' • ');
-            nameEl.title = tooltip;
+            wrapper.title = tooltip;
             li.title = tooltip;
           }
 
           li.appendChild(btnPlay);
-          li.appendChild(nameEl);
+          li.appendChild(wrapper);
 
           const baseMeta = { ...track };
           baseMeta.trackName = trackName;
