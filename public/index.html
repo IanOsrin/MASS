@@ -1554,7 +1554,6 @@
     const audioProbeCache = new Map(); // src -> { ok, reason, ts }
     const albumAudioState = new Map(); // albumKey -> { status, promise?, ts }
     const AUDIO_PROBE_TTL = 10 * 60 * 1000;
-    let renderQueued = false;
     const queueTask = typeof queueMicrotask === 'function' ? queueMicrotask : (fn) => Promise.resolve().then(fn);
     const containerCache = new Map(); // recordId|field -> cached container
 
@@ -1704,15 +1703,6 @@
       if (src.startsWith('/api/container?')) return src;
       if (/^https?:\/\//i.test(src)) return `/api/container?u=${encodeURIComponent(src)}`;
       return src;
-        }
-
-    function scheduleAlbumRender(){
-      if (renderQueued) return;
-      renderQueued = true;
-      queueTask(() => {
-        renderQueued = false;
-        renderAlbumPage();
-      });
         }
 
     function isFresh(entry){
@@ -1972,6 +1962,32 @@
       return false;
         }
 
+    function updateAlbumCardState(album){
+      if (!album) return;
+      const card = album._card;
+      if (!card || !card.isConnected) return;
+
+      const hasPlayable = !!album.hasPlayable;
+      const pending = !!album._pendingValidation;
+
+      card.dataset.pendingTracks = pending ? '1' : '0';
+      card.dataset.validTracks = hasPlayable ? '1' : '0';
+
+      card.classList.toggle('pending-audio', pending);
+
+      if (hasPlayable) {
+        card.dataset.hasAudioCandidates = 'true';
+        card.classList.remove('no-audio');
+        if (card.title === 'No playable audio available') card.removeAttribute('title');
+      } else if (!pending) {
+        card.dataset.hasAudioCandidates = 'false';
+        card.classList.add('no-audio');
+        if (!card.title) card.title = 'No playable audio available';
+      }
+
+      syncCardAudioState(card);
+        }
+
     function ensureAlbumAudioValidation(album){
       if (!album) return;
       const key = album.key || makeAlbumKey(album.catalogue, album.title, album.artist);
@@ -1989,13 +2005,15 @@
         .then((ok) => {
           albumAudioState.set(key, { status: ok ? 'valid' : 'invalid', ts: Date.now() });
           album._pendingValidation = false;
-          scheduleAlbumRender();
+          album.hasPlayable = !!ok;
+          updateAlbumCardState(album);
         })
         .catch((err) => {
           console.warn('[MASS] Album audio validation failed', err);
           albumAudioState.set(key, { status: 'invalid', ts: Date.now(), error: err });
           album._pendingValidation = false;
-          scheduleAlbumRender();
+          album.hasPlayable = false;
+          updateAlbumCardState(album);
         });
         }
 
@@ -3036,12 +3054,16 @@
 
       pageAlbums.forEach(album => {
         const card = document.createElement('div');
+        const key = album.key || makeAlbumKey(album.catalogue, album.title, album.artist);
+        album.key = key;
         card.className = 'card';
+        card.dataset.albumKey = key;
+        album._card = card;
         const candidateTracks = Array.isArray(album.tracks) ? album.tracks.filter(track => hasValidMp3(track.mp3)) : [];
         const hasPlayable = album && album.hasPlayable;
         const hasCandidates = hasPlayable !== undefined ? hasPlayable : candidateTracks.length > 0;
         card.dataset.hasAudioCandidates = hasCandidates ? 'true' : 'false';
-        card.dataset.validTracks = '0';
+        card.dataset.validTracks = hasPlayable ? '1' : '0';
         card.dataset.pendingTracks = album._pendingValidation ? '1' : '0';
         if (hasCandidates) {
           card.classList.remove('no-audio');
@@ -3127,6 +3149,7 @@
         card.appendChild(toggle);
 
         albumsEl.appendChild(card);
+        updateAlbumCardState(album);
       });
     }
 
