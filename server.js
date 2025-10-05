@@ -56,9 +56,80 @@ if (!process.env.AUTH_SECRET) {
 const AUTH_COOKIE_NAME = 'mass_session';
 const AUTH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 const AUTH_COOKIE_SECURE = process.env.AUTH_COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production';
+const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
 const PLAYLISTS_PATH = path.join(DATA_DIR, 'playlists.json');
 const DEFAULT_AUDIO_FIELDS = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
+const AUDIO_FIELD_CANDIDATES = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
+const ARTWORK_FIELD_CANDIDATES = ['Artwork::Picture', 'Artwork Picture', 'Picture'];
+const PUBLIC_PLAYLIST_FIELDS = [
+  'PublicPlaylist',
+  'Public Playlist',
+  'Tape Files::PublicPlaylist',
+  'Tape Files::Public Playlist',
+  'Public_Playlist',
+  'Playlist Name',
+  'Playlist::Public'
+];
+const TRACK_SEQUENCE_FIELDS = [
+  'Track Number',
+  'TrackNumber',
+  'Track_Number',
+  'Track No',
+  'Track No.',
+  'Track_No',
+  'Track #',
+  'Track#',
+  'Track Sequence',
+  'Track Sequence Number',
+  'Track Seq',
+  'Track Seq No',
+  'Track Order',
+  'Track Position',
+  'TrackPosition',
+  'Sequence',
+  'Seq',
+  'Sequence Number',
+  'Sequence_Number',
+  'Song Number',
+  'Song No',
+  'Song Seq',
+  'Song Order',
+  'Tape Files::Track Number',
+  'Tape Files::Track_No'
+];
+const PUBLIC_PLAYLIST_NAME_SPLIT = /[,;|\r\n]+/;
+const PUBLIC_PLAYLIST_LAYOUT = 'API_Album_Songs';
+const PLAYLIST_IMAGE_EXTS = ['.webp', '.jpg', '.jpeg', '.png', '.gif', '.svg'];
+const PLAYLIST_IMAGE_DIR = path.join(PUBLIC_DIR, 'img', 'Playlists');
+const playlistImageCache = new Map();
+
+const slugifyPlaylistName = (name) =>
+  String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+async function resolvePlaylistImage(name) {
+  if (!name) return null;
+  const slug = slugifyPlaylistName(name);
+  if (!slug) return null;
+  if (playlistImageCache.has(slug)) return playlistImageCache.get(slug);
+  for (const ext of PLAYLIST_IMAGE_EXTS) {
+    const fullPath = path.join(PLAYLIST_IMAGE_DIR, slug + ext);
+    try {
+      await fs.access(fullPath);
+      const relative = `/img/Playlists/${slug}${ext}`;
+      playlistImageCache.set(slug, relative);
+      return relative;
+    } catch {
+      // ignore
+    }
+  }
+  playlistImageCache.set(slug, null);
+  return null;
+}
 
 if (!FM_HOST || !FM_DB || !FM_USER || !FM_PASS) {
   console.warn('[MASS] Missing .env values; expected FM_HOST, FM_DB, FM_USER, FM_PASS');
@@ -318,6 +389,191 @@ async function createUserRecord(email, passwordHash) {
     recordId: response?.recordId,
     email: normalized
   };
+}
+
+const normalizeFieldKey = (name) => (typeof name === 'string' ? name.replace(/[^a-z0-9]/gi, '').toLowerCase() : '');
+
+function pickFieldValueCaseInsensitive(fields = {}, candidates = []) {
+  const entries = Object.entries(fields);
+  for (const candidate of candidates) {
+    for (const [key, raw] of entries) {
+      if (key === candidate && raw !== undefined && raw !== null) {
+        const str = typeof raw === 'string' ? raw.trim() : String(raw).trim();
+        if (str) return { value: str, field: key };
+      }
+    }
+    const needle = normalizeFieldKey(candidate);
+    if (!needle) continue;
+    for (const [key, raw] of entries) {
+      if (key === candidate) continue;
+      if (raw === undefined || raw === null) continue;
+      if (normalizeFieldKey(key) !== needle) continue;
+      const str = typeof raw === 'string' ? raw.trim() : String(raw).trim();
+      if (str) return { value: str, field: key };
+    }
+  }
+  return { value: '', field: '' };
+}
+
+function splitPlaylistNames(raw) {
+  if (typeof raw !== 'string') return [];
+  return raw.split(PUBLIC_PLAYLIST_NAME_SPLIT).map((value) => value.trim()).filter(Boolean);
+}
+
+function resolvePlayableSrc(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  const src = raw.trim();
+  if (!src) return '';
+  if (src.startsWith('/api/container?')) return src;
+  if (/^https?:\/\//i.test(src)) return `/api/container?u=${encodeURIComponent(src)}`;
+  if (src.startsWith('/')) return src;
+  return `/api/container?u=${encodeURIComponent(src)}`;
+}
+
+function resolveArtworkSrc(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  const src = raw.trim();
+  if (!src) return '';
+  if (src.startsWith('/api/container?') || /^https?:\/\//i.test(src)) return src;
+  return `/api/container?u=${encodeURIComponent(src)}`;
+}
+
+function normTitle(str) {
+  return String(str || '')
+    .replace(/\s+/g, ' ')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/^\W+|\W+$/g, '')
+    .trim();
+}
+
+function makeAlbumKey(catalogue, title, artist) {
+  const cat = String(catalogue || '').trim();
+  if (cat) return `cat:${cat.toLowerCase()}`;
+  const normT = normTitle(title || '').toLowerCase();
+  const normA = normTitle(artist || '').toLowerCase();
+  return `title:${normT}|artist:${normA}`;
+}
+
+function parseTrackSequence(fields = {}) {
+  for (const key of TRACK_SEQUENCE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(fields, key)) continue;
+    const raw = fields[key];
+    if (raw === undefined || raw === null) continue;
+    const str = String(raw).trim();
+    if (!str) continue;
+    const numeric = Number(str);
+    if (Number.isFinite(numeric)) return numeric;
+    const cleaned = Number(str.replace(/[^0-9.-]/g, ''));
+    if (Number.isFinite(cleaned)) return cleaned;
+  }
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null) continue;
+    const lower = key.toLowerCase();
+    if (!/(track|song)/.test(lower)) continue;
+    if (!/(no|num|#|seq|order|pos)/.test(lower)) continue;
+    const str = String(value).trim();
+    if (!str) continue;
+    const numeric = Number(str);
+    if (Number.isFinite(numeric)) return numeric;
+    const cleaned = Number(str.replace(/[^0-9.-]/g, ''));
+    if (Number.isFinite(cleaned)) return cleaned;
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+function composersFromFields(fields = {}) {
+  return [
+    fields['Composer'],
+    fields['Composer 1'] ?? fields['Composer1'],
+    fields['Composer 2'] ?? fields['Composer2'],
+    fields['Composer 3'] ?? fields['Composer3'],
+    fields['Composer 4'] ?? fields['Composer4']
+  ]
+    .filter((value) => value !== undefined && value !== null)
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+}
+
+function firstNonEmpty(fields, candidates) {
+  for (const candidate of candidates) {
+    if (!Object.prototype.hasOwnProperty.call(fields, candidate)) continue;
+    const raw = fields[candidate];
+    if (raw === undefined || raw === null) continue;
+    const str = String(raw).trim();
+    if (str) return str;
+  }
+  return '';
+}
+
+async function fetchPublicPlaylistRecords({ limit = 600 } = {}) {
+  // Robust version: try each candidate PublicPlaylist field individually, skip 102 errors,
+  // merge and dedupe results.
+  if (!FM_HOST || !FM_DB || !FM_USER || !FM_PASS) {
+    return { records: [], total: 0, missingEnv: true };
+  }
+
+  const seen = new Set();
+  const records = [];
+  let totalFound = 0;
+
+  const batchSize = Math.max(1, Math.min(100, limit));
+  const candidates = Array.isArray(PUBLIC_PLAYLIST_FIELDS) ? PUBLIC_PLAYLIST_FIELDS : ['PublicPlaylist'];
+
+  for (const field of candidates) {
+    let offset = 1;
+    let progressed = false;
+    while (records.length < limit) {
+      const remaining = limit - records.length;
+      const currentLimit = Math.min(batchSize, remaining);
+      let json;
+      try {
+        const response = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
+          query: [{ [field]: '*' }],
+          limit: currentLimit,
+          offset
+        });
+        json = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          const msg = json?.messages?.[0]?.message || 'FM error';
+          const code = json?.messages?.[0]?.code;
+          // Skip missing field errors (102) and move to next candidate
+          if (String(code) === '102') {
+            console.warn(`[MASS] Skipping playlist field "${field}" (FileMaker code 102: Field is missing on layout ${FM_LAYOUT})`);
+            break;
+          }
+          console.warn(`[MASS] Public playlist query on field "${field}" failed: ${msg} (${code ?? response.status})`);
+          break;
+        }
+      } catch (err) {
+        console.warn(`[MASS] Public playlist query on field "${field}" threw`, err?.message || err);
+        break;
+      }
+
+      const data = json?.response?.data || [];
+      totalFound = Math.max(totalFound, json?.response?.dataInfo?.foundCount ?? 0);
+
+      let added = 0;
+      for (const row of data) {
+        const rid = row?.recordId ? String(row.recordId) : JSON.stringify(row?.fieldData || row);
+        if (seen.has(rid)) continue;
+        seen.add(rid);
+        records.push(row);
+        added++;
+        if (records.length >= limit) break;
+      }
+
+      progressed = progressed || added > 0;
+
+      if (data.length < currentLimit) break;
+      offset += data.length;
+    }
+    // If this field produced any result and we already have enough rows, we can stop early
+    if (records.length >= limit) break;
+  }
+
+  return { records, total: totalFound || records.length };
 }
 
 function cookieOptions() {
@@ -949,7 +1205,6 @@ app.get('/api/track/:recordId/container', async (req, res) => {
 });
 
 /* ========= Static site ========= */
-const PUBLIC_DIR = path.join(__dirname, 'public');
 app.use(express.static(PUBLIC_DIR));
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
@@ -1040,6 +1295,113 @@ app.get('/api/search', async (req, res) => {
   } catch (err) {
     const detail = err?.response?.data?.messages?.[0]?.message || err?.message || String(err);
     res.status(500).json({ error: 'Album search failed', status: 500, detail });
+  }
+});
+
+app.get('/api/public-playlists', async (req, res) => {
+  try {
+    const nameParam = (req.query.name || '').toString().trim();
+    const limitParam = Number.parseInt((req.query.limit || '600'), 10);
+    const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(2000, limitParam)) : 600;
+
+    const result = await fetchPublicPlaylistRecords({ limit });
+    if (result && result.missingEnv) {
+      return res.status(503).json({ ok: false, error: 'Curated playlists are disabled: missing FM_HOST/FM_DB/FM_USER/FM_PASS' });
+    }
+    const { records } = result || { records: [] };
+    if (!records.length) {
+      const payload = { ok: true, playlists: [] };
+      if (nameParam) payload.tracks = [];
+      res.json(payload);
+      return;
+    }
+
+    const summaryMap = new Map();
+    const tracks = [];
+    const targetName = nameParam.toLowerCase();
+
+    for (const record of records) {
+      const fields = record?.fieldData || {};
+      const playlistInfo = pickFieldValueCaseInsensitive(fields, PUBLIC_PLAYLIST_FIELDS);
+      if (!playlistInfo.value) continue;
+      const playlistNames = splitPlaylistNames(playlistInfo.value);
+      if (!playlistNames.length) continue;
+
+      const trackName = firstNonEmpty(fields, ['Track Name', 'Tape Files::Track Name', 'Tape Files::Track_Name', 'Song Name', 'Song_Title', 'Title', 'Name']);
+      const albumTitle = firstNonEmpty(fields, ['Album Title', 'Tape Files::Album_Title', 'Tape Files::Album Title', 'Album']);
+      const albumArtist = firstNonEmpty(fields, ['Album Artist', 'Tape Files::Album Artist', 'Tape Files::Album_Artist', 'AlbumArtist', 'Artist']);
+      const trackArtist = firstNonEmpty(fields, ['Track Artist', 'Tape Files::Track Artist', 'TrackArtist', 'Artist']) || albumArtist;
+      const catalogue = firstNonEmpty(fields, ['Album Catalogue Number', 'Album Catalog Number', 'Album Catalogue No', 'Tape Files::Album Catalogue Number', 'Catalogue']);
+      const genre = firstNonEmpty(fields, ['Local Genre', 'Tape Files::Local Genre', 'Genre']);
+      const language = firstNonEmpty(fields, ['Language', 'Tape Files::Language', 'Language Code']);
+      const producer = firstNonEmpty(fields, ['Producer', 'Tape Files::Producer']);
+
+      const audioInfo = pickFieldValueCaseInsensitive(fields, AUDIO_FIELD_CANDIDATES);
+      const artworkInfo = pickFieldValueCaseInsensitive(fields, ARTWORK_FIELD_CANDIDATES);
+      const resolvedSrc = resolvePlayableSrc(audioInfo.value);
+      const resolvedArt = resolveArtworkSrc(artworkInfo.value);
+      const composers = composersFromFields(fields);
+      const seq = parseTrackSequence(fields);
+      const recordId = record.recordId ? String(record.recordId) : '';
+      const albumKey = makeAlbumKey(catalogue, albumTitle, albumArtist);
+
+      for (const rawName of playlistNames) {
+        const trimmed = rawName.trim();
+        if (!trimmed) continue;
+        const key = trimmed.toLowerCase();
+        let entry = summaryMap.get(key);
+        if (!entry) {
+          entry = { name: trimmed, albumKeys: new Set(), trackCount: 0 };
+          summaryMap.set(key, entry);
+        }
+        if (albumKey) entry.albumKeys.add(albumKey);
+        entry.trackCount += 1;
+
+        if (targetName && key === targetName) {
+          tracks.push({
+            id: recordId,
+            trackRecordId: recordId,
+            name: trackName || `Track ${tracks.length + 1}`,
+            seq: Number.isFinite(seq) ? Number(seq) : null,
+            albumTitle,
+            albumArtist,
+            trackArtist,
+            catalogue,
+            genre,
+            language,
+            producer,
+            composers,
+            isrc: firstNonEmpty(fields, ['ISRC', 'Tape Files::ISRC']) || '',
+            composer1: fields['Composer'] || fields['Composer 1'] || fields['Composer1'] || '',
+            composer2: fields['Composer 2'] || fields['Composer2'] || '',
+            composer3: fields['Composer 3'] || fields['Composer3'] || '',
+            composer4: fields['Composer 4'] || fields['Composer4'] || '',
+            mp3: audioInfo.value || '',
+            resolvedSrc,
+            audioField: audioInfo.field || '',
+            artworkField: artworkInfo.field || '',
+            picture: resolvedArt,
+            albumPicture: resolvedArt,
+            albumKey
+          });
+        }
+      }
+    }
+
+    const playlists = Array.from(summaryMap.values())
+      .map((entry) => ({
+        name: entry.name,
+        albumCount: entry.albumKeys.size,
+        trackCount: entry.trackCount
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+    const payload = { ok: true, playlists };
+    if (nameParam) payload.tracks = tracks;
+    res.json(payload);
+  } catch (err) {
+    console.error('[MASS] Public playlists fetch failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to load public playlists' });
   }
 });
 
