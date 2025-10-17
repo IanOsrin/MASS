@@ -24,6 +24,13 @@ try {
   process.exit(1);
 }
 
+let nodemailer;
+try {
+  ({ default: nodemailer } = await import('nodemailer'));
+} catch (err) {
+  console.warn('[MASS] Optional dependency nodemailer not available; playlist request emails disabled');
+}
+
 loadEnv();
 
 process.on('unhandledRejection', (err) => {
@@ -34,6 +41,7 @@ process.on('uncaughtException', (err) => {
 });
 
 const app = express();
+app.set('trust proxy', true);
 app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,6 +56,20 @@ const FM_LAYOUT = process.env.FM_LAYOUT || 'API_Album_Songs';
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
 const FM_USERS_LAYOUT = process.env.FM_USERS_LAYOUT || 'API_Users';
+const FM_STREAM_EVENTS_LAYOUT = process.env.FM_STREAM_EVENTS_LAYOUT || 'Stream_Events';
+const STREAM_EVENT_DEBUG =
+  process.env.DEBUG_STREAM_EVENTS === 'true' ||
+  process.env.NODE_ENV === 'development' ||
+  process.env.DEBUG?.includes('stream');
+const MASS_SESSION_COOKIE = 'mass.sid';
+const MASS_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
+const STREAM_EVENT_TYPES = new Set(['PLAY', 'PROGRESS', 'PAUSE', 'SEEK', 'END', 'ERROR']);
+const STREAM_TERMINAL_EVENTS = new Set(['END', 'ERROR']);
+const STREAM_TIME_FIELD = 'TimeStreamed';
+const STREAM_TIME_FIELD_LEGACY = 'PositionSec';
+
+const STREAM_RECORD_CACHE_TTL_MS = 30 * 60 * 1000;
+const streamRecordCache = new Map();
 
 const AUTH_SECRET = process.env.AUTH_SECRET || 'development-secret-change-me';
 if (!process.env.AUTH_SECRET) {
@@ -103,6 +125,17 @@ const PUBLIC_PLAYLIST_LAYOUT = 'API_Album_Songs';
 const PLAYLIST_IMAGE_EXTS = ['.webp', '.jpg', '.jpeg', '.png', '.gif', '.svg'];
 const PLAYLIST_IMAGE_DIR = path.join(PUBLIC_DIR, 'img', 'Playlists');
 const playlistImageCache = new Map();
+let playlistsCache = { data: null, mtimeMs: 0 };
+const PLAYLIST_REQUESTS_PATH = path.join(DATA_DIR, 'playlist_requests.json');
+
+const normalizeRecordId = (value) => {
+  if (value === undefined || value === null) return '';
+  const str = String(value).trim();
+  return str;
+};
+
+const playlistOwnerMatches = (ownerId, userRecordId) =>
+  normalizeRecordId(ownerId) === normalizeRecordId(userRecordId);
 
 const slugifyPlaylistName = (name) =>
   String(name || '')
@@ -110,6 +143,23 @@ const slugifyPlaylistName = (name) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+
+const SMTP_HOST = process.env.SMTP_HOST || '';
+const SMTP_PORT_RAW = Number.parseInt(process.env.SMTP_PORT || '', 10);
+const SMTP_PORT = Number.isFinite(SMTP_PORT_RAW) && SMTP_PORT_RAW > 0 ? SMTP_PORT_RAW : 587;
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = process.env.SMTP_PASS || '';
+const SMTP_SECURE = process.env.SMTP_SECURE === 'true';
+const EMAIL_FROM = process.env.EMAIL_FROM || process.env.SMTP_FROM || '';
+const PLAYLIST_REQUEST_RECIPIENT =
+  process.env.PLAYLIST_REQUEST_EMAIL ||
+  process.env.PLAYLIST_REQUEST_RECIPIENT ||
+  process.env.EMAIL_TO ||
+  '';
+const PLAYLIST_REQUEST_BCC = process.env.PLAYLIST_REQUEST_BCC || '';
+const EMAIL_ENABLED =
+  !!nodemailer && Boolean(SMTP_HOST && SMTP_PORT && EMAIL_FROM && PLAYLIST_REQUEST_RECIPIENT);
+let emailTransportPromise = null;
 
 async function resolvePlaylistImage(name) {
   if (!name) return null;
@@ -129,6 +179,110 @@ async function resolvePlaylistImage(name) {
   }
   playlistImageCache.set(slug, null);
   return null;
+}
+
+const isEmailConfigured = () => EMAIL_ENABLED;
+
+async function getEmailTransport() {
+  if (!isEmailConfigured()) return null;
+  if (!emailTransportPromise) {
+    emailTransportPromise = (async () => {
+      const transportOptions = {
+        host: SMTP_HOST,
+        port: SMTP_PORT,
+        secure: SMTP_SECURE
+      };
+      if (SMTP_USER) {
+        transportOptions.auth = {
+          user: SMTP_USER,
+          pass: SMTP_PASS
+        };
+      }
+      return nodemailer.createTransport(transportOptions);
+    })();
+  }
+  return emailTransportPromise;
+}
+
+function summarizePlaylistForEmail(playlist) {
+  const lines = [];
+  const tracks = Array.isArray(playlist?.tracks) ? playlist.tracks : [];
+  tracks.forEach((track, index) => {
+    if (!track) return;
+    const position = String(index + 1).padStart(2, '0');
+    const name = track.name || 'Untitled track';
+    const artist = track.trackArtist || track.albumArtist || 'Unknown artist';
+    const catalogue = track.catalogue ? ` [${track.catalogue}]` : '';
+    lines.push(`${position}. ${artist} — ${name}${catalogue}`);
+  });
+  return lines.join('\n') || '(no tracks)';
+}
+
+async function sendPlaylistRequestEmail({ playlist, userEmail, note }) {
+  const transport = await getEmailTransport();
+  if (!transport) {
+    throw new Error('Email transport unavailable');
+  }
+  const tracks = Array.isArray(playlist?.tracks) ? playlist.tracks : [];
+  const trackSummary = summarizePlaylistForEmail(playlist);
+  const now = new Date().toISOString();
+  const subject = `[MASS] Public playlist request: ${playlist?.name || 'Untitled'} (${tracks.length} tracks)`;
+  const lines = [
+    'A listener has requested curation of their playlist.',
+    '',
+    `Submitted: ${now}`,
+    `User email: ${userEmail || 'unknown'}`,
+    `Playlist ID: ${playlist?.id || 'unknown'}`,
+    `Playlist name: ${playlist?.name || 'Untitled playlist'}`,
+    `Track count: ${tracks.length}`,
+    `Created: ${playlist?.createdAt || 'n/a'}`,
+    `Updated: ${playlist?.updatedAt || 'n/a'}`,
+    ''
+  ];
+  if (note) {
+    lines.push('Listener note:');
+    lines.push(note);
+    lines.push('');
+  }
+  lines.push('Tracks:');
+  lines.push(trackSummary);
+  lines.push('');
+  lines.push('---');
+  lines.push('Generated by MASS playlist request workflow.');
+
+  const message = {
+    from: EMAIL_FROM,
+    to: PLAYLIST_REQUEST_RECIPIENT,
+    subject,
+    text: lines.join('\n')
+  };
+  if (userEmail) {
+    message.replyTo = userEmail;
+  }
+  if (PLAYLIST_REQUEST_BCC) {
+    message.bcc = PLAYLIST_REQUEST_BCC;
+  }
+  await transport.sendMail(message);
+}
+
+async function appendPlaylistRequestLog(entry) {
+  try {
+    await ensureDataDir();
+    let existing = [];
+    try {
+      const raw = await fs.readFile(PLAYLIST_REQUESTS_PATH, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) existing = parsed;
+    } catch (err) {
+      if (err?.code !== 'ENOENT') {
+        console.warn('[MASS] Unable to read playlist request log:', err);
+      }
+    }
+    existing.push(entry);
+    await fs.writeFile(PLAYLIST_REQUESTS_PATH, JSON.stringify(existing, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[MASS] Unable to append playlist request log:', err);
+  }
 }
 
 if (!FM_HOST || !FM_DB || !FM_USER || !FM_PASS) {
@@ -209,6 +363,33 @@ async function safeFetch(url, options = {}, { timeoutMs = 15000, retries = 2 } =
       throw err;
     }
   }
+}
+
+function getClientIP(req) {
+  const forwarded = req?.headers?.['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  if (Array.isArray(forwarded) && forwarded.length) {
+    const first = forwarded[0];
+    if (typeof first === 'string' && first.trim()) {
+      return first.trim();
+    }
+  }
+  if (typeof req?.ip === 'string' && req.ip) {
+    return req.ip;
+  }
+  const remoteAddress = req?.socket?.remoteAddress;
+  if (typeof remoteAddress === 'string' && remoteAddress) {
+    return remoteAddress;
+  }
+  return '';
+}
+
+async function lookupASN(ip) {
+  // TODO: integrate MaxMind ASN or an external lookup service for ASN enrichment.
+  if (!ip) return 'Unknown';
+  return 'Unknown';
 }
 
 async function fmLogin() {
@@ -319,6 +500,40 @@ async function fmCreateRecord(layout, fieldData) {
   return json?.response || null;
 }
 
+async function fmUpdateRecord(layout, recordId, fieldData) {
+  if (!recordId) throw new Error('fmUpdateRecord requires recordId');
+  await ensureToken();
+  const url = `${fmBase}/layouts/${encodeURIComponent(layout)}/records/${encodeURIComponent(recordId)}`;
+  const makeHeaders = () => ({
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${fmToken}`
+  });
+
+  let res = await safeFetch(url, {
+    method: 'PATCH',
+    headers: makeHeaders(),
+    body: JSON.stringify({ fieldData })
+  });
+
+  if (res.status === 401) {
+    await fmLogin();
+    res = await safeFetch(url, {
+      method: 'PATCH',
+      headers: makeHeaders(),
+      body: JSON.stringify({ fieldData })
+    });
+  }
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.messages?.[0]?.message || 'FM error';
+    const code = json?.messages?.[0]?.code;
+    throw new Error(`FM update failed: ${msg} (${code ?? 'n/a'})`);
+  }
+  return json?.response || null;
+}
+
 async function fmGetRecordById(layout, recordId) {
   if (!recordId) return null;
   await ensureToken();
@@ -342,12 +557,16 @@ async function fmGetRecordById(layout, recordId) {
   return json?.response?.data?.[0] || null;
 }
 
-async function fmFindRecords(layout, queries, { limit = 1, offset = 1 } = {}) {
-  const r = await fmPost(`/layouts/${encodeURIComponent(layout)}/_find`, {
+async function fmFindRecords(layout, queries, { limit = 1, offset = 1, sort = [] } = {}) {
+  const payload = {
     query: queries,
     limit,
     offset
-  });
+  };
+  if (Array.isArray(sort) && sort.length) {
+    payload.sort = sort;
+  }
+  const r = await fmPost(`/layouts/${encodeURIComponent(layout)}/_find`, payload);
   const json = await r.json().catch(() => ({}));
   if (!r.ok) {
     const msg = json?.messages?.[0]?.message || 'FM error';
@@ -613,7 +832,7 @@ function clearAuthCookie(res) {
   res.setHeader('Set-Cookie', parts.join('; '));
 }
 
-function getCookies(req) {
+function parseCookies(req) {
   const header = req.headers?.cookie;
   if (!header) return {};
   const out = {};
@@ -631,7 +850,7 @@ function getCookies(req) {
 }
 
 function readAuthToken(req) {
-  const cookies = getCookies(req);
+  const cookies = parseCookies(req);
   return cookies[AUTH_COOKIE_NAME] || null;
 }
 
@@ -693,28 +912,64 @@ async function ensureDataDir() {
 
 async function loadPlaylists() {
   try {
+    const stat = await fs.stat(PLAYLISTS_PATH);
+    if (Array.isArray(playlistsCache.data) && playlistsCache.mtimeMs === stat.mtimeMs) {
+      return playlistsCache.data;
+    }
+
     const raw = await fs.readFile(PLAYLISTS_PATH, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed;
-    return [];
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (parseErr) {
+      console.warn('[MASS] Playlists file contained invalid JSON, resetting to empty list:', parseErr);
+      await fs.writeFile(PLAYLISTS_PATH, '[]', 'utf8');
+      let repairedMtime = Date.now();
+      try {
+        const repairedStat = await fs.stat(PLAYLISTS_PATH);
+        if (repairedStat?.mtimeMs) repairedMtime = repairedStat.mtimeMs;
+      } catch {
+        // ignore stat errors; continue with Date.now()
+      }
+      playlistsCache = { data: [], mtimeMs: repairedMtime };
+      return playlistsCache.data;
+    }
+    const data = Array.isArray(parsed) ? parsed : [];
+    playlistsCache = { data, mtimeMs: stat.mtimeMs };
+    return data;
   } catch (err) {
     if (err && err.code === 'ENOENT') {
       await ensureDataDir();
       await fs.writeFile(PLAYLISTS_PATH, '[]', 'utf8');
-      return [];
+      playlistsCache = { data: [], mtimeMs: Date.now() };
+      return playlistsCache.data;
     }
     console.warn('[MASS] Failed to read playlists file:', err);
-    return [];
+    return Array.isArray(playlistsCache.data) ? playlistsCache.data : [];
   }
 }
 
 async function savePlaylists(playlists) {
   try {
     await ensureDataDir();
-    const payload = JSON.stringify(Array.isArray(playlists) ? playlists : [], null, 2);
+    const normalized = Array.isArray(playlists) ? playlists : [];
+    for (const entry of normalized) {
+      if (entry && typeof entry === 'object') {
+        entry.userId = normalizeRecordId(entry.userId);
+      }
+    }
+    const payload = JSON.stringify(normalized, null, 2);
     const tempPath = `${PLAYLISTS_PATH}.tmp`;
     await fs.writeFile(tempPath, payload, 'utf8');
     await fs.rename(tempPath, PLAYLISTS_PATH);
+    let mtimeMs = Date.now();
+    try {
+      const stat = await fs.stat(PLAYLISTS_PATH);
+      if (stat?.mtimeMs) mtimeMs = stat.mtimeMs;
+    } catch {
+      // ignore stat errors; fall back to Date.now()
+    }
+    playlistsCache = { data: normalized, mtimeMs };
   } catch (err) {
     console.error('[MASS] Failed to write playlists file:', err);
     throw err;
@@ -804,26 +1059,300 @@ function buildTrackEntry(payload, addedAt) {
   };
 }
 
-function findDuplicateTrack(playlist, payload) {
-  if (!playlist || !payload) return null;
-  const tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
-  for (const existing of tracks) {
-    if (!existing) continue;
-    const existingRecordId = typeof existing.trackRecordId === 'string' ? existing.trackRecordId : '';
-    if (payload.recordId && existingRecordId && existingRecordId === payload.recordId) {
-      return existing;
-    }
-    if (payload.name && payload.albumTitle && payload.albumArtist) {
-      const sameName = (existing.name || '') === payload.name;
-      const sameAlbum = (existing.albumTitle || '') === payload.albumTitle;
-      const sameArtist = (existing.albumArtist || '') === payload.albumArtist;
-      if (sameName && sameAlbum && sameArtist) {
-        return existing;
-      }
+function buildPlaylistDuplicateIndex(playlist) {
+  const map = new Map();
+  const tracks = Array.isArray(playlist?.tracks) ? playlist.tracks : [];
+  for (const entry of tracks) {
+    const key = trackDuplicateKeyFromEntry(entry);
+    if (key && !map.has(key)) {
+      map.set(key, entry);
     }
   }
-  return null;
+  return map;
 }
+
+function resolveDuplicate(map, payload) {
+  const key = trackDuplicateKey(payload);
+  if (!key) return { key: '', entry: null };
+  return { key, entry: map.get(key) || null };
+}
+
+function streamRecordCacheKey(sessionId, trackRecordId) {
+  return `${sessionId}::${trackRecordId}`;
+}
+
+function getCachedStreamRecordId(sessionId, trackRecordId) {
+  const key = streamRecordCacheKey(sessionId, trackRecordId);
+  const entry = streamRecordCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt && entry.expiresAt < Date.now()) {
+    streamRecordCache.delete(key);
+    return null;
+  }
+  return entry.recordId || null;
+}
+
+function setCachedStreamRecordId(sessionId, trackRecordId, recordId) {
+  if (!sessionId || !trackRecordId || !recordId) return;
+  const key = streamRecordCacheKey(sessionId, trackRecordId);
+  streamRecordCache.set(key, {
+    recordId,
+    expiresAt: Date.now() + STREAM_RECORD_CACHE_TTL_MS
+  });
+}
+
+function clearCachedStreamRecordId(sessionId, trackRecordId) {
+  if (!sessionId || !trackRecordId) return;
+  const key = streamRecordCacheKey(sessionId, trackRecordId);
+  streamRecordCache.delete(key);
+}
+
+async function findStreamRecord(sessionId, trackRecordId) {
+  if (!sessionId || !trackRecordId) return null;
+  const query = [
+    {
+      SessionID: `==${sessionId}`,
+      TrackRecordID: `==${trackRecordId}`
+    }
+  ];
+  const sort = [
+    { fieldName: 'LastEventUTC', sortOrder: 'descend' },
+    { fieldName: 'TimestampUTC', sortOrder: 'descend' }
+  ];
+  let result = await fmFindRecords(FM_STREAM_EVENTS_LAYOUT, query, { limit: 1, offset: 1, sort });
+  if (!result.ok) {
+    result = await fmFindRecords(FM_STREAM_EVENTS_LAYOUT, query, { limit: 1, offset: 1 });
+  }
+  if (!result.ok || result.data.length === 0) return null;
+  const entry = result.data[0];
+  const recordId = entry?.recordId;
+  if (recordId) setCachedStreamRecordId(sessionId, trackRecordId, recordId);
+  return {
+    recordId,
+    fieldData: entry?.fieldData || {}
+  };
+}
+
+async function ensureStreamRecord(sessionId, trackRecordId, createFields, { forceNew = false } = {}) {
+  if (!sessionId || !trackRecordId) {
+    throw new Error('ensureStreamRecord requires sessionId and trackRecordId');
+  }
+  if (forceNew) {
+    clearCachedStreamRecordId(sessionId, trackRecordId);
+  } else {
+    const cachedId = getCachedStreamRecordId(sessionId, trackRecordId);
+    if (cachedId) {
+      return { recordId: cachedId, created: false, response: null, existingFieldData: null };
+    }
+  }
+  if (!forceNew) {
+    const existing = await findStreamRecord(sessionId, trackRecordId);
+    if (existing?.recordId) {
+      return { recordId: existing.recordId, created: false, response: null, existingFieldData: existing.fieldData || null };
+    }
+  }
+  const response = await fmCreateRecord(FM_STREAM_EVENTS_LAYOUT, createFields);
+  const recordId = response?.recordId;
+  if (!recordId) {
+    throw new Error('Stream event create returned no recordId');
+  }
+  setCachedStreamRecordId(sessionId, trackRecordId, recordId);
+  return { recordId, created: true, response, existingFieldData: null };
+}
+
+function normalizeSeconds(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.round(value));
+  }
+  const parsed = Number(value);
+  if (Number.isFinite(parsed)) {
+    return Math.max(0, Math.round(parsed));
+  }
+  return 0;
+}
+
+function toCleanString(value) {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return '';
+  return String(value);
+}
+
+function formatTimestampUTC(dateInput = new Date()) {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (Number.isNaN(d.getTime())) {
+    return formatTimestampUTC(new Date());
+  }
+  const pad = (num) => String(num).padStart(2, '0');
+  const month = pad(d.getUTCMonth() + 1);
+  const day = pad(d.getUTCDate());
+  const year = d.getUTCFullYear();
+  const hours = pad(d.getUTCHours());
+  const minutes = pad(d.getUTCMinutes());
+  const seconds = pad(d.getUTCSeconds());
+  return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
+}
+
+app.post('/api/stream-events', async (req, res) => {
+  try {
+    const {
+      eventType = '',
+      trackRecordId = '',
+      trackISRC = '',
+      positionSec = 0,
+      durationSec = 0,
+      deltaSec = 0
+    } = req.body || {};
+
+    const normalizedType = String(eventType || '').trim().toUpperCase();
+    if (!STREAM_EVENT_TYPES.has(normalizedType)) {
+      res.status(400).json({ ok: false, error: 'Invalid eventType' });
+      return;
+    }
+
+    const headersSessionRaw = req.get?.('X-Session-ID') || req.headers?.['x-session-id'];
+    let sessionId = Array.isArray(headersSessionRaw) ? headersSessionRaw[0] : headersSessionRaw;
+    if (typeof sessionId === 'string') {
+      sessionId = sessionId.trim();
+    }
+
+    const cookies = parseCookies(req);
+    if (!sessionId) {
+      sessionId = cookies[MASS_SESSION_COOKIE] || '';
+    }
+    if (!sessionId) {
+      sessionId = randomUUID();
+    }
+
+    if (!cookies[MASS_SESSION_COOKIE] || cookies[MASS_SESSION_COOKIE] !== sessionId) {
+      const cookieParts = [
+        `${MASS_SESSION_COOKIE}=${encodeURIComponent(sessionId)}`,
+        'Path=/',
+        `Max-Age=${MASS_SESSION_MAX_AGE_SECONDS}`,
+        'SameSite=Lax'
+      ];
+      res.setHeader('Set-Cookie', cookieParts.join('; '));
+    }
+
+    const timestamp = formatTimestampUTC();
+    const clientIP = getClientIP(req);
+    const asn = await lookupASN(clientIP);
+    const userAgentHeader = req.headers?.['user-agent'];
+    const userAgent = Array.isArray(userAgentHeader) ? userAgentHeader[0] : userAgentHeader || '';
+
+    const normalizedTrackRecordId = toCleanString(trackRecordId);
+    if (!normalizedTrackRecordId) {
+      res.status(400).json({ ok: false, error: 'trackRecordId is required' });
+      return;
+    }
+
+    const normalizedTrackISRC = toCleanString(trackISRC);
+
+    const normalizedPosition = normalizeSeconds(positionSec);
+    const normalizedDuration = normalizeSeconds(durationSec);
+    const payloadDelta = normalizeSeconds(deltaSec);
+    const baseFields = {
+      TimestampUTC: timestamp,
+      EventType: normalizedType,
+      TrackRecordID: normalizedTrackRecordId,
+      TrackISRC: normalizedTrackISRC,
+      [STREAM_TIME_FIELD]: normalizedPosition,
+      DurationSec: normalizedDuration,
+      DeltaSec: payloadDelta,
+      SessionID: sessionId,
+      ClientIP: clientIP,
+      ASN: asn || 'Unknown',
+      UserAgent: userAgent
+    };
+
+    const primaryKey = randomUUID();
+    const createFields = {
+      PrimaryKey: primaryKey,
+      SessionID: sessionId,
+      TrackRecordID: normalizedTrackRecordId,
+      TrackISRC: normalizedTrackISRC,
+      TimestampUTC: timestamp,
+      EventType: normalizedType,
+      [STREAM_TIME_FIELD]: normalizedPosition,
+      DurationSec: normalizedDuration,
+      DeltaSec: payloadDelta,
+      ClientIP: clientIP,
+      ASN: asn || 'Unknown',
+      UserAgent: userAgent,
+      TotalPlayedSec: payloadDelta,
+      PlayStartUTC: normalizedType === 'PLAY' ? timestamp : '',
+      LastEventUTC: timestamp
+    };
+
+    if (STREAM_EVENT_DEBUG) {
+      console.info('[MASS] stream event logging', {
+        eventType: baseFields.EventType,
+        sessionId,
+        trackRecordId: normalizedTrackRecordId,
+        timeStreamed: baseFields[STREAM_TIME_FIELD],
+        deltaSec: baseFields.DeltaSec
+      });
+    }
+
+    const forceNewRecord = normalizedType === 'PLAY';
+    const ensureResult = await ensureStreamRecord(sessionId, normalizedTrackRecordId, createFields, { forceNew: forceNewRecord });
+    const existingFields = ensureResult.existingFieldData || {};
+
+    const existingPositionValue = existingFields
+      ? existingFields[STREAM_TIME_FIELD] ?? existingFields[STREAM_TIME_FIELD_LEGACY]
+      : null;
+    const existingPosition = normalizeSeconds(existingPositionValue);
+    const deltaFromPosition = Math.max(0, baseFields[STREAM_TIME_FIELD] - existingPosition);
+    if (existingPosition > baseFields[STREAM_TIME_FIELD]) {
+      baseFields[STREAM_TIME_FIELD] = existingPosition;
+    }
+    const existingDuration = normalizeSeconds(existingFields.DurationSec);
+    if (existingDuration && !baseFields.DurationSec) {
+      baseFields.DurationSec = existingDuration;
+    }
+    if (!baseFields.TrackISRC && existingFields.TrackISRC) {
+      baseFields.TrackISRC = existingFields.TrackISRC;
+    }
+
+    const existingTotalPlayed = normalizeSeconds(existingFields.TotalPlayedSec);
+    const effectiveDelta = payloadDelta || deltaFromPosition;
+    baseFields.DeltaSec = effectiveDelta;
+    baseFields.TotalPlayedSec = existingTotalPlayed + effectiveDelta;
+    baseFields.LastEventUTC = timestamp;
+    if (!existingFields.PlayStartUTC && normalizedType === 'PLAY') {
+      baseFields.PlayStartUTC = timestamp;
+    }
+
+    // Ensure DurationSec reflects track length when provided at END.
+    if (normalizedType === 'END' && normalizedDuration && normalizedDuration > baseFields.DurationSec) {
+      baseFields.DurationSec = normalizedDuration;
+    }
+
+    let fmResponse = await fmUpdateRecord(FM_STREAM_EVENTS_LAYOUT, ensureResult.recordId, baseFields);
+
+    if (STREAM_EVENT_DEBUG) {
+      console.info('[MASS] stream event persisted', {
+        eventType: baseFields.EventType,
+        sessionId,
+        trackRecordId: normalizedTrackRecordId,
+        recordId: ensureResult.recordId,
+        totalPlayedSec: baseFields.TotalPlayedSec,
+        timeStreamed: baseFields[STREAM_TIME_FIELD]
+      });
+    }
+
+    if (STREAM_TERMINAL_EVENTS.has(normalizedType)) {
+      clearCachedStreamRecordId(sessionId, normalizedTrackRecordId);
+    } else {
+      setCachedStreamRecordId(sessionId, normalizedTrackRecordId, ensureResult.recordId);
+    }
+
+    res.json({ ok: true, recordId: ensureResult.recordId, totalPlayedSec: baseFields.TotalPlayedSec });
+  } catch (err) {
+    console.error('[MASS] stream event failed', err);
+    const errorMessage = err?.message || 'Stream event logging failed';
+    res.status(500).json({ ok: false, error: errorMessage });
+  }
+});
 
 async function requireUser(req, res) {
   const user = await authenticateRequest(req);
@@ -926,8 +1455,9 @@ app.get('/api/playlists', async (req, res) => {
   if (!user) return;
 
   try {
+    const userRecordId = normalizeRecordId(user.recordId);
     const playlists = await loadPlaylists();
-    const mine = playlists.filter((p) => p && p.userId === user.recordId);
+    const mine = playlists.filter((p) => p && playlistOwnerMatches(p.userId, userRecordId));
     res.json({ ok: true, playlists: mine });
   } catch (err) {
     console.error('[MASS] Fetch playlists failed:', err);
@@ -940,6 +1470,7 @@ app.post('/api/playlists', async (req, res) => {
   if (!user) return;
 
   try {
+    const userRecordId = normalizeRecordId(user.recordId);
     const nameRaw = req.body?.name;
     const name = typeof nameRaw === 'string' ? nameRaw.trim() : '';
     if (!name) {
@@ -949,7 +1480,9 @@ app.post('/api/playlists', async (req, res) => {
 
     const now = new Date().toISOString();
     const playlists = await loadPlaylists();
-    const collision = playlists.find((p) => p && p.userId === user.recordId && typeof p.name === 'string' && p.name.toLowerCase() === name.toLowerCase());
+    const collision = playlists.find(
+      (p) => p && playlistOwnerMatches(p.userId, userRecordId) && typeof p.name === 'string' && p.name.toLowerCase() === name.toLowerCase()
+    );
     if (collision) {
       res.status(409).json({ ok: false, error: 'You already have a playlist with that name', playlist: collision });
       return;
@@ -957,7 +1490,7 @@ app.post('/api/playlists', async (req, res) => {
 
     const playlist = {
       id: randomUUID(),
-      userId: user.recordId,
+      userId: userRecordId,
       userEmail: user.email,
       name,
       tracks: [],
@@ -980,6 +1513,7 @@ app.post('/api/playlists/:playlistId/tracks', async (req, res) => {
   if (!user) return;
 
   try {
+    const userRecordId = normalizeRecordId(user.recordId);
     const playlistId = req.params?.playlistId;
     if (!playlistId) {
       res.status(400).json({ ok: false, error: 'Playlist ID required' });
@@ -994,24 +1528,27 @@ app.post('/api/playlists/:playlistId/tracks', async (req, res) => {
     }
 
     const playlists = await loadPlaylists();
-    const index = playlists.findIndex((p) => p && p.id === playlistId && p.userId === user.recordId);
+    const index = playlists.findIndex((p) => p && p.id === playlistId && playlistOwnerMatches(p.userId, userRecordId));
     if (index === -1) {
       res.status(404).json({ ok: false, error: 'Playlist not found' });
       return;
     }
 
     const playlist = playlists[index];
-    const duplicate = findDuplicateTrack(playlist, trackPayload);
+    playlist.tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+
+    const duplicateIndex = buildPlaylistDuplicateIndex(playlist);
+    const { entry: duplicate } = resolveDuplicate(duplicateIndex, trackPayload);
     if (duplicate) {
       res.status(200).json({ ok: true, playlist, track: duplicate, duplicate: true });
       return;
     }
 
-    const entry = buildTrackEntry(trackPayload, new Date().toISOString());
+    const addedAt = new Date().toISOString();
+    const entry = buildTrackEntry(trackPayload, addedAt);
 
-    playlist.tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
     playlist.tracks.push(entry);
-    playlist.updatedAt = entry.addedAt;
+    playlist.updatedAt = addedAt;
 
     playlists[index] = playlist;
     await savePlaylists(playlists);
@@ -1028,6 +1565,7 @@ app.post('/api/playlists/:playlistId/tracks/bulk', async (req, res) => {
   if (!user) return;
 
   try {
+    const userRecordId = normalizeRecordId(user.recordId);
     const playlistId = req.params?.playlistId;
     if (!playlistId) {
       res.status(400).json({ ok: false, error: 'Playlist ID required' });
@@ -1042,7 +1580,7 @@ app.post('/api/playlists/:playlistId/tracks/bulk', async (req, res) => {
 
     const normalizedTracks = rawTracks.map((track) => normalizeTrackPayload(track || {}));
     const playlists = await loadPlaylists();
-    const index = playlists.findIndex((p) => p && p.id === playlistId && p.userId === user.recordId);
+    const index = playlists.findIndex((p) => p && p.id === playlistId && playlistOwnerMatches(p.userId, userRecordId));
     if (index === -1) {
       res.status(404).json({ ok: false, error: 'Playlist not found' });
       return;
@@ -1051,15 +1589,12 @@ app.post('/api/playlists/:playlistId/tracks/bulk', async (req, res) => {
     const playlist = playlists[index];
     playlist.tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
 
-    const dedupeKeys = new Set();
-    for (const existing of playlist.tracks) {
-      const key = trackDuplicateKeyFromEntry(existing);
-      if (key) dedupeKeys.add(key);
-    }
+    const duplicateIndex = buildPlaylistDuplicateIndex(playlist);
 
     const addedEntries = [];
     const duplicates = [];
     const skipped = [];
+    const timestampBase = Date.now();
 
     for (const trackPayload of normalizedTracks) {
       if (!trackPayload.name) {
@@ -1067,27 +1602,21 @@ app.post('/api/playlists/:playlistId/tracks/bulk', async (req, res) => {
         continue;
       }
 
-      const key = trackDuplicateKey(trackPayload);
-      if (key && dedupeKeys.has(key)) {
-        duplicates.push({ ...summarizeTrackPayload(trackPayload), reason: 'already_exists' });
-        continue;
-      }
-
-      const duplicate = findDuplicateTrack(playlist, trackPayload);
+      const { key, entry: duplicate } = resolveDuplicate(duplicateIndex, trackPayload);
       if (duplicate) {
         duplicates.push({ ...summarizeTrackPayload(trackPayload), reason: 'already_exists' });
-        if (key) dedupeKeys.add(key);
         continue;
       }
 
-      const entry = buildTrackEntry(trackPayload, new Date().toISOString());
+      const addedAt = new Date(timestampBase + addedEntries.length).toISOString();
+      const entry = buildTrackEntry(trackPayload, addedAt);
       playlist.tracks.push(entry);
       addedEntries.push(entry);
-      if (key) dedupeKeys.add(key);
+      if (key) duplicateIndex.set(key, entry);
     }
 
     if (addedEntries.length) {
-      playlist.updatedAt = new Date().toISOString();
+      playlist.updatedAt = addedEntries[addedEntries.length - 1].addedAt;
       playlists[index] = playlist;
       await savePlaylists(playlists);
     }
@@ -1109,11 +1638,14 @@ app.post('/api/playlists/:playlistId/tracks/bulk', async (req, res) => {
   }
 });
 
-app.delete('/api/playlists/:playlistId', async (req, res) => {
+app.post('/api/playlists/:playlistId/request-public', async (req, res) => {
   const user = await requireUser(req, res);
   if (!user) return;
 
+  let requestEntry = null;
+
   try {
+    const userRecordId = normalizeRecordId(user.recordId);
     const playlistId = req.params?.playlistId;
     if (!playlistId) {
       res.status(400).json({ ok: false, error: 'Playlist ID required' });
@@ -1121,7 +1653,75 @@ app.delete('/api/playlists/:playlistId', async (req, res) => {
     }
 
     const playlists = await loadPlaylists();
-    const index = playlists.findIndex((p) => p && p.id === playlistId && p.userId === user.recordId);
+    const playlist = playlists.find((p) => p && p.id === playlistId && playlistOwnerMatches(p.userId, userRecordId));
+    if (!playlist) {
+      res.status(404).json({ ok: false, error: 'Playlist not found' });
+      return;
+    }
+
+    const tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+    if (!tracks.length) {
+      res.status(400).json({ ok: false, error: 'Add at least one track before requesting a public playlist' });
+      return;
+    }
+
+    const noteRaw = req.body?.note;
+    const note = typeof noteRaw === 'string' ? noteRaw.trim().slice(0, 2000) : '';
+
+    requestEntry = {
+      id: randomUUID(),
+      playlistId: playlist.id,
+      playlistName: playlist.name || '',
+      trackCount: tracks.length,
+      userEmail: user.email || '',
+      note,
+      createdAt: new Date().toISOString(),
+      status: isEmailConfigured() ? 'pending_email' : 'queued'
+    };
+
+    if (!isEmailConfigured()) {
+      await appendPlaylistRequestLog(requestEntry);
+      res.json({ ok: true, queued: true, message: 'Playlist request saved for manual review' });
+      return;
+    }
+
+    await sendPlaylistRequestEmail({
+      playlist,
+      userEmail: user.email,
+      note
+    });
+
+    requestEntry.status = 'emailed';
+    requestEntry.sentAt = new Date().toISOString();
+    await appendPlaylistRequestLog(requestEntry);
+
+    res.json({ ok: true, queued: false, message: 'Playlist request emailed successfully' });
+  } catch (err) {
+    console.error('[MASS] Playlist request email failed:', err);
+    if (requestEntry) {
+      requestEntry.status = 'failed';
+      requestEntry.error = err?.message || String(err);
+      requestEntry.failedAt = new Date().toISOString();
+      await appendPlaylistRequestLog(requestEntry);
+    }
+    res.status(500).json({ ok: false, error: 'Unable to submit playlist request' });
+  }
+});
+
+app.delete('/api/playlists/:playlistId', async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  try {
+    const userRecordId = normalizeRecordId(user.recordId);
+    const playlistId = req.params?.playlistId;
+    if (!playlistId) {
+      res.status(400).json({ ok: false, error: 'Playlist ID required' });
+      return;
+    }
+
+    const playlists = await loadPlaylists();
+    const index = playlists.findIndex((p) => p && p.id === playlistId && playlistOwnerMatches(p.userId, userRecordId));
     if (index === -1) {
       res.status(404).json({ ok: false, error: 'Playlist not found' });
       return;
@@ -1388,13 +1988,31 @@ app.get('/api/public-playlists', async (req, res) => {
       }
     }
 
-    const playlists = Array.from(summaryMap.values())
-      .map((entry) => ({
-        name: entry.name,
-        albumCount: entry.albumKeys.size,
-        trackCount: entry.trackCount
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    const summaryEntries = Array.from(summaryMap.values());
+    const playlists = await Promise.all(
+      summaryEntries.map(async (entry) => {
+        const image = (await resolvePlaylistImage(entry.name)) || '';
+        return {
+          name: entry.name,
+          albumCount: entry.albumKeys.size,
+          trackCount: entry.trackCount,
+          image
+        };
+      })
+    );
+    playlists.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+    if (nameParam) {
+      const match = playlists.find((p) => p && typeof p.name === 'string' && p.name.toLowerCase() === targetName);
+      const fallbackImage = match?.image || '';
+      if (fallbackImage) {
+        for (const track of tracks) {
+          if (!track || typeof track !== 'object') continue;
+          if (!track.picture) track.picture = fallbackImage;
+          if (!track.albumPicture) track.albumPicture = fallbackImage;
+        }
+      }
+    }
 
     const payload = { ok: true, playlists };
     if (nameParam) payload.tracks = tracks;

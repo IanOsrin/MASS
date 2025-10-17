@@ -58,6 +58,8 @@
     .public-playlist-hero img{display:block;width:60%;height:auto;max-height:240px;object-fit:contain;}
     .public-playlist-main{flex:1;display:flex;flex-direction:column;gap:12px;}
     .playlist-actions{display:flex;align-items:center;gap:6px;}
+    .playlist-footer-actions{margin-top:12px;display:flex;justify-content:flex-end;}
+    .playlist-footer-actions .btn{min-width:160px;}
     @media (max-width:900px){
       .layout-grid{flex-direction:column;}
       .playlist-column{max-width:100%;order:initial;}
@@ -388,6 +390,9 @@
           <div id="playlistTracksMeta" class="muted"></div>
           <ul id="playlistTracksList" class="tracks"></ul>
           <div id="playlistTracksEmpty" class="playlist-empty" hidden>No tracks in this playlist yet.</div>
+          <div class="playlist-footer-actions">
+            <button id="emailPlaylistButton" type="button" class="btn small">Request public playlist</button>
+          </div>
         </section>
       </aside>
       <section class="content-column">
@@ -542,6 +547,7 @@
     const playlistTracksList = document.getElementById('playlistTracksList');
     const playlistTracksEmpty = document.getElementById('playlistTracksEmpty');
     const togglePlaylistTracksButton = document.getElementById('togglePlaylistTracks');
+    const emailPlaylistButton = document.getElementById('emailPlaylistButton');
     const deletePlaylistButton = document.getElementById('deletePlaylistButton');
     const publicPlaylistView = document.getElementById('publicPlaylistView');
     const publicPlaylistTitle = document.getElementById('publicPlaylistTitle');
@@ -594,6 +600,121 @@
     let publicPlaylistsSummary = [];
     let activePublicPlaylist = null;
     let activePublicPlaylistImage = '';
+
+    const STREAM_EVENTS_ENDPOINT = '/api/stream-events';
+    const STREAM_SESSION_STORAGE_KEY = 'mass.session';
+    const STREAM_PROGRESS_INTERVAL_MS = 30 * 1000;
+    const STREAM_DEBUG = Boolean(window.massStreamDebug);
+    let streamSessionId = null;
+    try {
+      streamSessionId = localStorage.getItem(STREAM_SESSION_STORAGE_KEY);
+    } catch {
+      streamSessionId = null;
+    }
+    if (!streamSessionId) {
+      const fallbackId = (window.crypto && typeof window.crypto.randomUUID === 'function')
+        ? window.crypto.randomUUID()
+        : Math.random().toString(36).slice(2);
+      streamSessionId = fallbackId;
+      try {
+        localStorage.setItem(STREAM_SESSION_STORAGE_KEY, streamSessionId);
+      } catch {
+        // ignore storage failures; rely on cookie fallback from server
+      }
+    }
+    let lastStreamReportTs = 0;
+    let lastStreamReportPos = 0;
+    let lastProgressSentAt = 0;
+    let lastProgressAttemptTs = 0;
+    let seekStartPosition = 0;
+
+    function getCurrentTrackMeta(){
+      return (nowPlayingInfo && nowPlayingInfo.meta) || {};
+    }
+
+    function toSeconds(value){
+      const numeric = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(numeric)) return 0;
+      return Math.max(0, Math.round(numeric));
+    }
+
+    async function sendStreamEvent(type, metaOverride, positionOverride, durationOverride, deltaOverride){
+      if (typeof fetch !== 'function') return false;
+      const requestTs = Date.now();
+      const meta = metaOverride && typeof metaOverride === 'object' ? metaOverride : getCurrentTrackMeta();
+      const rawPos = typeof positionOverride === 'number' ? positionOverride : player?.currentTime || 0;
+      const rawDur = typeof durationOverride === 'number' ? durationOverride : player?.duration || 0;
+      const normalizedPos = toSeconds(rawPos);
+      const normalizedDur = toSeconds(rawDur);
+      const hasOverride = Number.isFinite(deltaOverride);
+      const overrideDelta = hasOverride ? Math.max(0, Math.round(deltaOverride)) : 0;
+      const deltaFromPos = Math.max(0, normalizedPos - (Number.isFinite(lastStreamReportPos) ? lastStreamReportPos : 0));
+      const deltaFromTime = lastStreamReportTs ? Math.max(0, Math.round((requestTs - lastStreamReportTs) / 1000)) : 0;
+      const normalizedDelta = hasOverride ? overrideDelta : (deltaFromPos || deltaFromTime);
+
+      const body = {
+        eventType: type,
+        trackRecordId: meta.trackRecordId || meta.recordId || meta.id || '',
+        trackISRC: meta.trackISRC || meta.isrc || meta.ISRC || '',
+        positionSec: normalizedPos,
+        durationSec: normalizedDur,
+        deltaSec: normalizedDelta
+      };
+
+      let responseJson = null;
+      try {
+        const response = await fetch(STREAM_EVENTS_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Session-ID': streamSessionId
+          },
+          body: JSON.stringify(body)
+        });
+        if (!response.ok) {
+          let detail = '';
+          try {
+            const mime = response.headers?.get ? response.headers.get('Content-Type') : '';
+            if (mime && mime.includes('application/json')) {
+              responseJson = await response.json();
+              detail = responseJson?.error || JSON.stringify(responseJson);
+            } else {
+              detail = await response.text();
+            }
+          } catch {
+            // ignore parsing errors
+          }
+          console.warn('[MASS] stream event rejected', { status: response.status, detail, body });
+          return false;
+        }
+        responseJson = await response.json().catch(() => null);
+        if (!responseJson?.ok) {
+          console.warn('[MASS] stream event server reported failure', { response: responseJson, body });
+          return false;
+        }
+        if (STREAM_DEBUG) {
+          console.info('[MASS] stream event sent', {
+            type,
+            trackRecordId: body.trackRecordId,
+            positionSec: body.positionSec,
+            deltaSec: body.deltaSec,
+            recordId: responseJson.recordId || null,
+            totalPlayedSec: responseJson.totalPlayedSec || null
+          });
+        }
+      } catch (err) {
+        console.warn('[MASS] stream event send failed', err, body);
+        return false;
+      }
+
+      lastStreamReportTs = requestTs;
+      lastStreamReportPos = normalizedPos;
+      if (type === 'PROGRESS') {
+        lastProgressSentAt = requestTs;
+      }
+      return true;
+    }
 
     // Config
     const ALBUMS_PER_PAGE = 9;
@@ -895,14 +1016,20 @@
     function updateNowPlayingUI(){
       if (!nowPlayingCard) return;
       const meta = nowPlayingInfo.meta;
+      const isPlaying = !!nowPlayingInfo.isPlaying;
       if (!meta) {
         if (nowPlayingProgressFill) nowPlayingProgressFill.style.width = '0%';
         if (nowPlayingMetaButtons) nowPlayingMetaButtons.innerHTML = '';
         nowPlayingCard.hidden = true;
+        if (nowPlayingToggleButton) {
+          nowPlayingToggleButton.textContent = '▶';
+          nowPlayingToggleButton.setAttribute('aria-label', 'Play track');
+          nowPlayingToggleButton.disabled = true;
+        }
         return;
       }
 
-      nowPlayingCard.hidden = false;
+      nowPlayingCard.hidden = !isPlaying;
       nowPlayingCard.classList.toggle('collapsed', nowPlayingCollapsed);
 
       if (nowPlayingTitle) nowPlayingTitle.textContent = meta.trackName || 'Track';
@@ -943,10 +1070,11 @@
         }
       }
 
-      if (nowPlayingStatus) nowPlayingStatus.textContent = nowPlayingInfo.isPlaying ? 'Playing' : 'Paused';
+      if (nowPlayingStatus) nowPlayingStatus.textContent = isPlaying ? 'Playing' : 'Paused';
 
       if (nowPlayingToggleButton) {
-        nowPlayingToggleButton.textContent = nowPlayingInfo.isPlaying ? 'Pause' : 'Play';
+        nowPlayingToggleButton.textContent = isPlaying ? '⏸' : '▶';
+        nowPlayingToggleButton.setAttribute('aria-label', isPlaying ? 'Pause playback' : 'Play track');
         nowPlayingToggleButton.disabled = !meta.src;
       }
 
@@ -1250,26 +1378,28 @@
       const hasUser = Boolean(currentUser);
       const playlist = getActivePlaylist();
 
-      if (!hasUser) {
-        playlistTracksSection.hidden = true;
-        if (deletePlaylistButton) deletePlaylistButton.hidden = true;
-        if (togglePlaylistTracksButton) togglePlaylistTracksButton.hidden = true;
-        return;
-      }
+    if (!hasUser) {
+      playlistTracksSection.hidden = true;
+      if (deletePlaylistButton) deletePlaylistButton.hidden = true;
+      if (togglePlaylistTracksButton) togglePlaylistTracksButton.hidden = true;
+      if (emailPlaylistButton) emailPlaylistButton.hidden = true;
+      return;
+    }
 
-      if (!playlist) {
-        playlistTracksCollapsed = false;
+    if (!playlist) {
+      playlistTracksCollapsed = false;
         if (playlistTracksTitle) playlistTracksTitle.textContent = 'Playlist';
         if (playlistTracksMeta) playlistTracksMeta.textContent = '';
-        if (playlistTracksList) playlistTracksList.innerHTML = '';
-        if (playlistTracksEmpty) playlistTracksEmpty.hidden = true;
-        if (deletePlaylistButton) deletePlaylistButton.hidden = true;
-        if (togglePlaylistTracksButton) togglePlaylistTracksButton.hidden = true;
-        playlistTracksSection.hidden = true;
-        return;
-      }
+      if (playlistTracksList) playlistTracksList.innerHTML = '';
+      if (playlistTracksEmpty) playlistTracksEmpty.hidden = true;
+      if (deletePlaylistButton) deletePlaylistButton.hidden = true;
+      if (togglePlaylistTracksButton) togglePlaylistTracksButton.hidden = true;
+      if (emailPlaylistButton) emailPlaylistButton.hidden = true;
+      playlistTracksSection.hidden = true;
+      return;
+    }
 
-      playlistTracksSection.hidden = false;
+    playlistTracksSection.hidden = false;
       playlistTracksSection.classList.toggle('collapsed', playlistTracksCollapsed);
 
       const tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
@@ -1287,6 +1417,17 @@
       if (deletePlaylistButton) {
         deletePlaylistButton.hidden = false;
         deletePlaylistButton.disabled = playlistsLoading;
+      }
+
+      if (emailPlaylistButton) {
+        emailPlaylistButton.hidden = false;
+        const hasTracks = count > 0;
+        emailPlaylistButton.disabled = playlistsLoading || !hasTracks;
+        if (!hasTracks) {
+          emailPlaylistButton.title = 'Add at least one track before requesting a public playlist';
+        } else {
+          emailPlaylistButton.title = '';
+        }
       }
 
       if (togglePlaylistTracksButton) {
@@ -1584,6 +1725,54 @@
       renderPlaylistsPanel();
       if (deletePlaylistButton) deletePlaylistButton.disabled = false;
       window.alert('Playlist deleted.');
+    }
+
+    async function requestPublicPlaylistEmail(){
+      const playlist = getActivePlaylist();
+      if (!playlist) return;
+      if (!Array.isArray(playlist.tracks) || playlist.tracks.length === 0) {
+        window.alert('Add tracks before requesting a public playlist.');
+        return;
+      }
+      if (emailPlaylistButton) {
+        emailPlaylistButton.disabled = true;
+      }
+      const notePrompt = window.prompt('Optional note for the curation team (leave blank to skip):');
+      const note = typeof notePrompt === 'string' ? notePrompt.trim() : '';
+      try {
+        const res = await fetch(`/api/playlists/${encodeURIComponent(playlist.id)}/request-public`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({ note })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          currentUser = null;
+          clearPlaylists();
+          updateAuthUI();
+          throw new Error('Please log in to manage playlists');
+        }
+        if (res.status === 400) {
+          throw new Error(data?.error || 'Playlist needs at least one track');
+        }
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || 'Unable to send playlist request');
+        }
+        const queued = Boolean(data?.queued);
+        const message = data?.message || (queued
+          ? 'Your playlist request has been saved for the curation team.'
+          : 'Thanks! Your playlist has been sent to the curation team.');
+        window.alert(message);
+      } catch (err) {
+        window.alert(err?.message || 'Unable to send playlist request');
+      } finally {
+        if (emailPlaylistButton) {
+          emailPlaylistButton.disabled = false;
+        }
+      }
     }
 
     function buildPlaylistTrackPayload(album, track, playableSrc){
@@ -3718,6 +3907,12 @@
         deleteActivePlaylist();
       });
     }
+    if (emailPlaylistButton) {
+      emailPlaylistButton.addEventListener('click', () => {
+        if (emailPlaylistButton.disabled) return;
+        requestPublicPlaylistEmail();
+      });
+    }
     if (togglePlaylistTracksButton) {
       togglePlaylistTracksButton.addEventListener('click', () => {
         playlistTracksCollapsed = !playlistTracksCollapsed;
@@ -4165,7 +4360,22 @@
       return false;
         }
 
+    player.addEventListener('seeking', () => {
+      seekStartPosition = Number.isFinite(player.currentTime) ? player.currentTime : seekStartPosition;
+    });
+    player.addEventListener('seeked', () => {
+      const to = Number.isFinite(player.currentTime) ? player.currentTime : 0;
+      const delta = Math.abs(to - seekStartPosition);
+      sendStreamEvent('SEEK', getCurrentTrackMeta(), to, player.duration, delta);
+    });
+
     player.addEventListener('ended', () => {
+      const meta = getCurrentTrackMeta();
+      const duration = Number.isFinite(player.duration) ? player.duration : 0;
+      const endedPosition = Number.isFinite(player.currentTime) ? player.currentTime : duration;
+      const finalPosition = duration || endedPosition;
+      const delta = Math.abs((finalPosition || 0) - lastStreamReportPos);
+      sendStreamEvent('END', meta, finalPosition, duration || finalPosition, delta);
       const nextLi = currentRow ? findNextPlayableRow(currentRow) : null;
       if (nextLi && nextLi._btn && nextLi._src) {
         handlePlay(nextLi._btn, nextLi, nextLi._src);
@@ -4206,9 +4416,19 @@
       markNowPlayingInactive();
       if (nowPlayingProgressFill) nowPlayingProgressFill.style.width = '0%';
     });
-    player.addEventListener('timeupdate', () => { updateProgressUI(); });
+    player.addEventListener('timeupdate', () => {
+      updateProgressUI();
+      const now = Date.now();
+      if (!lastProgressAttemptTs || now - lastProgressAttemptTs >= STREAM_PROGRESS_INTERVAL_MS) {
+        lastProgressAttemptTs = now;
+        sendStreamEvent('PROGRESS', getCurrentTrackMeta());
+      }
+    });
     player.addEventListener('loadedmetadata', () => { updateProgressUI(); });
     player.addEventListener('pause', () => {
+      if (!player.ended) {
+        sendStreamEvent('PAUSE', getCurrentTrackMeta(), player.currentTime, player.duration);
+      }
       if (currentBtn && currentSrc === player.src) {
         const playLabel = currentBtn.dataset?.playLabel || '▶ Play';
         currentBtn.textContent = playLabel;
@@ -4220,6 +4440,7 @@
       else markNowPlayingInactive();
         });
     player.addEventListener('play', () => {
+      sendStreamEvent('PLAY', getCurrentTrackMeta(), player.currentTime, player.duration);
       if (currentBtn && currentSrc === player.src) {
         const pauseLabel = currentBtn.dataset?.pauseLabel || '⏸ Pause';
         currentBtn.textContent = pauseLabel;
@@ -4230,6 +4451,7 @@
       if (currentRow) setNowPlayingFromRow(currentRow, true);
     });
     player.addEventListener('error', () => {
+      sendStreamEvent('ERROR', getCurrentTrackMeta(), player.currentTime, player.duration);
       const err = player.error;
       if (err) {
         console.warn('[MASS] Audio element error', { code: err.code, message: err.message });
