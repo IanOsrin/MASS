@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
@@ -22,13 +22,6 @@ try {
 } catch (err) {
   console.error('[MASS] Missing dependency express. Run "npm install" to install server packages.');
   process.exit(1);
-}
-
-let nodemailer;
-try {
-  ({ default: nodemailer } = await import('nodemailer'));
-} catch (err) {
-  console.warn('[MASS] Optional dependency nodemailer not available; playlist request emails disabled');
 }
 
 loadEnv();
@@ -126,7 +119,7 @@ const PLAYLIST_IMAGE_EXTS = ['.webp', '.jpg', '.jpeg', '.png', '.gif', '.svg'];
 const PLAYLIST_IMAGE_DIR = path.join(PUBLIC_DIR, 'img', 'Playlists');
 const playlistImageCache = new Map();
 let playlistsCache = { data: null, mtimeMs: 0 };
-const PLAYLIST_REQUESTS_PATH = path.join(DATA_DIR, 'playlist_requests.json');
+const loggedPublicPlaylistFieldErrors = new Set();
 
 const normalizeRecordId = (value) => {
   if (value === undefined || value === null) return '';
@@ -144,22 +137,113 @@ const slugifyPlaylistName = (name) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 
-const SMTP_HOST = process.env.SMTP_HOST || '';
-const SMTP_PORT_RAW = Number.parseInt(process.env.SMTP_PORT || '', 10);
-const SMTP_PORT = Number.isFinite(SMTP_PORT_RAW) && SMTP_PORT_RAW > 0 ? SMTP_PORT_RAW : 587;
-const SMTP_USER = process.env.SMTP_USER || '';
-const SMTP_PASS = process.env.SMTP_PASS || '';
-const SMTP_SECURE = process.env.SMTP_SECURE === 'true';
-const EMAIL_FROM = process.env.EMAIL_FROM || process.env.SMTP_FROM || '';
-const PLAYLIST_REQUEST_RECIPIENT =
-  process.env.PLAYLIST_REQUEST_EMAIL ||
-  process.env.PLAYLIST_REQUEST_RECIPIENT ||
-  process.env.EMAIL_TO ||
-  '';
-const PLAYLIST_REQUEST_BCC = process.env.PLAYLIST_REQUEST_BCC || '';
-const EMAIL_ENABLED =
-  !!nodemailer && Boolean(SMTP_HOST && SMTP_PORT && EMAIL_FROM && PLAYLIST_REQUEST_RECIPIENT);
-let emailTransportPromise = null;
+const normalizeShareId = (value) => {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+};
+
+const generateShareId = () => {
+  if (typeof randomUUID === 'function') {
+    return randomUUID().replace(/-/g, '');
+  }
+  return randomBytes(16).toString('hex');
+};
+
+const cloneTrackForShare = (track) => {
+  if (!track || typeof track !== 'object') return null;
+  const {
+    id = null,
+    trackRecordId = null,
+    name = '',
+    albumTitle = '',
+    albumArtist = '',
+    catalogue = '',
+    trackArtist = '',
+    mp3 = '',
+    resolvedSrc = '',
+    seq = null,
+    artwork = '',
+    audioField = '',
+    artworkField = '',
+    addedAt = null,
+    producer = '',
+    language = '',
+    genre = '',
+    isrc = '',
+    composer1 = '',
+    composer2 = '',
+    composer3 = '',
+    composer4 = '',
+    composers = [],
+    albumKey = '',
+    picture = ''
+  } = track;
+
+  const payload = {
+    id,
+    trackRecordId,
+    name,
+    albumTitle,
+    albumArtist,
+    catalogue,
+    trackArtist,
+    mp3,
+    resolvedSrc,
+    seq,
+    artwork,
+    audioField,
+    artworkField,
+    addedAt
+  };
+  if (producer) payload.producer = producer;
+  if (language) payload.language = language;
+  if (genre) payload.genre = genre;
+  if (isrc) payload.isrc = isrc;
+  if (composer1) payload.composer1 = composer1;
+  if (composer2) payload.composer2 = composer2;
+  if (composer3) payload.composer3 = composer3;
+  if (composer4) payload.composer4 = composer4;
+  if (Array.isArray(composers) && composers.length) payload.composers = composers.slice();
+  if (albumKey) payload.albumKey = albumKey;
+  if (picture) payload.picture = picture;
+  return payload;
+};
+
+const sanitizePlaylistForShare = (playlist) => {
+  if (!playlist || typeof playlist !== 'object') return null;
+  const tracks = Array.isArray(playlist.tracks)
+    ? playlist.tracks.map(cloneTrackForShare).filter(Boolean)
+    : [];
+  return {
+    id: playlist.id || null,
+    shareId: normalizeShareId(playlist.shareId),
+    name: playlist.name || '',
+    sharedAt: playlist.sharedAt || null,
+    createdAt: playlist.createdAt || null,
+    updatedAt: playlist.updatedAt || null,
+    tracks
+  };
+};
+
+const resolveRequestOrigin = (req) => {
+  const originHeader = req.get('origin');
+  if (originHeader) return originHeader;
+  const forwardedProto = req.get('x-forwarded-proto');
+  const forwardedHost = req.get('x-forwarded-host');
+  const host = forwardedHost || req.get('host');
+  const proto = forwardedProto || req.protocol;
+  if (proto && host) return `${proto}://${host}`;
+  if (host) return `http://${host}`;
+  return '';
+};
+
+const buildShareUrl = (req, shareId) => {
+  const normalized = normalizeShareId(shareId);
+  if (!normalized) return '';
+  const origin = resolveRequestOrigin(req);
+  const pathPart = `/?share=${encodeURIComponent(normalized)}`;
+  return origin ? `${origin}${pathPart}` : pathPart;
+};
 
 async function resolvePlaylistImage(name) {
   if (!name) return null;
@@ -179,110 +263,6 @@ async function resolvePlaylistImage(name) {
   }
   playlistImageCache.set(slug, null);
   return null;
-}
-
-const isEmailConfigured = () => EMAIL_ENABLED;
-
-async function getEmailTransport() {
-  if (!isEmailConfigured()) return null;
-  if (!emailTransportPromise) {
-    emailTransportPromise = (async () => {
-      const transportOptions = {
-        host: SMTP_HOST,
-        port: SMTP_PORT,
-        secure: SMTP_SECURE
-      };
-      if (SMTP_USER) {
-        transportOptions.auth = {
-          user: SMTP_USER,
-          pass: SMTP_PASS
-        };
-      }
-      return nodemailer.createTransport(transportOptions);
-    })();
-  }
-  return emailTransportPromise;
-}
-
-function summarizePlaylistForEmail(playlist) {
-  const lines = [];
-  const tracks = Array.isArray(playlist?.tracks) ? playlist.tracks : [];
-  tracks.forEach((track, index) => {
-    if (!track) return;
-    const position = String(index + 1).padStart(2, '0');
-    const name = track.name || 'Untitled track';
-    const artist = track.trackArtist || track.albumArtist || 'Unknown artist';
-    const catalogue = track.catalogue ? ` [${track.catalogue}]` : '';
-    lines.push(`${position}. ${artist} — ${name}${catalogue}`);
-  });
-  return lines.join('\n') || '(no tracks)';
-}
-
-async function sendPlaylistRequestEmail({ playlist, userEmail, note }) {
-  const transport = await getEmailTransport();
-  if (!transport) {
-    throw new Error('Email transport unavailable');
-  }
-  const tracks = Array.isArray(playlist?.tracks) ? playlist.tracks : [];
-  const trackSummary = summarizePlaylistForEmail(playlist);
-  const now = new Date().toISOString();
-  const subject = `[MASS] Public playlist request: ${playlist?.name || 'Untitled'} (${tracks.length} tracks)`;
-  const lines = [
-    'A listener has requested curation of their playlist.',
-    '',
-    `Submitted: ${now}`,
-    `User email: ${userEmail || 'unknown'}`,
-    `Playlist ID: ${playlist?.id || 'unknown'}`,
-    `Playlist name: ${playlist?.name || 'Untitled playlist'}`,
-    `Track count: ${tracks.length}`,
-    `Created: ${playlist?.createdAt || 'n/a'}`,
-    `Updated: ${playlist?.updatedAt || 'n/a'}`,
-    ''
-  ];
-  if (note) {
-    lines.push('Listener note:');
-    lines.push(note);
-    lines.push('');
-  }
-  lines.push('Tracks:');
-  lines.push(trackSummary);
-  lines.push('');
-  lines.push('---');
-  lines.push('Generated by MASS playlist request workflow.');
-
-  const message = {
-    from: EMAIL_FROM,
-    to: PLAYLIST_REQUEST_RECIPIENT,
-    subject,
-    text: lines.join('\n')
-  };
-  if (userEmail) {
-    message.replyTo = userEmail;
-  }
-  if (PLAYLIST_REQUEST_BCC) {
-    message.bcc = PLAYLIST_REQUEST_BCC;
-  }
-  await transport.sendMail(message);
-}
-
-async function appendPlaylistRequestLog(entry) {
-  try {
-    await ensureDataDir();
-    let existing = [];
-    try {
-      const raw = await fs.readFile(PLAYLIST_REQUESTS_PATH, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) existing = parsed;
-    } catch (err) {
-      if (err?.code !== 'ENOENT') {
-        console.warn('[MASS] Unable to read playlist request log:', err);
-      }
-    }
-    existing.push(entry);
-    await fs.writeFile(PLAYLIST_REQUESTS_PATH, JSON.stringify(existing, null, 2), 'utf8');
-  } catch (err) {
-    console.warn('[MASS] Unable to append playlist request log:', err);
-  }
 }
 
 if (!FM_HOST || !FM_DB || !FM_USER || !FM_PASS) {
@@ -757,16 +737,36 @@ async function fetchPublicPlaylistRecords({ limit = 600 } = {}) {
         if (!response.ok) {
           const msg = json?.messages?.[0]?.message || 'FM error';
           const code = json?.messages?.[0]?.code;
+          const tableMissing = typeof msg === 'string' && /table is missing/i.test(msg);
           // Skip missing field errors (102) and move to next candidate
           if (String(code) === '102') {
             console.warn(`[MASS] Skipping playlist field "${field}" (FileMaker code 102: Field is missing on layout ${FM_LAYOUT})`);
+            break;
+          }
+          if (tableMissing) {
+            if (!loggedPublicPlaylistFieldErrors.has(field)) {
+              loggedPublicPlaylistFieldErrors.add(field);
+              console.warn(
+                `[MASS] Skipping playlist field "${field}" because FileMaker reported "Table is missing" on layout ${FM_LAYOUT}`
+              );
+            }
             break;
           }
           console.warn(`[MASS] Public playlist query on field "${field}" failed: ${msg} (${code ?? response.status})`);
           break;
         }
       } catch (err) {
-        console.warn(`[MASS] Public playlist query on field "${field}" threw`, err?.message || err);
+        const msg = err?.message || '';
+        if (/table is missing/i.test(msg)) {
+          if (!loggedPublicPlaylistFieldErrors.has(field)) {
+            loggedPublicPlaylistFieldErrors.add(field);
+            console.warn(
+              `[MASS] Skipping playlist field "${field}" because FileMaker reported "Table is missing" on layout ${FM_LAYOUT}`
+            );
+          }
+        } else {
+          console.warn(`[MASS] Public playlist query on field "${field}" threw`, msg || err);
+        }
         break;
       }
 
@@ -956,6 +956,13 @@ async function savePlaylists(playlists) {
     for (const entry of normalized) {
       if (entry && typeof entry === 'object') {
         entry.userId = normalizeRecordId(entry.userId);
+        const shareId = normalizeShareId(entry.shareId);
+        if (shareId) {
+          entry.shareId = shareId;
+        } else {
+          delete entry.shareId;
+          if (entry.sharedAt) entry.sharedAt = null;
+        }
       }
     }
     const payload = JSON.stringify(normalized, null, 2);
@@ -1638,11 +1645,12 @@ app.post('/api/playlists/:playlistId/tracks/bulk', async (req, res) => {
   }
 });
 
-app.post('/api/playlists/:playlistId/request-public', async (req, res) => {
+app.post('/api/playlists/:playlistId/share', async (req, res) => {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  let requestEntry = null;
+  let playlist = null;
+  let shareId = '';
 
   try {
     const userRecordId = normalizeRecordId(user.recordId);
@@ -1653,58 +1661,94 @@ app.post('/api/playlists/:playlistId/request-public', async (req, res) => {
     }
 
     const playlists = await loadPlaylists();
-    const playlist = playlists.find((p) => p && p.id === playlistId && playlistOwnerMatches(p.userId, userRecordId));
+    const index = playlists.findIndex((p) => p && p.id === playlistId && playlistOwnerMatches(p.userId, userRecordId));
+    if (index === -1) {
+      res.status(404).json({ ok: false, error: 'Playlist not found' });
+      return;
+    }
+
+    playlist = playlists[index];
+    const tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+    if (!tracks.length) {
+      res.status(400).json({ ok: false, error: 'Add at least one track before sharing a playlist' });
+      return;
+    }
+
+    const regenerate = req.body?.regenerate === true;
+    const existingIds = new Set();
+    playlists.forEach((entry, idx) => {
+      if (!entry || idx === index) return;
+      const existing = normalizeShareId(entry.shareId);
+      if (existing) existingIds.add(existing);
+    });
+
+    shareId = normalizeShareId(playlist.shareId);
+    const needsNewId = regenerate || !shareId || existingIds.has(shareId);
+    if (needsNewId) {
+      let candidate = '';
+      let attempts = 0;
+      do {
+        candidate = generateShareId();
+        attempts += 1;
+      } while (existingIds.has(candidate) && attempts < 50);
+      if (existingIds.has(candidate)) {
+        res.status(500).json({ ok: false, error: 'Unable to generate a unique share link' });
+        return;
+      }
+      shareId = candidate;
+      playlist.shareId = shareId;
+      playlist.sharedAt = new Date().toISOString();
+    } else if (!playlist.sharedAt) {
+      playlist.sharedAt = new Date().toISOString();
+    }
+
+    playlists[index] = playlist;
+    await savePlaylists(playlists);
+
+    const payload = sanitizePlaylistForShare(playlist);
+    const shareUrl = buildShareUrl(req, shareId);
+
+    res.json({ ok: true, shareId, shareUrl, playlist: payload });
+  } catch (err) {
+    console.error('[MASS] Generate playlist share link failed:', err);
+    const detail = err?.message || err?.code || String(err);
+    const fallbackId = normalizeShareId(shareId || playlist?.shareId);
+    if (fallbackId && playlist) {
+      try {
+        const payload = sanitizePlaylistForShare(playlist);
+        const shareUrl = buildShareUrl(req, fallbackId);
+        res.json({ ok: true, shareId: fallbackId, shareUrl, playlist: payload, reused: true, error: 'Existing share link reused' });
+        return;
+      } catch (fallbackErr) {
+        console.error('[MASS] Fallback share link serialization failed:', fallbackErr);
+      }
+    }
+    res.status(500).json({ ok: false, error: 'Unable to generate share link', detail });
+  }
+});
+
+app.get('/api/shared-playlists/:shareId', async (req, res) => {
+  try {
+    const shareId = normalizeShareId(req.params?.shareId);
+    if (!shareId) {
+      res.status(400).json({ ok: false, error: 'Share ID required' });
+      return;
+    }
+
+    const playlists = await loadPlaylists();
+    const playlist = playlists.find((p) => p && normalizeShareId(p.shareId) === shareId);
     if (!playlist) {
       res.status(404).json({ ok: false, error: 'Playlist not found' });
       return;
     }
 
-    const tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
-    if (!tracks.length) {
-      res.status(400).json({ ok: false, error: 'Add at least one track before requesting a public playlist' });
-      return;
-    }
+    const payload = sanitizePlaylistForShare(playlist);
+    const shareUrl = buildShareUrl(req, shareId);
 
-    const noteRaw = req.body?.note;
-    const note = typeof noteRaw === 'string' ? noteRaw.trim().slice(0, 2000) : '';
-
-    requestEntry = {
-      id: randomUUID(),
-      playlistId: playlist.id,
-      playlistName: playlist.name || '',
-      trackCount: tracks.length,
-      userEmail: user.email || '',
-      note,
-      createdAt: new Date().toISOString(),
-      status: isEmailConfigured() ? 'pending_email' : 'queued'
-    };
-
-    if (!isEmailConfigured()) {
-      await appendPlaylistRequestLog(requestEntry);
-      res.json({ ok: true, queued: true, message: 'Playlist request saved for manual review' });
-      return;
-    }
-
-    await sendPlaylistRequestEmail({
-      playlist,
-      userEmail: user.email,
-      note
-    });
-
-    requestEntry.status = 'emailed';
-    requestEntry.sentAt = new Date().toISOString();
-    await appendPlaylistRequestLog(requestEntry);
-
-    res.json({ ok: true, queued: false, message: 'Playlist request emailed successfully' });
+    res.json({ ok: true, playlist: payload, shareUrl });
   } catch (err) {
-    console.error('[MASS] Playlist request email failed:', err);
-    if (requestEntry) {
-      requestEntry.status = 'failed';
-      requestEntry.error = err?.message || String(err);
-      requestEntry.failedAt = new Date().toISOString();
-      await appendPlaylistRequestLog(requestEntry);
-    }
-    res.status(500).json({ ok: false, error: 'Unable to submit playlist request' });
+    console.error('[MASS] Fetch shared playlist failed:', err);
+    res.status(500).json({ ok: false, error: 'Unable to load playlist' });
   }
 });
 
@@ -1809,10 +1853,8 @@ app.use(express.static(PUBLIC_DIR));
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
 /* ========= Search ========= */
-const SEARCH_FIELDS = [
-  'Album Artist',
-  'Album Title',
-  'Track Name',
+const SEARCH_FIELDS_BASE = ['Album Artist', 'Album Title', 'Track Name'];
+const SEARCH_FIELDS_OPTIONAL = [
   'Year of Release',
   'Local Genre',
   'Language',
@@ -1821,6 +1863,72 @@ const SEARCH_FIELDS = [
   'Tape Files::Album_Title',
   'Track Artist'
 ];
+const SEARCH_FIELDS_DEFAULT = [...SEARCH_FIELDS_BASE, ...SEARCH_FIELDS_OPTIONAL];
+
+const ARTIST_FIELDS_BASE = ['Album Artist'];
+const ARTIST_FIELDS_OPTIONAL = ['Tape Files::Album Artist', 'Track Artist'];
+const ALBUM_FIELDS_BASE = ['Album Title'];
+const ALBUM_FIELDS_OPTIONAL = ['Tape Files::Album_Title'];
+const TRACK_FIELDS_BASE = ['Track Name'];
+const TRACK_FIELDS_OPTIONAL = [];
+
+const listSearchFields = (base, optional, includeOptional) =>
+  includeOptional ? [...base, ...optional] : base;
+
+function buildSearchQueries({ q, artist, album, track }, includeOptionalFields) {
+  const queries = [];
+
+  const extend = (arr, make) => {
+    const out = [];
+    for (const base of arr) {
+      const vs = make(base);
+      if (Array.isArray(vs)) out.push(...vs);
+      else out.push(vs);
+    }
+    return out;
+  };
+
+  let combos = [{}];
+  const artistFields = listSearchFields(ARTIST_FIELDS_BASE, ARTIST_FIELDS_OPTIONAL, includeOptionalFields);
+  const albumFields = listSearchFields(ALBUM_FIELDS_BASE, ALBUM_FIELDS_OPTIONAL, includeOptionalFields);
+  const trackFields = listSearchFields(TRACK_FIELDS_BASE, TRACK_FIELDS_OPTIONAL, includeOptionalFields);
+
+  if (artist) {
+    combos = extend(combos, (b) =>
+      artistFields.map((field) => ({
+        ...b,
+        [field]: begins(artist)
+      }))
+    );
+  }
+  if (album) {
+    combos = extend(combos, (b) =>
+      albumFields.map((field) => ({
+        ...b,
+        [field]: begins(album)
+      }))
+    );
+  }
+  if (track) {
+    combos = extend(combos, (b) =>
+      trackFields.map((field) => ({
+        ...b,
+        [field]: begins(track)
+      }))
+    );
+  }
+
+  if (artist || album || track) {
+    return combos;
+  }
+
+  if (q) {
+    const fields = includeOptionalFields ? SEARCH_FIELDS_DEFAULT : SEARCH_FIELDS_BASE;
+    return fields.map((field) => ({ [field]: begins(q) }));
+  }
+
+  return [{ 'Album Title': '*' }];
+}
 
 const begins = (s) => (s ? `${s}*` : '');
 
@@ -1834,57 +1942,38 @@ app.get('/api/search', async (req, res) => {
     const uiOff0 = Math.max(0, parseInt(req.query.offset || '0', 10));
     const fmOff = uiOff0 + 1;
 
-    let queries = [];
-    if (artist || album || track) {
-      let combos = [{}];
-      const extend = (arr, make) => {
-        const out = [];
-        for (const base of arr) {
-          const vs = make(base);
-          if (Array.isArray(vs)) out.push(...vs);
-          else out.push(vs);
-        }
-        return out;
-      };
-      if (artist) {
-        combos = extend(combos, (b) => [
-          { ...b, ['Album Artist']: begins(artist) },
-          { ...b, ['Tape Files::Album Artist']: begins(artist) },
-          { ...b, ['Track Artist']: begins(artist) }
-        ]);
+    const makePayload = (includeOptionalFields) => ({
+      query: buildSearchQueries({ q, artist, album, track }, includeOptionalFields),
+      limit,
+      offset: fmOff
+    });
+
+    const runSearch = async (includeOptionalFields) => {
+      const payload = makePayload(includeOptionalFields);
+      const response = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
+      const json = await response.json().catch(() => ({}));
+      return { response, json };
+    };
+
+    let attempt = await runSearch(true);
+
+    if (!attempt.response.ok) {
+      const code = attempt.json?.messages?.[0]?.code;
+      if (code === '102') {
+        attempt = await runSearch(false);
       }
-      if (album) {
-        combos = extend(combos, (b) => [
-          { ...b, ['Album Title']: begins(album) },
-          { ...b, ['Tape Files::Album_Title']: begins(album) }
-        ]);
-      }
-      if (track) {
-        combos = extend(combos, (b) => [
-          { ...b, ['Track Name']: begins(track) }
-        ]);
-      }
-      queries = combos;
-    } else if (q) {
-      const needle = begins(q);
-      queries = SEARCH_FIELDS.map((field) => ({ [field]: needle }));
-    } else {
-      queries = [{ 'Album Title': '*' }];
     }
 
-    const payload = { query: queries, limit, offset: fmOff };
-    const r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
-    const json = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      const msg = json?.messages?.[0]?.message || 'FM error';
-      const code = json?.messages?.[0]?.code;
+    if (!attempt.response.ok) {
+      const msg = attempt.json?.messages?.[0]?.message || 'FM error';
+      const code = attempt.json?.messages?.[0]?.code;
       return res
         .status(500)
-        .json({ error: 'Album search failed', status: r.status, detail: `${msg} (${code})` });
+        .json({ error: 'Album search failed', status: attempt.response.status, detail: `${msg} (${code})` });
     }
 
-    const data = json?.response?.data || [];
-    const total = json?.response?.dataInfo?.foundCount ?? data.length;
+    const data = attempt.json?.response?.data || [];
+    const total = attempt.json?.response?.dataInfo?.foundCount ?? data.length;
 
     res.json({
       items: data.map((d) => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} })),
