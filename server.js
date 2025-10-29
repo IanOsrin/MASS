@@ -7,6 +7,8 @@ import { Readable } from 'node:stream';
 import { fetch } from 'undici';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import compression from 'compression';
+import { searchCache, exploreCache, albumCache, publicPlaylistsCache } from './cache.js';
 const { AbortController } = globalThis;
 
 let loadEnv = () => ({ parsed: {}, skipped: true });
@@ -35,6 +37,22 @@ process.on('uncaughtException', (err) => {
 
 const app = express();
 app.set('trust proxy', true);
+
+// Response time logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    // Only log API requests and slow requests (>100ms)
+    if (req.path.startsWith('/api/') || duration > 100) {
+      const cached = res.getHeader('X-Cache-Hit') === 'true' ? '[CACHED]' : '';
+      console.log(`${req.method} ${req.path} ${res.statusCode} ${duration}ms ${cached}`);
+    }
+  });
+  next();
+});
+
+app.use(compression()); // Enable gzip compression
 app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
@@ -629,6 +647,14 @@ function resolvePlayableSrc(raw) {
   return `/api/container?u=${encodeURIComponent(src)}`;
 }
 
+function hasValidAudio(fields) {
+  if (!fields || typeof fields !== 'object') return false;
+  const audioInfo = pickFieldValueCaseInsensitive(fields, AUDIO_FIELD_CANDIDATES);
+  if (!audioInfo.value) return false;
+  const resolvedSrc = resolvePlayableSrc(audioInfo.value);
+  return resolvedSrc !== '';
+}
+
 function resolveArtworkSrc(raw) {
   if (!raw || typeof raw !== 'string') return '';
   const src = raw.trim();
@@ -935,6 +961,14 @@ async function loadPlaylists() {
       return playlistsCache.data;
     }
     const data = Array.isArray(parsed) ? parsed : [];
+
+    // Remove email addresses for privacy (we only need userId)
+    for (const entry of data) {
+      if (entry && typeof entry === 'object') {
+        delete entry.userEmail;
+      }
+    }
+
     playlistsCache = { data, mtimeMs: stat.mtimeMs };
     return data;
   } catch (err) {
@@ -956,6 +990,10 @@ async function savePlaylists(playlists) {
     for (const entry of normalized) {
       if (entry && typeof entry === 'object') {
         entry.userId = normalizeRecordId(entry.userId);
+
+        // Remove email address for privacy (we already have userId)
+        delete entry.userEmail;
+
         const shareId = normalizeShareId(entry.shareId);
         if (shareId) {
           entry.shareId = shareId;
@@ -1498,7 +1536,6 @@ app.post('/api/playlists', async (req, res) => {
     const playlist = {
       id: randomUUID(),
       userId: userRecordId,
-      userEmail: user.email,
       name,
       tracks: [],
       createdAt: now,
@@ -1848,6 +1885,22 @@ app.get('/api/track/:recordId/container', async (req, res) => {
   }
 });
 
+/* ========= Cache statistics ========= */
+app.get('/api/cache/stats', (req, res) => {
+  try {
+    const stats = {
+      search: searchCache.getStats(),
+      explore: exploreCache.getStats(),
+      album: albumCache.getStats(),
+      publicPlaylists: publicPlaylistsCache.getStats(),
+      timestamp: new Date().toISOString()
+    };
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve cache stats' });
+  }
+});
+
 /* ========= Static site ========= */
 app.use(express.static(PUBLIC_DIR));
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
@@ -1938,9 +1991,18 @@ app.get('/api/search', async (req, res) => {
     const artist = (req.query.artist || '').toString().trim();
     const album = (req.query.album || '').toString().trim();
     const track = (req.query.track || '').toString().trim();
-    const limit = Math.max(1, Math.min(200, parseInt(req.query.limit || '60', 10)));
+    const limit = Math.max(1, Math.min(300, parseInt(req.query.limit || '60', 10)));
     const uiOff0 = Math.max(0, parseInt(req.query.offset || '0', 10));
     const fmOff = uiOff0 + 1;
+
+    // Check cache
+    const cacheKey = `search:${q}:${artist}:${album}:${track}:${limit}:${uiOff0}`;
+    const cached = searchCache.get(cacheKey);
+    if (cached) {
+      console.log(`[CACHE HIT] search: ${cacheKey.slice(0, 50)}...`);
+      res.setHeader('X-Cache-Hit', 'true');
+      return res.json(cached);
+    }
 
     const makePayload = (includeOptionalFields) => ({
       query: buildSearchQueries({ q, artist, album, track }, includeOptionalFields),
@@ -1972,15 +2034,58 @@ app.get('/api/search', async (req, res) => {
         .json({ error: 'Album search failed', status: attempt.response.status, detail: `${msg} (${code})` });
     }
 
-    const data = attempt.json?.response?.data || [];
+    const rawData = attempt.json?.response?.data || [];
+
+    // Filter to only include records with valid audio
+    const data = rawData.filter(record => hasValidAudio(record.fieldData || {}));
+
     const total = attempt.json?.response?.dataInfo?.foundCount ?? data.length;
 
-    res.json({
-      items: data.map((d) => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} })),
+    // Deduplicate by album to ensure diverse results
+    // Group tracks by album key and keep representative tracks from each
+    const albumMap = new Map();
+    const MIN_ALBUMS = 8;
+
+    for (const record of data) {
+      const fields = record.fieldData || {};
+      const catalogue = firstNonEmpty(fields, ['Album Catalogue Number', 'Album Catalog Number', 'Catalogue', 'Tape Files::Album Catalogue Number']);
+      const albumTitle = firstNonEmpty(fields, ['Album Title', 'Tape Files::Album_Title', 'Tape Files::Album Title']);
+      const albumArtist = firstNonEmpty(fields, ['Album Artist', 'Tape Files::Album Artist', 'Artist']);
+
+      const albumKey = makeAlbumKey(catalogue, albumTitle, albumArtist);
+
+      if (!albumMap.has(albumKey)) {
+        albumMap.set(albumKey, []);
+      }
+      albumMap.get(albumKey).push(record);
+    }
+
+    // If we have fewer unique albums than MIN_ALBUMS and this is the first page,
+    // return all tracks to maximize grouping on frontend
+    // Otherwise, return one representative track per album for diverse results
+    let finalData;
+    if (uiOff0 === 0 && albumMap.size < MIN_ALBUMS) {
+      // Return all tracks - not enough unique albums
+      finalData = data;
+    } else {
+      // Return up to 3 tracks per album to ensure frontend has enough data
+      // while keeping results diverse
+      finalData = [];
+      for (const tracks of albumMap.values()) {
+        finalData.push(...tracks.slice(0, 3));
+      }
+    }
+
+    const response = {
+      items: finalData.map((d) => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} })),
       total,
       offset: uiOff0,
       limit
-    });
+    };
+
+    // Cache the response
+    searchCache.set(cacheKey, response);
+    res.json(response);
   } catch (err) {
     const detail = err?.response?.data?.messages?.[0]?.message || err?.message || String(err);
     res.status(500).json({ error: 'Album search failed', status: 500, detail });
@@ -1992,6 +2097,15 @@ app.get('/api/public-playlists', async (req, res) => {
     const nameParam = (req.query.name || '').toString().trim();
     const limitParam = Number.parseInt((req.query.limit || '600'), 10);
     const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(2000, limitParam)) : 600;
+
+    // Check cache
+    const cacheKey = `public-playlists:${nameParam}:${limit}`;
+    const cached = publicPlaylistsCache.get(cacheKey);
+    if (cached) {
+      console.log(`[CACHE HIT] public-playlists: ${nameParam || 'all'}`);
+      res.setHeader('X-Cache-Hit', 'true');
+      return res.json(cached);
+    }
 
     const result = await fetchPublicPlaylistRecords({ limit });
     if (result && result.missingEnv) {
@@ -2011,6 +2125,10 @@ app.get('/api/public-playlists', async (req, res) => {
 
     for (const record of records) {
       const fields = record?.fieldData || {};
+
+      // Skip records without valid audio
+      if (!hasValidAudio(fields)) continue;
+
       const playlistInfo = pickFieldValueCaseInsensitive(fields, PUBLIC_PLAYLIST_FIELDS);
       if (!playlistInfo.value) continue;
       const playlistNames = splitPlaylistNames(playlistInfo.value);
@@ -2105,6 +2223,9 @@ app.get('/api/public-playlists', async (req, res) => {
 
     const payload = { ok: true, playlists };
     if (nameParam) payload.tracks = tracks;
+
+    // Cache the response
+    publicPlaylistsCache.set(cacheKey, payload);
     res.json(payload);
   } catch (err) {
     console.error('[MASS] Public playlists fetch failed:', err);
@@ -2233,8 +2354,18 @@ app.get('/api/explore', async (req, res) => {
   try {
     const start = parseInt((req.query.start || '0'), 10);
     const end = parseInt((req.query.end || '0'), 10);
-    const reqLimit = Math.max(1, Math.min(400, parseInt((req.query.limit || '200'), 10)));
+    const reqLimit = Math.max(1, Math.min(300, parseInt((req.query.limit || '200'), 10)));
     if (!start || !end || end < start) return res.status(400).json({ error: 'bad decade', start, end });
+
+    // Note: Random offset means we cache by decade/limit but accept different random results
+    // This gives variety while still caching common decade queries
+    const cacheKey = `explore:${start}:${end}:${reqLimit}`;
+    const cached = exploreCache.get(cacheKey);
+    if (cached) {
+      console.log(`[CACHE HIT] explore: ${start}-${end}`);
+      res.setHeader('X-Cache-Hit', 'true');
+      return res.json(cached);
+    }
 
     const FIELDS = [
       'Year of Release',
@@ -2329,7 +2460,7 @@ app.get('/api/explore', async (req, res) => {
       return res.json({ ok: true, items: [], total: 0, offset: 0, limit: reqLimit });
     }
 
-    const windowSize = Math.min(reqLimit, 400);
+    const windowSize = Math.min(reqLimit, 300);
     const maxStart = Math.max(1, foundTotal - windowSize + 1);
     const randStart = Math.floor(1 + Math.random() * maxStart);
 
@@ -2342,9 +2473,14 @@ app.get('/api/explore', async (req, res) => {
       }
     }
 
-    const items = (final.data || []).map((d) => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} }));
-    console.log(`[EXPLORE] ${start}-${end} using ${chosenField}: total ${foundTotal}, offset ${randStart}, returned ${items.length}`);
-    return res.json({ ok: true, items, total: foundTotal, offset: randStart - 1, limit: windowSize, field: chosenField });
+    // Filter to only include records with valid audio
+    const filteredData = (final.data || []).filter(d => hasValidAudio(d.fieldData || {}));
+    const items = filteredData.map((d) => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} }));
+    console.log(`[EXPLORE] ${start}-${end} using ${chosenField}: total ${foundTotal}, offset ${randStart}, returned ${items.length} (filtered from ${final.data?.length || 0})`);
+
+    const response = { ok: true, items, total: foundTotal, offset: randStart - 1, limit: windowSize, field: chosenField };
+    exploreCache.set(cacheKey, response);
+    return res.json(response);
   } catch (err) {
     const detail = err?.message || String(err);
     return res.status(500).json({ error: 'Explore failed', status: 500, detail });
@@ -2358,6 +2494,15 @@ app.get('/api/album', async (req, res) => {
     const title = (req.query.title || '').toString().trim();
     const artist = (req.query.artist || '').toString().trim();
     const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit || '800', 10)));
+
+    // Check cache
+    const cacheKey = `album:${cat}:${title}:${artist}:${limit}`;
+    const cached = albumCache.get(cacheKey);
+    if (cached) {
+      console.log(`[CACHE HIT] album: ${cacheKey.slice(0, 50)}...`);
+      res.setHeader('X-Cache-Hit', 'true');
+      return res.json(cached);
+    }
 
     let queries = [];
     const exact = (v) => `==${v}`;
@@ -2393,16 +2538,24 @@ app.get('/api/album', async (req, res) => {
       return res.status(500).json({ error: 'Album lookup failed', status: r.status, detail: `${msg} (${code})` });
     }
 
-    const data = json?.response?.data || [];
-    const total = json?.response?.dataInfo?.foundCount ?? data.length;
+    const rawData = json?.response?.data || [];
 
-    return res.json({
+    // Filter to only include records with valid audio
+    const data = rawData.filter(d => hasValidAudio(d.fieldData || {}));
+
+    const total = data.length;
+
+    const response = {
       ok: true,
       items: data.map((d) => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} })),
       total,
       offset: 0,
       limit
-    });
+    };
+
+    // Cache the response
+    albumCache.set(cacheKey, response);
+    return res.json(response);
   } catch (err) {
     const detail = err?.message || String(err);
     return res.status(500).json({ error: 'Album lookup failed', status: 500, detail });

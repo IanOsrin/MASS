@@ -11,14 +11,20 @@ MASS (Music Album Streaming System) is a Node.js music streaming application tha
 ## Development Commands
 
 ```bash
-# Start the server (default: http://127.0.0.1:3000)
+# Start the server with clustering (recommended for production)
 npm start
+
+# Start single server instance (recommended for development/debugging)
+npm run start:single
 
 # Run smoke tests (validates health and search endpoints)
 npm run smoke
 
 # Set custom base URL for smoke tests
 SMOKE_BASE_URL=http://localhost:3000 npm run smoke
+
+# Remove email addresses from playlists (privacy migration)
+node scripts/remove-emails-from-playlists.js
 ```
 
 ## Environment Configuration
@@ -62,6 +68,7 @@ AUTH_COOKIE_SECURE=false  # set to true in production
 - Stream event tracking system
 - Playlist management
 - Audio streaming from FileMaker containers
+- Audio validation and filtering (only shows tracks with valid audio files)
 
 **worker.js** - Background worker process (currently a placeholder with heartbeat logging)
 
@@ -136,6 +143,31 @@ See constants at server.js:77-115.
 **Analytics**:
 - `POST /api/stream-events` - Track playback events (PLAY, PROGRESS, PAUSE, SEEK, END, ERROR)
 
+**Monitoring**:
+- `GET /api/cache/stats` - Get cache performance statistics (hit rate, size, TTL)
+
+### Audio Validation
+
+All API endpoints that return music tracks automatically filter and hide albums without valid audio files. The validation process:
+
+**Backend Filtering** (server.js:650-656):
+1. Checks for presence of audio field (mp3, MP3, Audio File, Audio::mp3)
+2. Validates that the field contains a non-empty value
+3. Verifies the value can be resolved to a playable source URL
+
+**Frontend Hiding** (index.html:90):
+- Albums without playable audio are marked with `.no-audio` class
+- These albums are completely hidden via `display: none !important`
+- No red borders or visual indicators - they simply don't appear
+
+**Implementation**:
+- Backend: `hasValidAudio(fields)` function used by `/api/search`, `/api/explore`, `/api/album`, `/api/public-playlists`
+- Frontend: CSS rule `.card.no-audio{display:none !important;}`
+- Prevents display of albums/tracks that cannot be played
+- Reduces user frustration from non-playable content
+
+This ensures users only see content they can actually stream.
+
 ### Authentication System
 
 **Implementation** (server.js:840-904):
@@ -155,7 +187,7 @@ See constants at server.js:77-115.
 
 ### Stream Event Tracking
 
-The system tracks detailed playback analytics in FileMaker's Stream_Events layout:
+The system tracks detailed playback analytics in FileMaker's Stream_Events layout for usage statistics.
 
 **Event Types**: `PLAY`, `PROGRESS`, `PAUSE`, `SEEK`, `END`, `ERROR`
 
@@ -168,19 +200,32 @@ The system tracks detailed playback analytics in FileMaker's Stream_Events layou
 **Data Fields Tracked**:
 - Time streamed (seconds)
 - Last event type and timestamp
-- Client IP address
+- Client IP address (analytics only)
 - ASN (placeholder for future MaxMind integration)
+
+**Important**: IP addresses are ONLY used for stream event analytics (play tracking) and are NOT stored in playlists or exposed during playlist sharing.
 
 ### Playlist Sharing System
 
 **Share Flow**:
 1. User creates playlist and adds tracks
 2. `POST /api/playlists/:id/share` generates UUID-based shareId
-3. Playlist data saved to `playlists.json` with shareId
+3. Playlist data saved to `playlists.json` with shareId (privacy-focused, no user emails)
 4. Share URL returned: `https://domain.com/?share=<shareId>`
 5. Recipients access via `GET /api/shared-playlists/:shareId`
 
-**Security**: Only track/album data is shared - no user information exposed.
+**Privacy & Security**:
+- ✅ **No email addresses stored** - Only userId (FileMaker record ID) is stored
+- ✅ **No IP addresses in sharing** - IP addresses only used for analytics (stream events)
+- ✅ **UUID-based share links** - Random, non-guessable share IDs
+- ✅ **Sanitized sharing** - Only track metadata shared (names, artists, albums)
+- ✅ **No user identification** - Recipients cannot see who created the playlist
+- ✅ **Automatic cleanup** - Email addresses removed from playlists on load/save
+
+**Implementation Details** (server.js:939-1008, 1524-1542):
+- `loadPlaylists()` strips email addresses when loading
+- `savePlaylists()` strips email addresses before saving
+- `sanitizePlaylistForShare()` only includes track metadata, timestamps, and shareId
 
 ## Code Patterns & Conventions
 

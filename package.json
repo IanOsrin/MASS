@@ -5,7 +5,9 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node cluster.js",
+    "start:single": "node server.js",
+    "start:cluster": "node cluster.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "smoke": "node scripts/smoke.js"
   },

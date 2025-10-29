@@ -1,544 +1,14 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>MASS — Albums & Tracks</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root {
-      --bg:#0f0f12; --fg:#f5f6f7; --muted:#a7abb3; --card:#17181c; --accent:#62f5a9; --border:#24262c;
-      --cover-size: 68px; /* smaller, tidy covers */
-      --overlay: rgba(0,0,0,.6);
-      --btn-gradient-start:#3a7bd5;
-      --btn-gradient-end:#00d2ff;
-      --btn-text:#06121f;
-      --btn-shadow:rgba(58,123,213,0.25);
-      --btn-shadow-hover:rgba(58,123,213,0.35);
-        }
-    html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;}
-    header{padding:12px 18px;border-bottom:1px solid var(--border);position:sticky;top:0;background:linear-gradient(180deg,rgba(15,15,18,0.98),rgba(15,15,18,0.9));backdrop-filter:saturate(180%) blur(8px);z-index:10;}
-    .header-main{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:18px;justify-content:space-between;flex-wrap:wrap;}
-    .header-logo{flex-shrink:0;max-height:96px;filter:drop-shadow(0 6px 12px rgba(0,0,0,0.25));}
-    .searchbar{flex:1;display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:8px;align-items:center;}
-    .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:16px;outline:none;}
-    .searchbar button{border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer;}
-
-    main{max-width:1100px;margin:20px auto;padding:0 16px 40px;}
-    .layout-grid{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;}
-    .playlist-column{flex:0 0 260px;max-width:260px;width:100%;display:flex;flex-direction:column;gap:14px;position:relative;order:2;}
-    .playlist-column[hidden]{display:none !important;}
-    .content-column{flex:1 1 560px;min-width:260px;display:flex;flex-direction:column;gap:16px;width:100%;order:1;}
-
-    /* Explore layout: place Featured Playlists below the albums grid */
-    .content-column.exploring{
-      display:flex;
-      flex-direction:column;
-    }
-    .content-column.exploring #albums{ order: 10; }
-    .content-column.exploring #publicFeaturedRow{ order: 20; }
-
-
-    .public-playlists{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;}
-    .public-playlists .playlists-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
-    .public-playlists-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
-    .public-playlist-item button{width:100%;text-align:left;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 10px;color:var(--fg);font-size:14px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;transition:background .15s ease,border-color .15s ease;}
-    .public-playlist-item button:hover{background:var(--border);}
-    .public-playlist-item button.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:rgba(98,245,169,0.15);}
-    .public-playlist-count{color:var(--muted);font-size:12px;}
-    .public-featured-row{display:flex;align-items:flex-start;gap:18px;width:100%;margin-bottom:16px;}
-    .public-featured-row > .public-playlists{flex:0 0 220px;max-width:240px;}
-    .public-playlist-view{display:flex;flex-direction:column;gap:12px;border:1px solid var(--border);border-radius:14px;background:var(--card);padding:12px;flex:1;min-width:0;}
-    .public-playlist-view[hidden]{display:none !important;}
-    .public-playlist-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
-    .public-playlist-title{margin:0;font-size:18px;}
-    .public-playlist-status{color:var(--muted);font-size:13px;}
-    .public-playlist-tracks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;overflow-y:auto;max-height:none;}
-    .public-playlist-tracks::-webkit-scrollbar{width:8px;}
-    .public-playlist-tracks::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:999px;}
-    .public-playlist-track .track-name-title{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .public-playlist-track .track-name-artist{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .public-playlist-item button{justify-content:flex-start;gap:10px;}
-    .public-playlist-thumb{width:34px;height:34px;border-radius:8px;background:#101215 center/cover no-repeat;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:16px;overflow:hidden;transition:background .2s ease, color .2s ease;}
-    .public-playlist-thumb.has-art{color:transparent;}
-    .public-playlist-label{display:flex;flex-direction:column;align-items:flex-start;gap:2px;flex:1;min-width:0;}
-    .public-playlist-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .public-playlist-count{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .public-playlist-hero{border-radius:16px;overflow:hidden;background:#11141a;display:flex;align-items:center;justify-content:center;padding:12px;}
-    .public-playlist-hero[hidden]{display:none;}
-    .public-playlist-hero img{display:block;width:60%;height:auto;max-height:240px;object-fit:contain;}
-    .public-playlist-main{flex:1;display:flex;flex-direction:column;gap:12px;}
-    .playlist-actions{display:flex;align-items:center;gap:6px;}
-    .playlist-footer-actions{margin-top:12px;display:flex;justify-content:flex-end;}
-    .playlist-footer-actions .btn{min-width:160px;}
-    .shared-playlist-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap;}
-    .shared-playlist-actions .btn{min-width:140px;}
-    .share-link-display{display:none !important;}
-    @media (max-width:900px){
-      .layout-grid{flex-direction:column;}
-      .playlist-column{max-width:100%;order:initial;}
-      .content-column{order:initial;}
-      .public-playlist-view{width:100%;max-width:none;}
-      .public-featured-row{flex-direction:column;}
-      .public-featured-row > .public-playlists{width:100%;max-width:none;}
-    }
-    .albums{display:grid;grid-template-columns:repeat(4,150px);grid-template-rows:auto auto;gap:14px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
-    .albums.single-album{display:flex;flex-direction:column;align-items:center;gap:24px;}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:9px;display:flex;flex-direction:column;gap:6px;overflow:hidden;scroll-margin-top:128px;min-height:220px;}
-    .card > .btn{margin-top:auto;}
-    .card.pending-audio{opacity:0.8;}
-    .card.no-audio{display:none !important;}
-
-    /* Cover: small, centered square; never bleeds */
-    .cover-wrap{position:relative;width:var(--cover-size);height:var(--cover-size);border-radius:6px;overflow:hidden;border:1px solid var(--border);background:#101215;margin:0 auto;}
-    .cover-wrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
-    .albums.single-album .cover-wrap{width:260px;height:260px;margin:0 auto 16px;}
-
-    .heading{display:flex;align-items:center;gap:5px;flex-wrap:wrap;justify-content:center;text-align:center;}
-    .card h3{margin:0;font-size:13px;line-height:1.2;}
-    .albums.single-album .card h3{font-size:26px;}
-    .muted{color:var(--muted);font-size:11px;text-align:center;line-height:1.2;}
-    .albums.single-album .muted{font-size:16px;}
-    .badge{border:1px solid var(--border);border-radius:999px;padding:2px 6px;font-size:9px;color:var(--muted);}
-    .badge-warning{background:rgba(255,193,7,0.15);border-color:rgba(255,193,7,0.4);color:#ffc107;}
-
-    .btn{border-radius:10px;padding:8px 10px;cursor:pointer;font-weight:600;}
-    .btn.small{padding:3px 4px;font-size:10px;}
-    .btn.icon{width:34px;display:inline-flex;align-items:center;justify-content:center;}
-    .btn-accent{font-weight:700;filter:brightness(1.08);}
-    .btn-error{background:#b9383a;border:none;color:#fff;box-shadow:0 6px 16px rgba(185,56,58,0.35);}
-    .btn-error:hover{transform:none !important;box-shadow:0 6px 12px rgba(185,56,58,0.4) !important;}
-    .btn-error:disabled{opacity:0.9;box-shadow:none;}
-    .btn.info-more{font-size:18px;line-height:1;padding:4px 8px;display:flex;align-items:center;justify-content:center;}
-
-
-    .back-row{display:flex;justify-content:center;margin-bottom:12px;}
-.toolbar{display:none;}
-    .pager{display:none !important;}
-    .pager button{border-radius:10px;padding:10px 12px;cursor:pointer;}
-    .count{display:none;}
-    .error{background:#2b1517;border:1px solid #5a2327;color:#ffb1b8;padding:10px 12px;border-radius:10px;}
-
-    .explore-wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;min-width:220px;}
-    .explore-panel{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;justify-content:flex-end;max-width:520px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;}
-    .explore-panel[hidden]{display:none;}
-    .explore-section{display:flex;flex-direction:column;gap:8px;min-width:160px;}
-    .explore-section h3{margin:0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
-    .explore-buttons{display:flex;flex-wrap:wrap;gap:8px;}
-    .explore-buttons button{border-radius:999px;padding:6px 10px;cursor:pointer;font-size:13px;}
-    #explore{padding:10px 20px;border-radius:14px;font-weight:700;font-size:15px;white-space:nowrap;}
-
-    .auth-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
-    .auth-controls .badge{font-size:12px;}
-    .auth-controls [hidden]{display:none !important;}
-    .auth-form{display:flex;flex-direction:column;gap:12px;margin-top:12px;}
-    .auth-form label{display:flex;flex-direction:column;gap:6px;font-size:14px;}
-    .auth-form input{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--fg);}
-    .auth-switch{display:flex;align-items:center;gap:6px;margin-top:12px;font-size:13px;color:var(--muted);}
-    .auth-switch button{background:none;border:none;color:var(--accent);cursor:pointer;font-weight:600;padding:0;}
-    .auth-switch button:disabled{opacity:.6;cursor:not-allowed;}
-    #authError{margin-top:12px;}
-
-    .playlists-panel{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:flex;flex-direction:column;gap:10px;}
-    .playlists-panel[hidden]{display:none;}
-    .playlists-header{display:flex;align-items:center;gap:12px;justify-content:space-between;}
-    .playlists-header h2{margin:0;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);}
-    .playlists-list{display:flex;flex-direction:column;gap:8px;}
-    .playlist-pill{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#1b1c20;color:#f5f5f5;cursor:pointer;min-width:0;transition:transform .15s ease,box-shadow .15s ease;font-size:12px;}
-    .playlist-pill:hover{transform:translateY(-1px);box-shadow:0 10px 20px rgba(0,0,0,.25);}
-    .playlist-pill.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(98,245,169,.4);}
-    .playlist-pill .name{font-weight:600;font-size:13px;}
-    .playlist-pill .meta{color:var(--muted);font-size:11px;}
-    .playlist-empty{color:var(--muted);font-size:12px;}
-    .playlist-create{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-    .playlist-create input{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--fg);flex:1;min-width:160px;font-size:13px;}
-    .playlist-create button{padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;}
-
-    .playlist-tracks{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:flex;flex-direction:column;gap:6px;}
-    .playlist-tracks[hidden]{display:none;}
-    .playlist-tracks .playlists-header{margin-bottom:0;}
-    .playlist-tracks .playlists-header h2{font-size:18px;}
-    .playlist-tracks .muted{font-size:13px;}
-    .playlist-tracks .tracks{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none;max-height:360px;overflow-y:auto;}
-    .playlist-track{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;background:transparent;border:1px solid transparent;min-height:36px;}
-    .playlist-track:hover{background:#1c1d21;border-color:rgba(255,255,255,0.07);}
-    .playlist-track.playing{background:#202427;border-color:var(--accent);}
-    .playlist-track .track-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;font-weight:600;line-height:1.4;margin:0;}
-    .playlist-track .track-play{width:26px;height:26px;border-radius:4px;padding:0;font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;line-height:1;}
-    .playlist-tracks.collapsed .tracks{display:none;}
-    .playlist-tracks.collapsed .playlist-empty{display:none;}
-    .playlist-tracks.only-current .tracks{display:none;}
-    .playlist-tracks.only-current .playlist-empty{display:none;}
-    .playlist-tracks.only-current .now-playing-placeholder{display:none;}
-
-    .now-playing{padding:12px;border:1px solid var(--border);border-radius:12px;background:#1d1f24;display:flex;flex-direction:column;gap:10px;}
-    .now-playing[hidden]{display:none !important;}
-    .now-playing-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
-    .now-playing-header .label{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
-    .now-playing-body{display:flex;align-items:center;gap:10px;}
-    .now-playing-thumb{width:44px;height:44px;border-radius:8px;overflow:hidden;flex-shrink:0;background:#0e1014;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);}
-    .now-playing-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
-    .now-playing-meta{display:flex;flex-direction:column;gap:2px;min-width:0;}
-    .now-playing-title{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .now-playing-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .now-playing-source{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .now-playing-controls{display:flex;align-items:center;gap:8px;}
-    .now-playing-meta-buttons{display:flex;flex-direction:column;align-items:flex-start;gap:4px;}
-    .now-playing-meta-buttons .btn.small{padding:5px 8px;font-size:11px;}
-    .now-playing-meta-list{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-top:2px;}
-    .now-playing-meta-line{color:#dcdcdc;line-height:1.3;}
-    .now-playing-meta-line strong{color:#fff;font-weight:600;margin-right:4px;}
-    .now-playing-status{font-size:11px;color:var(--muted);}
-    .now-playing-progress{width:100%;height:6px;background:#262830;border-radius:4px;overflow:hidden;position:relative;margin-top:6px;}
-    .now-playing-progress .fill{position:absolute;inset:0;background:linear-gradient(90deg,var(--accent),#6bd3ff);width:0%;border-radius:4px;transition:width .1s linear;}
-    .now-playing-controls .btn.small{padding:6px 10px;font-size:12px;}
-    .now-playing.collapsed .now-playing-body,
-    .now-playing.collapsed .now-playing-controls{display:none;}
-
-    /* Landing placeholder */
-    .loading-indicator{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:40px;min-height:300px;}
-    .loading-indicator[hidden]{display:none;}
-    .loading-spinner{width:48px;height:48px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;}
-    @keyframes spin{to{transform:rotate(360deg);}}
-    .loading-text{color:var(--muted);font-size:14px;}
-
-    /* ======= Modal (centered track window) ======= */
-    .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--overlay);z-index:100;}
-    .overlay.open{display:flex;}
-    .modal{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.35);width:min(900px,94vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden;}
-    .modal header{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border);background:#14161a;position:sticky;top:0;z-index:1;}
-    .modal .cover-wrap{width:56px;height:56px;margin:0;}
-    .modal .meta{display:flex;flex-direction:column;gap:2px;min-width:0;}
-    .modal h2{margin:0;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .modal .sub{color:var(--muted);font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-    .modal .spacer{flex:1;}
-    .modal .close{border-radius:10px;padding:8px 10px;cursor:pointer;}
-    .modal .content{padding:12px;overflow:auto;}
-    .album-actions{display:flex;justify-content:flex-end;gap:10px;margin:0 0 12px;}
-    .album-actions .btn{white-space:nowrap;}
-    .tracks{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;}
-    .track{background:#1f1f23;padding:8px 10px;border-radius:8px;display:flex;flex-direction:column;gap:6px;}
-    .track.loading{opacity:0.75;}
-    .track.loading .btn.small{pointer-events:none;}
-    .track-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
-    .track-title{display:flex;flex-direction:column;flex:1;min-width:0;}
-    .track .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .track .artist{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .controls{display:flex;align-items:center;gap:6px;}
-    .playing{outline:1px solid var(--accent); background:#202427;}
-    .progress{display:flex;align-items:center;gap:8px;margin-top:6px;}
-    .seek{appearance:none;width:240px;height:8px;background:linear-gradient(var(--accent),var(--accent)) 0/var(--fill,0%) 100% no-repeat,#1b2a21;border-radius:999px;outline:none;border:1px solid var(--accent);}
-    .seek::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);}
-    .time{font-size:12px;color:var(--muted);min-width:98px;text-align:right;}
-    .no-scroll{overflow:hidden;}
-
-    .info-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:150;}
-    .info-modal-overlay.open{display:flex;}
-    .info-modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 20px;width:min(480px,92vw);max-height:80vh;overflow:auto;box-shadow:0 18px 48px rgba(0,0,0,.4);}
-    .info-modal header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;}
-    .info-modal h3{margin:0;font-size:18px;}
-    .info-modal .info-close{border-radius:8px;padding:6px 10px;cursor:pointer;}
-    .info-modal dl{margin:0;display:grid;grid-template-columns:minmax(120px,auto) 1fr;gap:10px 14px;font-size:14px;}
-    .info-modal dt{font-weight:600;color:var(--muted);}
-    .info-modal dd{margin:0;}
-    .info-modal-empty{color:var(--muted);font-style:italic;text-align:center;margin:12px 0;}
-
-    /* Busy / searching status indicator */
-    .status{display:inline-flex;align-items:center;gap:8px;margin-left:8px;color:var(--muted);font-size:13px;}
-    .status[hidden]{display:none;}
-    .status .pulse{width:8px;height:8px;border-radius:50%;background:var(--accent);
-      box-shadow:0 0 0 0 rgba(98,245,169,.7);animation:pulse 1.3s infinite;}
-    @keyframes pulse{
-      0%{transform:scale(.9);box-shadow:0 0 0 0 rgba(98,245,169,.7);}
-      70%{transform:scale(1);box-shadow:0 0 0 10px rgba(98,245,169,0);}
-      100%{transform:scale(.9);box-shadow:0 0 0 0 rgba(98,245,169,0);}
-        }
-    .btn,
-    .searchbar button,
-    .pager button,
-    .explore-buttons button,
-    .modal .close,
-    .info-modal .info-close,
-    #explore {
-      background:linear-gradient(135deg,var(--btn-gradient-start),var(--btn-gradient-end));
-      color:var(--btn-text);
-      border:none;
-      box-shadow:0 6px 18px var(--btn-shadow);
-      transition:transform 0.15s ease,box-shadow 0.15s ease,opacity 0.15s ease;
-    }
-
-    .btn:hover,
-    .searchbar button:hover,
-    .pager button:hover,
-    .explore-buttons button:hover,
-    .modal .close:hover,
-    .info-modal .info-close:hover,
-    #explore:hover {
-      transform:translateY(-1px);
-      box-shadow:0 8px 20px var(--btn-shadow-hover);
-    }
-
-    .btn:active,
-    .searchbar button:active,
-    .pager button:active,
-    .explore-buttons button:active,
-    .modal .close:active,
-    .info-modal .info-close:active,
-    #explore:active {
-      transform:translateY(0);
-      box-shadow:0 5px 14px var(--btn-shadow);
-    }
-
-    button:disabled{opacity:.6;cursor:not-allowed;transform:none !important;box-shadow:none !important;}
-
-    /* Fix playlist row layout: keep items in a row next to the play button */
-    .track.playlist-track {
-      flex-direction: row;       /* override .track { flex-direction: column } */
-      align-items: center;
-      gap: 0.5rem;               /* keep a little space between button and text */
-    }
-
-    /* Ensure the text can shrink and ellipsis correctly in a flex row */
-    .playlist-track .track-name {
-      flex: 1;
-      min-width: 0;              /* required so text-overflow works inside flex */
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .playlist-track .track-name-artist {
-      font-size: 12px;
-      color: var(--muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .playlist-track .track-name-title {
-      font-size: 14px;
-      font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-  </style>
-</head>
-<body>
-  <header>
-    <div class="header-main">
-      <img src="/img/MAD_Logo.png" alt="MAD Logo" class="header-logo">
-      <div class="searchbar">
-        <input id="search" type="search" placeholder="Search albums, artists, tracks, year, genre…" autocomplete="off" />
-        <button id="go">Search</button>
-        <button id="clear">Clear</button>
-        <button id="shuffleBtn" class="btn-accent" hidden>🔄 Load More</button>
-        <span id="status" class="status" hidden aria-live="polite" role="status"><span class="pulse"></span><span id="statusText">Searching…</span></span>
-      </div>
-      <div class="explore-wrap">
-        <button id="explore" type="button" aria-expanded="false">Explore</button>
-        <div id="explorePanel" class="explore-panel" hidden>
-          <section class="explore-section">
-            <h3>Decades</h3>
-            <div id="exploreDecades" class="explore-buttons"></div>
-          </section>
-          <section class="explore-section">
-            <h3>Genres</h3>
-            <div id="exploreGenres" class="explore-buttons"></div>
-          </section>
-          <section class="explore-section">
-            <h3>Moods</h3>
-            <div id="exploreMoods" class="explore-buttons"></div>
-          </section>
-        </div>
-        <div id="authControls" class="auth-controls">
-          <span id="userBadge" class="badge" hidden></span>
-          <button id="loginTrigger" type="button" class="btn small">Log in</button>
-          <button id="signupTrigger" type="button" class="btn small">Sign up</button>
-          <button id="logoutButton" type="button" class="btn small" hidden>Log out</button>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <main>
-    <div class="layout-grid">
-      <aside id="playlistColumn" class="playlist-column" hidden>
-        <section id="playlistsPanel" class="playlists-panel" hidden>
-          <div class="playlists-header">
-            <h2>My Playlists</h2>
-            <span id="playlistsStatus" class="muted"></span>
-          </div>
-          <div id="playlistsList" class="playlists-list"></div>
-          <form id="playlistCreateForm" class="playlist-create" autocomplete="off">
-            <input id="playlistNameInput" type="text" placeholder="Create new playlist" maxlength="80" />
-            <button type="submit" class="btn small">Create</button>
-          </form>
-          <div id="playlistsEmpty" class="playlist-empty" hidden>No playlists yet. Create one to start saving tracks.</div>
-        </section>
-        <section id="nowPlayingCard" class="now-playing" hidden>
-          <div class="now-playing-header">
-            <span class="label">Now Playing</span>
-            <button id="nowPlayingCollapse" type="button" class="btn small">Hide info</button>
-          </div>
-          <div class="now-playing-body">
-            <div id="nowPlayingThumb" class="now-playing-thumb">--</div>
-            <div class="now-playing-meta">
-              <div id="nowPlayingTitle" class="now-playing-title">Track</div>
-              <div id="nowPlayingSubtitle" class="now-playing-sub">Artist</div>
-              <div id="nowPlayingSource" class="now-playing-source"></div>
-            </div>
-          </div>
-          <div class="now-playing-controls">
-            <span id="nowPlayingStatus" class="now-playing-status">Paused</span>
-            <div id="nowPlayingMetaButtons" class="now-playing-meta-buttons"></div>
-            <button id="nowPlayingToggle" type="button" class="btn small">Play</button>
-          </div>
-          <div class="now-playing-progress">
-            <div id="nowPlayingProgressFill" class="fill"></div>
-          </div>
-        </section>
-        <section id="playlistTracksSection" class="playlist-tracks" hidden>
-          <div class="playlists-header">
-            <h2 id="playlistTracksTitle">Playlist</h2>
-            <div class="playlist-actions">
-              <button id="togglePlaylistTracks" type="button" class="btn small">Show tracks</button>
-              <button id="deletePlaylistButton" type="button" class="btn small btn-error">Delete playlist</button>
-            </div>
-          </div>
-          <div id="playlistTracksMeta" class="muted"></div>
-          <ul id="playlistTracksList" class="tracks"></ul>
-          <div id="playlistTracksEmpty" class="playlist-empty" hidden>No tracks in this playlist yet.</div>
-          <div class="playlist-footer-actions">
-            <button id="sharePlaylistButton" type="button" class="btn small">Copy share link</button>
-          </div>
-          <div id="shareLinkOutput" class="share-link-display" hidden title="Click to copy"></div>
-        </section>
-      </aside>
-      <section class="content-column">
-        <div class="toolbar">
-          <div id="count" class="count"></div>
-        </div>
-        <div id="publicFeaturedRow" class="public-featured-row" hidden>
-          <section id="publicPlaylistsPanel" class="public-playlists" hidden>
-            <div class="playlists-header">
-              <h2>Featured Playlists</h2>
-            </div>
-            <ul id="publicPlaylistsList" class="public-playlists-list"></ul>
-            <div id="publicPlaylistsEmpty" class="playlist-empty" hidden>No curated playlists yet.</div>
-          </section>
-          <div id="publicPlaylistView" class="public-playlist-view" hidden>
-            <div class="public-playlist-header">
-              <h2 id="publicPlaylistTitle" class="public-playlist-title">Playlist</h2>
-              <span id="publicPlaylistMeta" class="public-playlist-status"></span>
-            </div>
-            <div id="publicPlaylistStatus" class="public-playlist-status" hidden></div>
-            <div id="publicPlaylistHero" class="public-playlist-hero" hidden>
-              <img id="publicPlaylistArt" alt="Playlist artwork" />
-            </div>
-            <ul id="publicPlaylistTracks" class="tracks public-playlist-tracks"></ul>
-            <div id="publicPlaylistEmpty" class="playlist-empty" hidden>No tracks in this playlist yet.</div>
-          </div>
-        </div>
-        <section id="sharedPlaylistView" class="public-playlist-view" hidden>
-          <div class="public-playlist-header">
-            <h2 id="sharedPlaylistTitle" class="public-playlist-title">Playlist</h2>
-            <span id="sharedPlaylistMeta" class="public-playlist-status"></span>
-          </div>
-          <div id="sharedPlaylistStatus" class="public-playlist-status" hidden></div>
-          <div id="sharedPlaylistHero" class="public-playlist-hero" hidden>
-            <img id="sharedPlaylistArt" alt="Playlist artwork" />
-          </div>
-          <ul id="sharedPlaylistTracks" class="tracks public-playlist-tracks"></ul>
-          <div id="sharedPlaylistEmpty" class="playlist-empty" hidden>No tracks are available in this shared playlist.</div>
-          <div class="shared-playlist-actions">
-            <button id="sharedPlaylistBack" type="button" class="btn small">Back to discovery</button>
-            <button id="sharedPlaylistCopy" type="button" class="btn small">Copy share link</button>
-          </div>
-        </section>
-        <div id="loadingIndicator" class="loading-indicator" hidden>
-          <div class="loading-spinner"></div>
-          <div class="loading-text">Loading albums...</div>
-        </div>
-        <div id="albums" class="albums"></div>
-        <div id="pager" class="pager" hidden>
-          <button id="prev">◀ Prev</button>
-          <span id="pageInfo" class="badge">Page 1</span>
-          <button id="next">Next ▶</button>
-        </div>
-        <div id="error" class="error" hidden></div>
-      </section>
-    </div>
-  </main>
-
-  <!-- Single centered modal (reused for all albums) -->
-  <div id="overlay" class="overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-      <header>
-        <div id="modalCover" class="cover-wrap" aria-hidden="true"></div>
-        <div class="meta">
-          <h2 id="modalTitle">Album</h2>
-          <div class="sub">
-            <span id="modalArtist"></span>
-            <span id="modalCat" class="badge"></span>
-          </div>
-        </div>
-        <div class="spacer"></div>
-        <button id="modalClose" class="close" aria-label="Close">✕</button>
-          </header>
-      <div id="modalContent" class="content"></div>
-    </div>
-  </div>
-
-  <div id="trackInfoOverlay" class="info-modal-overlay" hidden>
-    <div id="trackInfoDialog" class="info-modal" role="dialog" aria-modal="true" aria-labelledby="trackInfoTitle">
-      <header>
-        <h3 id="trackInfoTitle">More info</h3>
-        <button type="button" id="trackInfoClose" class="info-close">Close</button>
-      </header>
-      <div id="trackInfoBody"></div>
-    </div>
-  </div>
-
-  <div id="authOverlay" class="info-modal-overlay" hidden>
-    <div id="authDialog" class="info-modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
-      <header>
-        <h3 id="authTitle">Log in</h3>
-        <button type="button" id="authClose" class="info-close">Close</button>
-      </header>
-      <form id="authForm" class="auth-form">
-        <label for="authEmail">
-          <span>Email</span>
-          <input id="authEmail" type="email" name="email" autocomplete="email" required />
-        </label>
-        <label for="authPassword">
-          <span>Password</span>
-          <input id="authPassword" type="password" name="password" autocomplete="current-password" minlength="8" required />
-        </label>
-        <button type="submit" id="authSubmit" class="btn btn-accent">Log in</button>
-      </form>
-      <div class="auth-switch">
-        <span id="authToggleText">Need an account?</span>
-        <button type="button" id="authSwitchMode">Sign up</button>
-      </div>
-      <div id="authError" class="error" hidden></div>
-    </div>
-  </div>
-
-  <audio id="player" preload="none"></audio>
-
-  <script>
     const albumsEl = document.getElementById('albums');
     const loadingIndicator = document.getElementById('loadingIndicator');
     const searchEl = document.getElementById('search');
     const clearEl  = document.getElementById('clear');
     const goEl  = document.getElementById('go');
+    const showWithoutAudioEl = document.getElementById('showWithoutAudio');
     const headerEl = document.querySelector('header');
     const pagerEl  = document.getElementById('pager');
     const prevEl   = document.getElementById('prev');
     const nextEl   = document.getElementById('next');
     const pageInfo = document.getElementById('pageInfo');
-    const shuffleBtn = document.getElementById('shuffleBtn');
     const countEl  = document.getElementById('count');
     const errorEl  = document.getElementById('error');
     const player   = document.getElementById('player');
@@ -777,7 +247,7 @@
 
     // Config
     const ALBUMS_PER_PAGE = 8;
-    const FM_FETCH_LIMIT  = 300; // Balanced: enough for diverse albums without timing out
+    const FM_FETCH_LIMIT  = 80; // Smaller initial batch for snappier responses
     const PLAYLIST_ARTWORK_BASE = '/img/playlists/';
     const PLAYLIST_ARTWORK_EXTENSIONS = ['.webp', '.png', '.jpg', '.jpeg', '.avif'];
 
@@ -2176,10 +1646,9 @@
     let albumGroups = [];
     let albumPage = 0;
     let currentMode = 'landing';
-    let currentExploreDecade = null; // Track current decade for reload
     let shouldScrollAlbums = false;
     let isRestoring = false;
-    let showAlbumsWithoutAudio = true; // Show all albums, trust FileMaker data
+    let showAlbumsWithoutAudio = false; // Toggle: show albums even if audio validation fails
 
     // Single audio UI state
     let currentBtn=null, currentRow=null, currentSrc='';
@@ -2967,19 +2436,16 @@
 
       if (sharedPlaylistActive) { clearSharedPlaylistState(); }
       currentMode = 'landing';
-      currentExploreDecade = null;
       prevSearch = null;
       rawItems = [];
       albumsEl.classList.remove('single-album');
       pagerEl.hidden = true;
-      if (shuffleBtn) shuffleBtn.hidden = true;
       countEl.textContent = '';
       errorEl.hidden = true;
       // Placeholder graphic removed; nothing else to show here.
     }
 
     async function loadRandomAlbums() {
-      const perfStart = performance.now();
       // Show loading indicator
       if (loadingIndicator) loadingIndicator.hidden = false;
       if (albumsEl) albumsEl.style.display = 'none';
@@ -2994,19 +2460,14 @@
         const params = new URLSearchParams();
         params.set('start', String(start));
         params.set('end', String(end));
-        params.set('limit', '150'); // Balanced: enough albums without timing out
+        params.set('limit', '40'); // Small limit for fast loading
 
-        const fetchStart = performance.now();
         const r = await fetch(`/api/explore?${params}`);
-        const fetchTime = performance.now() - fetchStart;
         if (!r.ok) {
           return;
         }
 
-        const parseStart = performance.now();
         const j = await r.json();
-        const parseTime = performance.now() - parseStart;
-
         if (!j || !Array.isArray(j.items) || j.items.length === 0) {
           return;
         }
@@ -3014,30 +2475,21 @@
         rawItems = j.items || [];
         rawTotalFound = Number(j.total || rawItems.length);
 
-        const groupStart = performance.now();
-        const groupedAlbums = groupAlbums(rawItems);
-        const groupTime = performance.now() - groupStart;
+        const groupedAlbums = groupAlbums(rawItems).filter(album => (album.picture || '').trim());
 
         if (!groupedAlbums.length) {
           return;
         }
 
-        // Shuffle and keep all albums for pagination
-        const shuffleStart = performance.now();
+        // Shuffle and take up to 12 (ensures we get 8 after any filtering)
         shuffleInPlace(groupedAlbums);
-        const shuffleTime = performance.now() - shuffleStart;
-
-        albumGroups = groupedAlbums;
+        albumGroups = groupedAlbums.slice(0, Math.min(12, groupedAlbums.length));
         rawItems = albumGroups;
         rawTotalFound = albumGroups.length;
         rawNextOffset = albumGroups.length;
 
-        const totalTime = performance.now() - perfStart;
-        console.log(`[loadRandomAlbums] Loaded ${albumGroups.length} albums from ${j.items.length} tracks in ${totalTime.toFixed(0)}ms (fetch: ${fetchTime.toFixed(0)}ms)`);
-
         albumPage = 0;
         currentMode = 'explore';
-        currentExploreDecade = null; // Random load, no specific decade
         activePublicPlaylist = null;
 
         // Set up explore layout
@@ -3102,7 +2554,33 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       return `title:${normT}|artist:${normA}`;
         }
 
-    function groupAlbums(items){
+    let groupAlbumsCacheKey = '';
+    let groupAlbumsCacheValue = null;
+
+    function groupAlbumsCacheKeyFor(items){
+      if (!Array.isArray(items) || items.length === 0) return 'empty';
+      const parts = [];
+      for (const rec of items) {
+        if (!rec || typeof rec !== 'object') {
+          parts.push('blank');
+          continue;
+        }
+        const id = rec.recordId != null ? String(rec.recordId) : '';
+        const mod = rec.modId != null ? String(rec.modId) : '';
+        const title =
+          rec.fields && rec.fields['Album Title']
+            ? String(rec.fields['Album Title'])
+            : rec.key
+              ? String(rec.key)
+              : rec.title
+                ? String(rec.title)
+                : '';
+        parts.push(`${id}:${mod}:${title}`);
+      }
+      return parts.join('|');
+        }
+
+    function computeGroupedAlbums(items){
       const byCat = new Map();
 
       for (const rec of items) {
@@ -3132,7 +2610,7 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         const composer3 = normTitle(f['Composer 3'] || f['Composer3'] || '');
         const composer4 = normTitle(f['Composer 4'] || f['Composer4'] || '');
         const isrc = (f['ISRC'] || '').trim();
-        // Check Audio Test field for invalid/bad audio markers
+        // Simplified: just check if Audio Test field exists and explicitly says invalid
         const audioTest = String(f['songfiles:Audio Test'] || f['Songfiles::Audio Test'] || f['songfiles::Audio Test'] || f['Audio Test'] || '').toLowerCase();
         const hasValidAudio = audioTest ? !audioTest.includes('invalid') : true;
 
@@ -3197,8 +2675,8 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         // Removed hard filter for no playable tracks - let toggle control this
         // if (!playableTracks.length) continue;
 
-        // Only show tracks with valid audio
-        const tracksForDisplay = playableTracks.map(track => ({ ...track }));
+        // Use all tracks if no playable ones (for albums shown via toggle)
+        const tracksForDisplay = (playableTracks.length > 0 ? playableTracks : g.tracks).map(track => ({ ...track }));
 
         const albumPlaylistMap = new Map();
         for (const track of g.tracks) {
@@ -3252,6 +2730,17 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       }
 
       groups.sort((a,b)=> a.title.localeCompare(b.title, undefined, { sensitivity:'base' }) || a.artist.localeCompare(b.artist, undefined, { sensitivity:'base' }));
+      return groups;
+        }
+
+    function groupAlbums(items){
+      const key = groupAlbumsCacheKeyFor(items);
+      if (key === groupAlbumsCacheKey && Array.isArray(groupAlbumsCacheValue)) {
+        return groupAlbumsCacheValue;
+      }
+      const groups = computeGroupedAlbums(items);
+      groupAlbumsCacheKey = key;
+      groupAlbumsCacheValue = groups;
       return groups;
         }
 
@@ -4278,7 +3767,7 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       document.body.classList.remove('no-scroll');
         }
 
-    async function openTracksModal(album, sourceCard=null){
+    function openTracksModal(album, sourceCard=null){
       // Ensure only one window open: close any existing
       closeTracksModal();
       const albumCard = sourceCard || null;
@@ -4294,44 +3783,18 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         }
       }
 
-      // Fetch complete album if we might not have all tracks
-      let fullAlbum = album;
-      const shouldFetchComplete = currentMode === 'explore' || currentMode === 'landing';
-
-      if (shouldFetchComplete && (album.catalogue || album.title)) {
-        try {
-          const params = new URLSearchParams();
-          if (album.catalogue) params.set('cat', album.catalogue);
-          if (album.title) params.set('title', album.title);
-          if (album.artist) params.set('artist', album.artist);
-
-          const response = await fetch(`/api/album?${params}`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data.items && data.items.length > 0) {
-              // Merge the full tracklist
-              fullAlbum = { ...album, tracks: data.items };
-              console.log(`[openTracksModal] Fetched ${data.items.length} complete tracks for "${album.title}"`);
-            }
-          }
-        } catch (err) {
-          console.warn('[openTracksModal] Failed to fetch complete album:', err);
-          // Continue with partial album
-        }
-      }
-
       // Fill header
-      modalTitle.textContent = fullAlbum.title || '(no album)';
-      modalArtist.textContent = fullAlbum.artist || '';
-      modalCat.textContent = fullAlbum.catalogue || '';
-      if (!fullAlbum.catalogue) modalCat.style.display = 'none'; else modalCat.style.display = 'inline-block';
+      modalTitle.textContent = album.title || '(no album)';
+      modalArtist.textContent = album.artist || '';
+      modalCat.textContent = album.catalogue || '';
+      if (!album.catalogue) modalCat.style.display = 'none'; else modalCat.style.display = 'inline-block';
 
       // Cover
-      if (fullAlbum.picture) {
+      if (album.picture) {
         const wrap = document.createElement('div');
         wrap.className = 'cover-wrap';
         const img = document.createElement('img');
-        img.src = `/api/container?u=${encodeURIComponent(fullAlbum.picture)}`;
+        img.src = `/api/container?u=${encodeURIComponent(album.picture)}`;
         img.alt = 'Cover';
         img.onerror = () => { modalCover.innerHTML = ''; };
         wrap.appendChild(img);
@@ -4347,7 +3810,7 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       const ul = document.createElement('ul');
       ul.className = 'tracks';
 
-      const validTracks = (fullAlbum.tracks || []).filter(t => t.hasValidAudio !== false);
+      const validTracks = album.tracks.filter(t => t.hasValidAudio);
       validTracks.forEach((t, idx) => {
         const li = document.createElement('li');
         li.className = 'track';
@@ -4385,17 +3848,17 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         li._audioField = t.mp3Field || '';
         const baseMetaAlbum = { ...t };
         baseMetaAlbum.trackName = t.name || 'Untitled track';
-        baseMetaAlbum.trackArtist = t.trackArtist || fullAlbum.artist || '';
-        baseMetaAlbum.albumTitle = fullAlbum.title || '';
-        baseMetaAlbum.albumArtist = fullAlbum.artist || '';
+        baseMetaAlbum.trackArtist = t.trackArtist || album.artist || '';
+        baseMetaAlbum.albumTitle = album.title || '';
+        baseMetaAlbum.albumArtist = album.artist || '';
         baseMetaAlbum.playlistId = null;
         baseMetaAlbum.playlistName = '';
-        baseMetaAlbum.picture = fullAlbum.picture || '';
+        baseMetaAlbum.picture = album.picture || '';
         baseMetaAlbum.source = 'album';
-        baseMetaAlbum.catalogue = fullAlbum.catalogue || '';
+        baseMetaAlbum.catalogue = album.catalogue || '';
         baseMetaAlbum.audioField = t.mp3Field || '';
         baseMetaAlbum.trackRecordId = t.recordId || '';
-        baseMetaAlbum.pictureField = fullAlbum.pictureField || t.pictureField || '';
+        baseMetaAlbum.pictureField = album.pictureField || t.pictureField || '';
         baseMetaAlbum.src = playableSrc;
         li._meta = baseMetaAlbum;
         li._validated = false;
@@ -4501,19 +3964,19 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       });
 
       modalContent.innerHTML = '';
-      if (Array.isArray(fullAlbum?.tracks) && fullAlbum.tracks.length) {
+      if (Array.isArray(album?.tracks) && album.tracks.length) {
         const albumActions = document.createElement('div');
         albumActions.className = 'album-actions';
         const btnAddAlbum = document.createElement('button');
         btnAddAlbum.type = 'button';
         btnAddAlbum.className = 'btn small btn-accent';
-        btnAddAlbum.textContent = `Add album to playlist (${fullAlbum.tracks.length} tracks)`;
+        btnAddAlbum.textContent = 'Add album to playlist';
         btnAddAlbum.addEventListener('click', async () => {
           const previousLabel = btnAddAlbum.textContent;
           btnAddAlbum.disabled = true;
           btnAddAlbum.textContent = 'Adding…';
           try {
-            await handleAddAlbumToPlaylist(fullAlbum);
+            await handleAddAlbumToPlaylist(album);
           } finally {
             btnAddAlbum.disabled = false;
             btnAddAlbum.textContent = previousLabel;
@@ -4803,25 +4266,10 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       const totalPool = Math.max(availableAlbums, displayAlbums.length);
       const maxPage = Math.max(1, Math.ceil(Math.max(totalPool, 1) / ALBUMS_PER_PAGE));
       albumPage = Math.min(albumPage, maxPage - 1);
-
-      // Show shuffle button for explore mode, pagination for search mode
-      const isExploreMode = currentMode === 'explore' || currentMode === 'landing';
-      console.log(`[renderAlbumPage] mode=${currentMode}, isExploreMode=${isExploreMode}, shuffleBtn=${!!shuffleBtn}`);
-      if (isExploreMode) {
-        pagerEl.hidden = true;
-        if (shuffleBtn) shuffleBtn.hidden = false;
-      } else {
-        pagerEl.hidden = totalPool <= ALBUMS_PER_PAGE;
-        if (shuffleBtn) shuffleBtn.hidden = true;
-        pageInfo.textContent = `Page ${albumPage + 1} / ${maxPage}`;
-        prevEl.disabled = albumPage <= 0;
-        nextEl.disabled = albumPage >= maxPage - 1 && rawItems.length >= rawTotalFound;
-      }
-
-      // Debug pagination
-      if (totalPool > ALBUMS_PER_PAGE && !isExploreMode) {
-        console.log(`[PAGINATION] Showing pager: ${totalPool} albums (${maxPage} pages)`);
-      }
+      pagerEl.hidden = totalPool <= ALBUMS_PER_PAGE;
+      pageInfo.textContent = `Page ${albumPage + 1} / ${maxPage}`;
+      prevEl.disabled = albumPage <= 0;
+      nextEl.disabled = albumPage >= maxPage - 1 && rawItems.length >= rawTotalFound;
 
       if (totalAlbums === 0 && pendingAlbums > 0) {
         const wait = document.createElement('div');
@@ -4832,7 +4280,12 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       }
 
       if (totalAlbums === 0) {
-        // Don't show error message for public playlists
+        if (activePublicPlaylist) {
+          const empty = document.createElement('div');
+          empty.className = 'muted';
+          empty.textContent = `No albums found in "${activePublicPlaylist}".`;
+          albumsEl.appendChild(empty);
+        }
         return;
       }
 
@@ -4840,8 +4293,9 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       const end = Math.min(start + ALBUMS_PER_PAGE, totalAlbums);
       let pageAlbums = displayAlbums.slice(start, end);
 
-      // Always pad to exactly 8 slots for consistent layout
-      if (pageAlbums.length < 8) {
+      // Pad to exactly 8 slots only if we have at least 3 albums
+      // Otherwise something is wrong and we shouldn't show empty slots
+      if (pageAlbums.length >= 3 && pageAlbums.length < 8) {
         pageAlbums = pageAlbums.concat(Array(8 - pageAlbums.length).fill(null));
       }
 
@@ -4992,8 +4446,6 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
           shouldScrollAlbums = false;
         }
       }
-
-      // Removed performance logging overhead
     }
 
     function updateProgressUI(){
@@ -5277,8 +4729,7 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         const returnedOffset = Number(j.offset || 0);
         rawNextOffset = returnedOffset + newItems.length;
         albumGroups = groupAlbums(rawItems);
-        // Skip audio validation for faster loads
-        // primeAlbumAudioValidation(albumGroups);
+        primeAlbumAudioValidation(albumGroups);
         refreshPublicPlaylists();
         return newItems.length > 0;
       } finally {
@@ -5355,7 +4806,7 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       const params = new URLSearchParams();
       params.set('start', String(start));
       params.set('end',   String(end));
-      params.set('limit', '150'); // Balanced: enough albums without timing out
+      params.set('limit', '120'); // quick; let UI group & sample
       try {
         const r = await fetch(`/api/explore?${params}`);
         if (!r.ok) {
@@ -5383,13 +4834,10 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         rawTotalFound = Number(j.total || rawItems.length);
         rawNextOffset = 0;
         activePublicPlaylist = null;
-        const groupedAlbums = groupAlbums(rawItems);
+        const groupedAlbums = groupAlbums(rawItems).filter(album => (album.picture || '').trim());
         albumGroups = groupedAlbums;
-        console.log(`[runExplore] Loaded ${albumGroups.length} unique albums from ${rawItems.length} tracks for ${start}s`);
-        // Skip expensive audio validation - trust FileMaker data
-        // primeAlbumAudioValidation(albumGroups);
+        primeAlbumAudioValidation(albumGroups);
         currentMode = 'explore';
-        currentExploreDecade = start; // Save decade for reload
         if (!albumGroups.length) {
           errorEl.hidden = false;
           errorEl.textContent = `No albums with complete audio and artwork found for the ${start}s.`;
@@ -5502,11 +4950,8 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
 
           activePublicPlaylist = null;
           currentMode = 'search';
-          currentExploreDecade = null; // Clear explore decade when searching
           albumGroups = groupAlbums(rawItems);
-          console.log(`[search] Found ${albumGroups.length} unique albums from ${rawItems.length} tracks (query: "${q}")`);
-          // Skip audio validation for faster loads
-          // primeAlbumAudioValidation(albumGroups);
+          primeAlbumAudioValidation(albumGroups);
           refreshPublicPlaylists();
           albumPage = 0;
           renderAlbumPage();
@@ -5533,15 +4978,10 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         }
     clearEl.addEventListener('click', () => { searchEl.value=''; loadRandomAlbums(); });
 
-    if (shuffleBtn) {
-      shuffleBtn.addEventListener('click', () => {
-        if (currentExploreDecade !== null) {
-          // Reload the same decade with different random offset
-          runExplore(currentExploreDecade);
-        } else {
-          // Load random albums from a different decade
-          loadRandomAlbums();
-        }
+    if (showWithoutAudioEl) {
+      showWithoutAudioEl.addEventListener('change', () => {
+        showAlbumsWithoutAudio = showWithoutAudioEl.checked;
+        renderAlbumPage(); // Re-render to apply the filter
       });
     }
 
@@ -5583,6 +5023,3 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
     } else {
       loadRandomAlbums();
     }
-  </script>
-</body>
-</html>

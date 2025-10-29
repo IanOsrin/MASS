@@ -2,6 +2,7 @@
   {
     "id": "dd08d666-cb8a-45b6-b00c-0afdc34cb478",
     "userId": "4",
+    "userEmail": "ian@test.co.za",
     "name": "Ians Favourites",
     "tracks": [
       {
@@ -269,6 +270,7 @@
   {
     "id": "1b05a9c0-8dc2-46bb-92c2-452d1adc77e3",
     "userId": "4",
+    "userEmail": "ian@test.co.za",
     "name": "A Collection of Faves",
     "tracks": [
       {

@@ -22,6 +22,8 @@
     .searchbar{flex:1;display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:8px;align-items:center;}
     .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:16px;outline:none;}
     .searchbar button{border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer;}
+    .searchbar .toggle-label{display:flex;align-items:center;gap:6px;font-size:14px;white-space:nowrap;cursor:pointer;user-select:none;}
+    .searchbar .toggle-label input[type="checkbox"]{cursor:pointer;width:16px;height:16px;}
 
     main{max-width:1100px;margin:20px auto;padding:0 16px 40px;}
     .layout-grid{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;}
@@ -72,7 +74,8 @@
     .playlist-footer-actions .btn{min-width:160px;}
     .shared-playlist-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap;}
     .shared-playlist-actions .btn{min-width:140px;}
-    .share-link-display{display:none !important;}
+    .share-link-display{margin-top:8px;font-size:13px;color:var(--muted);word-break:break-all;cursor:pointer;}
+    .share-link-display:hover{color:#fff;}
     @media (max-width:900px){
       .layout-grid{flex-direction:column;}
       .playlist-column{max-width:100%;order:initial;}
@@ -86,7 +89,7 @@
     .card{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:9px;display:flex;flex-direction:column;gap:6px;overflow:hidden;scroll-margin-top:128px;min-height:220px;}
     .card > .btn{margin-top:auto;}
     .card.pending-audio{opacity:0.8;}
-    .card.no-audio{display:none !important;}
+    .card.no-audio{border-color:#b9383a;box-shadow:0 0 0 1px rgba(185,56,58,0.45);}
 
     /* Cover: small, centered square; never bleeds */
     .cover-wrap{position:relative;width:var(--cover-size);height:var(--cover-size);border-radius:6px;overflow:hidden;border:1px solid var(--border);background:#101215;margin:0 auto;}
@@ -110,7 +113,7 @@
     .btn-error:disabled{opacity:0.9;box-shadow:none;}
     .btn.info-more{font-size:18px;line-height:1;padding:4px 8px;display:flex;align-items:center;justify-content:center;}
 
-
+    
     .back-row{display:flex;justify-content:center;margin-bottom:12px;}
 .toolbar{display:none;}
     .pager{display:none !important;}
@@ -332,7 +335,10 @@
         <input id="search" type="search" placeholder="Search albums, artists, tracks, year, genre…" autocomplete="off" />
         <button id="go">Search</button>
         <button id="clear">Clear</button>
-        <button id="shuffleBtn" class="btn-accent" hidden>🔄 Load More</button>
+        <label class="toggle-label" for="showWithoutAudio" title="Show albums even if they don't have playable audio files">
+          <input type="checkbox" id="showWithoutAudio" />
+          <span>Show all</span>
+        </label>
         <span id="status" class="status" hidden aria-live="polite" role="status"><span class="pulse"></span><span id="statusText">Searching…</span></span>
       </div>
       <div class="explore-wrap">
@@ -533,12 +539,12 @@
     const searchEl = document.getElementById('search');
     const clearEl  = document.getElementById('clear');
     const goEl  = document.getElementById('go');
+    const showWithoutAudioEl = document.getElementById('showWithoutAudio');
     const headerEl = document.querySelector('header');
     const pagerEl  = document.getElementById('pager');
     const prevEl   = document.getElementById('prev');
     const nextEl   = document.getElementById('next');
     const pageInfo = document.getElementById('pageInfo');
-    const shuffleBtn = document.getElementById('shuffleBtn');
     const countEl  = document.getElementById('count');
     const errorEl  = document.getElementById('error');
     const player   = document.getElementById('player');
@@ -777,7 +783,7 @@
 
     // Config
     const ALBUMS_PER_PAGE = 8;
-    const FM_FETCH_LIMIT  = 300; // Balanced: enough for diverse albums without timing out
+    const FM_FETCH_LIMIT  = 80; // Smaller initial batch for snappier responses
     const PLAYLIST_ARTWORK_BASE = '/img/playlists/';
     const PLAYLIST_ARTWORK_EXTENSIONS = ['.webp', '.png', '.jpg', '.jpeg', '.avif'];
 
@@ -2176,10 +2182,9 @@
     let albumGroups = [];
     let albumPage = 0;
     let currentMode = 'landing';
-    let currentExploreDecade = null; // Track current decade for reload
     let shouldScrollAlbums = false;
     let isRestoring = false;
-    let showAlbumsWithoutAudio = true; // Show all albums, trust FileMaker data
+    let showAlbumsWithoutAudio = false; // Toggle: show albums even if audio validation fails
 
     // Single audio UI state
     let currentBtn=null, currentRow=null, currentSrc='';
@@ -2967,19 +2972,16 @@
 
       if (sharedPlaylistActive) { clearSharedPlaylistState(); }
       currentMode = 'landing';
-      currentExploreDecade = null;
       prevSearch = null;
       rawItems = [];
       albumsEl.classList.remove('single-album');
       pagerEl.hidden = true;
-      if (shuffleBtn) shuffleBtn.hidden = true;
       countEl.textContent = '';
       errorEl.hidden = true;
       // Placeholder graphic removed; nothing else to show here.
     }
 
     async function loadRandomAlbums() {
-      const perfStart = performance.now();
       // Show loading indicator
       if (loadingIndicator) loadingIndicator.hidden = false;
       if (albumsEl) albumsEl.style.display = 'none';
@@ -2994,19 +2996,14 @@
         const params = new URLSearchParams();
         params.set('start', String(start));
         params.set('end', String(end));
-        params.set('limit', '150'); // Balanced: enough albums without timing out
+        params.set('limit', '40'); // Small limit for fast loading
 
-        const fetchStart = performance.now();
         const r = await fetch(`/api/explore?${params}`);
-        const fetchTime = performance.now() - fetchStart;
         if (!r.ok) {
           return;
         }
 
-        const parseStart = performance.now();
         const j = await r.json();
-        const parseTime = performance.now() - parseStart;
-
         if (!j || !Array.isArray(j.items) || j.items.length === 0) {
           return;
         }
@@ -3014,30 +3011,21 @@
         rawItems = j.items || [];
         rawTotalFound = Number(j.total || rawItems.length);
 
-        const groupStart = performance.now();
-        const groupedAlbums = groupAlbums(rawItems);
-        const groupTime = performance.now() - groupStart;
+        const groupedAlbums = groupAlbums(rawItems).filter(album => (album.picture || '').trim());
 
         if (!groupedAlbums.length) {
           return;
         }
 
-        // Shuffle and keep all albums for pagination
-        const shuffleStart = performance.now();
+        // Shuffle and take up to 12 (ensures we get 8 after any filtering)
         shuffleInPlace(groupedAlbums);
-        const shuffleTime = performance.now() - shuffleStart;
-
-        albumGroups = groupedAlbums;
+        albumGroups = groupedAlbums.slice(0, Math.min(12, groupedAlbums.length));
         rawItems = albumGroups;
         rawTotalFound = albumGroups.length;
         rawNextOffset = albumGroups.length;
 
-        const totalTime = performance.now() - perfStart;
-        console.log(`[loadRandomAlbums] Loaded ${albumGroups.length} albums from ${j.items.length} tracks in ${totalTime.toFixed(0)}ms (fetch: ${fetchTime.toFixed(0)}ms)`);
-
         albumPage = 0;
         currentMode = 'explore';
-        currentExploreDecade = null; // Random load, no specific decade
         activePublicPlaylist = null;
 
         // Set up explore layout
@@ -3102,7 +3090,33 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       return `title:${normT}|artist:${normA}`;
         }
 
-    function groupAlbums(items){
+    let groupAlbumsCacheKey = '';
+    let groupAlbumsCacheValue = null;
+
+    function groupAlbumsCacheKeyFor(items){
+      if (!Array.isArray(items) || items.length === 0) return 'empty';
+      const parts = [];
+      for (const rec of items) {
+        if (!rec || typeof rec !== 'object') {
+          parts.push('blank');
+          continue;
+        }
+        const id = rec.recordId != null ? String(rec.recordId) : '';
+        const mod = rec.modId != null ? String(rec.modId) : '';
+        const title =
+          rec.fields && rec.fields['Album Title']
+            ? String(rec.fields['Album Title'])
+            : rec.key
+              ? String(rec.key)
+              : rec.title
+                ? String(rec.title)
+                : '';
+        parts.push(`${id}:${mod}:${title}`);
+      }
+      return parts.join('|');
+        }
+
+    function computeGroupedAlbums(items){
       const byCat = new Map();
 
       for (const rec of items) {
@@ -3132,7 +3146,7 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         const composer3 = normTitle(f['Composer 3'] || f['Composer3'] || '');
         const composer4 = normTitle(f['Composer 4'] || f['Composer4'] || '');
         const isrc = (f['ISRC'] || '').trim();
-        // Check Audio Test field for invalid/bad audio markers
+        // Simplified: just check if Audio Test field exists and explicitly says invalid
         const audioTest = String(f['songfiles:Audio Test'] || f['Songfiles::Audio Test'] || f['songfiles::Audio Test'] || f['Audio Test'] || '').toLowerCase();
         const hasValidAudio = audioTest ? !audioTest.includes('invalid') : true;
 
@@ -3197,8 +3211,8 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         // Removed hard filter for no playable tracks - let toggle control this
         // if (!playableTracks.length) continue;
 
-        // Only show tracks with valid audio
-        const tracksForDisplay = playableTracks.map(track => ({ ...track }));
+        // Use all tracks if no playable ones (for albums shown via toggle)
+        const tracksForDisplay = (playableTracks.length > 0 ? playableTracks : g.tracks).map(track => ({ ...track }));
 
         const albumPlaylistMap = new Map();
         for (const track of g.tracks) {
@@ -3252,6 +3266,17 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       }
 
       groups.sort((a,b)=> a.title.localeCompare(b.title, undefined, { sensitivity:'base' }) || a.artist.localeCompare(b.artist, undefined, { sensitivity:'base' }));
+      return groups;
+        }
+
+    function groupAlbums(items){
+      const key = groupAlbumsCacheKeyFor(items);
+      if (key === groupAlbumsCacheKey && Array.isArray(groupAlbumsCacheValue)) {
+        return groupAlbumsCacheValue;
+      }
+      const groups = computeGroupedAlbums(items);
+      groupAlbumsCacheKey = key;
+      groupAlbumsCacheValue = groups;
       return groups;
         }
 
@@ -4278,7 +4303,7 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       document.body.classList.remove('no-scroll');
         }
 
-    async function openTracksModal(album, sourceCard=null){
+    function openTracksModal(album, sourceCard=null){
       // Ensure only one window open: close any existing
       closeTracksModal();
       const albumCard = sourceCard || null;
@@ -4294,44 +4319,18 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         }
       }
 
-      // Fetch complete album if we might not have all tracks
-      let fullAlbum = album;
-      const shouldFetchComplete = currentMode === 'explore' || currentMode === 'landing';
-
-      if (shouldFetchComplete && (album.catalogue || album.title)) {
-        try {
-          const params = new URLSearchParams();
-          if (album.catalogue) params.set('cat', album.catalogue);
-          if (album.title) params.set('title', album.title);
-          if (album.artist) params.set('artist', album.artist);
-
-          const response = await fetch(`/api/album?${params}`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data.items && data.items.length > 0) {
-              // Merge the full tracklist
-              fullAlbum = { ...album, tracks: data.items };
-              console.log(`[openTracksModal] Fetched ${data.items.length} complete tracks for "${album.title}"`);
-            }
-          }
-        } catch (err) {
-          console.warn('[openTracksModal] Failed to fetch complete album:', err);
-          // Continue with partial album
-        }
-      }
-
       // Fill header
-      modalTitle.textContent = fullAlbum.title || '(no album)';
-      modalArtist.textContent = fullAlbum.artist || '';
-      modalCat.textContent = fullAlbum.catalogue || '';
-      if (!fullAlbum.catalogue) modalCat.style.display = 'none'; else modalCat.style.display = 'inline-block';
+      modalTitle.textContent = album.title || '(no album)';
+      modalArtist.textContent = album.artist || '';
+      modalCat.textContent = album.catalogue || '';
+      if (!album.catalogue) modalCat.style.display = 'none'; else modalCat.style.display = 'inline-block';
 
       // Cover
-      if (fullAlbum.picture) {
+      if (album.picture) {
         const wrap = document.createElement('div');
         wrap.className = 'cover-wrap';
         const img = document.createElement('img');
-        img.src = `/api/container?u=${encodeURIComponent(fullAlbum.picture)}`;
+        img.src = `/api/container?u=${encodeURIComponent(album.picture)}`;
         img.alt = 'Cover';
         img.onerror = () => { modalCover.innerHTML = ''; };
         wrap.appendChild(img);
@@ -4347,7 +4346,7 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       const ul = document.createElement('ul');
       ul.className = 'tracks';
 
-      const validTracks = (fullAlbum.tracks || []).filter(t => t.hasValidAudio !== false);
+      const validTracks = album.tracks.filter(t => t.hasValidAudio);
       validTracks.forEach((t, idx) => {
         const li = document.createElement('li');
         li.className = 'track';
@@ -4385,17 +4384,17 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         li._audioField = t.mp3Field || '';
         const baseMetaAlbum = { ...t };
         baseMetaAlbum.trackName = t.name || 'Untitled track';
-        baseMetaAlbum.trackArtist = t.trackArtist || fullAlbum.artist || '';
-        baseMetaAlbum.albumTitle = fullAlbum.title || '';
-        baseMetaAlbum.albumArtist = fullAlbum.artist || '';
+        baseMetaAlbum.trackArtist = t.trackArtist || album.artist || '';
+        baseMetaAlbum.albumTitle = album.title || '';
+        baseMetaAlbum.albumArtist = album.artist || '';
         baseMetaAlbum.playlistId = null;
         baseMetaAlbum.playlistName = '';
-        baseMetaAlbum.picture = fullAlbum.picture || '';
+        baseMetaAlbum.picture = album.picture || '';
         baseMetaAlbum.source = 'album';
-        baseMetaAlbum.catalogue = fullAlbum.catalogue || '';
+        baseMetaAlbum.catalogue = album.catalogue || '';
         baseMetaAlbum.audioField = t.mp3Field || '';
         baseMetaAlbum.trackRecordId = t.recordId || '';
-        baseMetaAlbum.pictureField = fullAlbum.pictureField || t.pictureField || '';
+        baseMetaAlbum.pictureField = album.pictureField || t.pictureField || '';
         baseMetaAlbum.src = playableSrc;
         li._meta = baseMetaAlbum;
         li._validated = false;
@@ -4501,19 +4500,19 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       });
 
       modalContent.innerHTML = '';
-      if (Array.isArray(fullAlbum?.tracks) && fullAlbum.tracks.length) {
+      if (Array.isArray(album?.tracks) && album.tracks.length) {
         const albumActions = document.createElement('div');
         albumActions.className = 'album-actions';
         const btnAddAlbum = document.createElement('button');
         btnAddAlbum.type = 'button';
         btnAddAlbum.className = 'btn small btn-accent';
-        btnAddAlbum.textContent = `Add album to playlist (${fullAlbum.tracks.length} tracks)`;
+        btnAddAlbum.textContent = 'Add album to playlist';
         btnAddAlbum.addEventListener('click', async () => {
           const previousLabel = btnAddAlbum.textContent;
           btnAddAlbum.disabled = true;
           btnAddAlbum.textContent = 'Adding…';
           try {
-            await handleAddAlbumToPlaylist(fullAlbum);
+            await handleAddAlbumToPlaylist(album);
           } finally {
             btnAddAlbum.disabled = false;
             btnAddAlbum.textContent = previousLabel;
@@ -4803,25 +4802,10 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       const totalPool = Math.max(availableAlbums, displayAlbums.length);
       const maxPage = Math.max(1, Math.ceil(Math.max(totalPool, 1) / ALBUMS_PER_PAGE));
       albumPage = Math.min(albumPage, maxPage - 1);
-
-      // Show shuffle button for explore mode, pagination for search mode
-      const isExploreMode = currentMode === 'explore' || currentMode === 'landing';
-      console.log(`[renderAlbumPage] mode=${currentMode}, isExploreMode=${isExploreMode}, shuffleBtn=${!!shuffleBtn}`);
-      if (isExploreMode) {
-        pagerEl.hidden = true;
-        if (shuffleBtn) shuffleBtn.hidden = false;
-      } else {
-        pagerEl.hidden = totalPool <= ALBUMS_PER_PAGE;
-        if (shuffleBtn) shuffleBtn.hidden = true;
-        pageInfo.textContent = `Page ${albumPage + 1} / ${maxPage}`;
-        prevEl.disabled = albumPage <= 0;
-        nextEl.disabled = albumPage >= maxPage - 1 && rawItems.length >= rawTotalFound;
-      }
-
-      // Debug pagination
-      if (totalPool > ALBUMS_PER_PAGE && !isExploreMode) {
-        console.log(`[PAGINATION] Showing pager: ${totalPool} albums (${maxPage} pages)`);
-      }
+      pagerEl.hidden = totalPool <= ALBUMS_PER_PAGE;
+      pageInfo.textContent = `Page ${albumPage + 1} / ${maxPage}`;
+      prevEl.disabled = albumPage <= 0;
+      nextEl.disabled = albumPage >= maxPage - 1 && rawItems.length >= rawTotalFound;
 
       if (totalAlbums === 0 && pendingAlbums > 0) {
         const wait = document.createElement('div');
@@ -4832,7 +4816,12 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       }
 
       if (totalAlbums === 0) {
-        // Don't show error message for public playlists
+        if (activePublicPlaylist) {
+          const empty = document.createElement('div');
+          empty.className = 'muted';
+          empty.textContent = `No albums found in "${activePublicPlaylist}".`;
+          albumsEl.appendChild(empty);
+        }
         return;
       }
 
@@ -4840,8 +4829,9 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       const end = Math.min(start + ALBUMS_PER_PAGE, totalAlbums);
       let pageAlbums = displayAlbums.slice(start, end);
 
-      // Always pad to exactly 8 slots for consistent layout
-      if (pageAlbums.length < 8) {
+      // Pad to exactly 8 slots only if we have at least 3 albums
+      // Otherwise something is wrong and we shouldn't show empty slots
+      if (pageAlbums.length >= 3 && pageAlbums.length < 8) {
         pageAlbums = pageAlbums.concat(Array(8 - pageAlbums.length).fill(null));
       }
 
@@ -4992,8 +4982,6 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
           shouldScrollAlbums = false;
         }
       }
-
-      // Removed performance logging overhead
     }
 
     function updateProgressUI(){
@@ -5277,8 +5265,7 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         const returnedOffset = Number(j.offset || 0);
         rawNextOffset = returnedOffset + newItems.length;
         albumGroups = groupAlbums(rawItems);
-        // Skip audio validation for faster loads
-        // primeAlbumAudioValidation(albumGroups);
+        primeAlbumAudioValidation(albumGroups);
         refreshPublicPlaylists();
         return newItems.length > 0;
       } finally {
@@ -5355,7 +5342,7 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       const params = new URLSearchParams();
       params.set('start', String(start));
       params.set('end',   String(end));
-      params.set('limit', '150'); // Balanced: enough albums without timing out
+      params.set('limit', '120'); // quick; let UI group & sample
       try {
         const r = await fetch(`/api/explore?${params}`);
         if (!r.ok) {
@@ -5383,13 +5370,10 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         rawTotalFound = Number(j.total || rawItems.length);
         rawNextOffset = 0;
         activePublicPlaylist = null;
-        const groupedAlbums = groupAlbums(rawItems);
+        const groupedAlbums = groupAlbums(rawItems).filter(album => (album.picture || '').trim());
         albumGroups = groupedAlbums;
-        console.log(`[runExplore] Loaded ${albumGroups.length} unique albums from ${rawItems.length} tracks for ${start}s`);
-        // Skip expensive audio validation - trust FileMaker data
-        // primeAlbumAudioValidation(albumGroups);
+        primeAlbumAudioValidation(albumGroups);
         currentMode = 'explore';
-        currentExploreDecade = start; // Save decade for reload
         if (!albumGroups.length) {
           errorEl.hidden = false;
           errorEl.textContent = `No albums with complete audio and artwork found for the ${start}s.`;
@@ -5502,11 +5486,8 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
 
           activePublicPlaylist = null;
           currentMode = 'search';
-          currentExploreDecade = null; // Clear explore decade when searching
           albumGroups = groupAlbums(rawItems);
-          console.log(`[search] Found ${albumGroups.length} unique albums from ${rawItems.length} tracks (query: "${q}")`);
-          // Skip audio validation for faster loads
-          // primeAlbumAudioValidation(albumGroups);
+          primeAlbumAudioValidation(albumGroups);
           refreshPublicPlaylists();
           albumPage = 0;
           renderAlbumPage();
@@ -5533,15 +5514,10 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         }
     clearEl.addEventListener('click', () => { searchEl.value=''; loadRandomAlbums(); });
 
-    if (shuffleBtn) {
-      shuffleBtn.addEventListener('click', () => {
-        if (currentExploreDecade !== null) {
-          // Reload the same decade with different random offset
-          runExplore(currentExploreDecade);
-        } else {
-          // Load random albums from a different decade
-          loadRandomAlbums();
-        }
+    if (showWithoutAudioEl) {
+      showWithoutAudioEl.addEventListener('change', () => {
+        showAlbumsWithoutAudio = showWithoutAudioEl.checked;
+        renderAlbumPage(); // Re-render to apply the filter
       });
     }
 
