@@ -2487,6 +2487,82 @@ app.get('/api/explore', async (req, res) => {
   }
 });
 
+/* ========= Random Songs: Get random individual songs with artwork ========= */
+app.get('/api/random-songs', async (req, res) => {
+  try {
+    const count = Math.max(1, Math.min(50, parseInt(req.query.count || '8', 10)));
+
+    // Get a random sample of records
+    // FileMaker doesn't have a built-in random function, so we'll get a larger set and shuffle
+    // Fetch 20x to ensure we have enough artist diversity (aim for 12 different artists)
+    const fetchLimit = Math.min(300, count * 20); // Get 20x more records for artist diversity
+
+    // Get random offset to vary results
+    const maxOffset = 5000; // Assume there are at least 5000 records
+    const randomOffset = Math.floor(Math.random() * maxOffset) + 1;
+
+    // Find all records with wildcard (gets any record)
+    const payload = {
+      query: [{ 'Album Title': '*' }], // Match any record with an album title
+      limit: fetchLimit,
+      offset: randomOffset
+    };
+
+    const r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
+    const json = await r.json().catch(() => ({}));
+
+    if (!r.ok) {
+      const msg = json?.messages?.[0]?.message || 'FM error';
+      const code = json?.messages?.[0]?.code;
+      return res.status(500).json({ error: 'Random songs failed', status: r.status, detail: `${msg} (${code})` });
+    }
+
+    const rawData = json?.response?.data || [];
+
+    // Filter to only include records with valid audio
+    const dataWithAudio = rawData.filter(record => hasValidAudio(record.fieldData || {}));
+
+    // Group by artist to maximize diversity
+    const artistMap = new Map();
+    for (const record of dataWithAudio) {
+      const fields = record.fieldData || {};
+      const artist = fields['Album Artist'] || fields['Artist'] || fields['Tape Files::Album Artist'] || 'Unknown';
+
+      if (!artistMap.has(artist)) {
+        artistMap.set(artist, []);
+      }
+      artistMap.get(artist).push(record);
+    }
+
+    // Get one random track from each artist
+    const selected = [];
+    const artists = Array.from(artistMap.keys());
+
+    // Shuffle artists for randomness
+    artists.sort(() => Math.random() - 0.5);
+
+    // Pick one track from each artist until we have enough
+    for (const artist of artists) {
+      if (selected.length >= count) break;
+
+      const tracks = artistMap.get(artist);
+      const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
+      selected.push(randomTrack);
+    }
+
+    const items = selected.map((d) => ({
+      recordId: d.recordId,
+      modId: d.modId,
+      fields: d.fieldData || {}
+    }));
+
+    return res.json({ ok: true, items, total: items.length });
+  } catch (err) {
+    const detail = err?.message || String(err);
+    return res.status(500).json({ error: 'Random songs failed', status: 500, detail });
+  }
+});
+
 /* ========= Album: fetch full tracklist ========= */
 app.get('/api/album', async (req, res) => {
   try {

@@ -259,10 +259,26 @@
         "audioField": "Audio File",
         "artworkField": "Artwork::Picture",
         "addedAt": "2025-10-20T12:33:52.157Z"
+      },
+      {
+        "id": "764146c1-4f7e-45b1-8ae9-d242da5a68e7",
+        "trackRecordId": "1557",
+        "name": "Ayabaleka Amagwala",
+        "albumTitle": "",
+        "albumArtist": "Uvemvame",
+        "catalogue": "",
+        "trackArtist": "Uvemvame",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/7D87F8646D6B92D53DBC8D57D7AE8D2E1D625F2ED1BE4D41F13826EC9CD94FB0.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F7D87F8646D6B92D53DBC8D57D7AE8D2E1D625F2ED1BE4D41F13826EC9CD94FB0.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/4DF9488EB435E8F34679679D81CF3091FB6032219A18D562BD84C5E6ABA532EF.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-10-29T19:34:07.177Z"
       }
     ],
     "createdAt": "2025-10-05T17:30:14.074Z",
-    "updatedAt": "2025-10-20T12:33:52.157Z",
+    "updatedAt": "2025-10-29T19:34:07.177Z",
     "shareId": "a079c893b3824783bd42f9f745bee177",
     "sharedAt": "2025-10-20T11:28:39.778Z"
   },
@@ -644,5 +660,94 @@
     "updatedAt": "2025-10-26T12:02:06.477Z",
     "shareId": "a5d7ee189c7343bf9e845f8856fce473",
     "sharedAt": "2025-10-20T12:38:46.341Z"
+  },
+  {
+    "id": "e40d5413-eb8f-4fac-9974-cd1469ec140e",
+    "userId": "4",
+    "name": "The Weird and Wonderful",
+    "tracks": [
+      {
+        "id": "2a7dd360-4ccb-42ae-bd09-4b769a8108b5",
+        "trackRecordId": "4738",
+        "name": "Dock of the Bay",
+        "albumTitle": "The Thunderbolts Strike",
+        "albumArtist": "The Thunderbolts",
+        "catalogue": "RPM 1005",
+        "trackArtist": "The Thunderbolts",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/600EF726E1B5BA2333AAC2BD9A4669913E684A58A8CB03D821437B3D1CE6FDB4.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F600EF726E1B5BA2333AAC2BD9A4669913E684A58A8CB03D821437B3D1CE6FDB4.mp3%3FRCType%3DRCFileProcessor",
+        "seq": 3,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/89836F4C04201858500BDDAC07654CFBEF12FAB632CAB85FBA46A31612D59182.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-10-29T18:49:04.078Z"
+      },
+      {
+        "id": "d6685e78-16a1-44f8-9804-e96cd14df7bc",
+        "trackRecordId": "4095",
+        "name": "Opgehok",
+        "albumTitle": "Dis Net Vir Jou",
+        "albumArtist": "Sonja Herholdt",
+        "catalogue": "RPM 1235",
+        "trackArtist": "Sonja Herholdt",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/643767984A3630FCAD808BEA00DD7FE3FA23CE167AD57BEA1E6B05DC57B1DC3F.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F643767984A3630FCAD808BEA00DD7FE3FA23CE167AD57BEA1E6B05DC57B1DC3F.mp3%3FRCType%3DRCFileProcessor",
+        "seq": 3,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/3EDAFC6DD68DFBA2CA3D08CBC76DEC5650174B1E3322333794CCAB34ADC7CE9F.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-10-29T18:50:46.299Z"
+      },
+      {
+        "id": "41858eae-9629-4bb3-aa76-03959fbf8ad4",
+        "trackRecordId": "5964",
+        "name": "Chattanooga Choo Choo",
+        "albumTitle": "",
+        "albumArtist": "Dana Valery With The Dan Hill Combo",
+        "catalogue": "",
+        "trackArtist": "Dana Valery With The Dan Hill Combo",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/A1DE8C2ADF33F1592E89C5FBA1E2C9E195DAD8E4ADFCC75101411282DB029647.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2FA1DE8C2ADF33F1592E89C5FBA1E2C9E195DAD8E4ADFCC75101411282DB029647.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/8DCEFEF0C8DC68109F161B32331027DB9A8936401CDCCD892308B6CA3A2AB325.png?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-10-29T19:27:35.897Z"
+      },
+      {
+        "id": "11d5072f-329a-4d9e-beca-8eee9cba6567",
+        "trackRecordId": "6073",
+        "name": "Masasani",
+        "albumTitle": "",
+        "albumArtist": "Elias Maluleke and Mavambe Girls",
+        "catalogue": "",
+        "trackArtist": "Elias Maluleke and Mavambe Girls",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/D00D4BCD55F2F6BA467671EC4B7B59D2CEA33C04A3150502726A0DE3411D234E.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2FD00D4BCD55F2F6BA467671EC4B7B59D2CEA33C04A3150502726A0DE3411D234E.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/D3AF14ACE4FD1ACAEEA5DCF18D7CFCDCAD6459DBCCB41975712687B033759255.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-10-29T19:28:01.008Z"
+      },
+      {
+        "id": "22e94d1e-64a9-4577-bb12-71e7b1248cd0",
+        "trackRecordId": "1557",
+        "name": "Ayabaleka Amagwala",
+        "albumTitle": "",
+        "albumArtist": "Uvemvame",
+        "catalogue": "",
+        "trackArtist": "Uvemvame",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/7D87F8646D6B92D53DBC8D57D7AE8D2E1D625F2ED1BE4D41F13826EC9CD94FB0.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F7D87F8646D6B92D53DBC8D57D7AE8D2E1D625F2ED1BE4D41F13826EC9CD94FB0.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/4DF9488EB435E8F34679679D81CF3091FB6032219A18D562BD84C5E6ABA532EF.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-10-29T19:34:32.947Z"
+      }
+    ],
+    "createdAt": "2025-10-29T18:48:34.237Z",
+    "updatedAt": "2025-10-29T19:34:32.947Z"
   }
 ]
