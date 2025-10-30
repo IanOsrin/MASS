@@ -415,6 +415,7 @@
             <input id="playlistNameInput" type="text" placeholder="Create new playlist" maxlength="80" />
             <button type="submit" class="btn small">Create</button>
           </form>
+          <button id="importPlaylistButton" type="button" class="btn small" style="width:100%;margin-top:8px;">Import Playlist</button>
           <div id="playlistsEmpty" class="playlist-empty" hidden>No playlists yet. Create one to start saving tracks.</div>
         </section>
         <section id="publicPlaylistsPanel" class="public-playlists" hidden>
@@ -436,9 +437,8 @@
           <ul id="playlistTracksList" class="tracks"></ul>
           <div id="playlistTracksEmpty" class="playlist-empty" hidden>No tracks in this playlist yet.</div>
           <div class="playlist-footer-actions">
-            <button id="sharePlaylistButton" type="button" class="btn small">Copy share link</button>
+            <button id="exportPlaylistButton" type="button" class="btn small">Export</button>
           </div>
-          <div id="shareLinkOutput" class="share-link-display" hidden title="Click to copy"></div>
         </section>
       </aside>
       <section class="content-column">
@@ -554,7 +554,37 @@
     </div>
   </div>
 
+  <div id="exportModal" class="share-modal-overlay">
+    <div class="share-modal" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
+      <h3 id="exportModalTitle">Export Playlist</h3>
+      <p>Copy the compact code or download as JSON file:</p>
+      <input id="exportCodeInput" type="text" readonly />
+      <div class="actions">
+        <button type="button" id="exportDownloadBtn" class="btn small">Download JSON</button>
+        <button type="button" id="exportCopyBtn" class="btn small">Copy Code</button>
+        <button type="button" id="exportModalClose" class="btn small">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="importModal" class="share-modal-overlay">
+    <div class="share-modal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+      <h3 id="importModalTitle">Import Playlist</h3>
+      <p>Paste a compact code (MASS:...) or upload a JSON file:</p>
+      <textarea id="importCodeInput" placeholder="Paste MASS:... code here" rows="4" style="width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:14px;font-family:monospace;margin-bottom:12px;resize:vertical;"></textarea>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <span style="color:var(--muted);font-size:14px;">or</span>
+        <input type="file" id="importFileInput" accept=".json" style="flex:1;font-size:14px;" />
+      </div>
+      <div id="importStatus" style="color:var(--muted);font-size:13px;margin-bottom:12px;min-height:20px;"></div>
+      <div class="actions">
+        <button type="button" id="importSubmitBtn" class="btn small">Import</button>
+        <button type="button" id="importModalClose" class="btn small">Close</button>
+      </div>
+    </div>
+  </div>
+
   <audio id="player" preload="none"></audio>
 
-  <script src="/app.min.js?v=10" defer></script></body>
+  <script src="/app.min.js?v=14" defer></script></body>
 </html>

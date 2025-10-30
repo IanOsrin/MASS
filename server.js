@@ -1773,6 +1773,209 @@ app.post('/api/playlists/:playlistId/share', async (req, res) => {
   }
 });
 
+// Export playlist as compact code
+app.get('/api/playlists/:playlistId/export', async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  try {
+    const userRecordId = normalizeRecordId(user.recordId);
+    const playlistId = req.params?.playlistId;
+
+    if (!playlistId) {
+      return res.status(400).json({ ok: false, error: 'Playlist ID required' });
+    }
+
+    const playlists = await loadPlaylists();
+    const playlist = playlists.find((p) => p && p.id === playlistId && playlistOwnerMatches(p.userId, userRecordId));
+
+    if (!playlist) {
+      return res.status(404).json({ ok: false, error: 'Playlist not found' });
+    }
+
+    const tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+    if (!tracks.length) {
+      return res.status(400).json({ ok: false, error: 'Playlist is empty' });
+    }
+
+    // Extract track IDs
+    const trackIds = tracks.map(t => t.trackRecordId).filter(Boolean);
+    console.log(`[MASS] Export: Extracted ${trackIds.length} track IDs from playlist "${playlist.name}"`);
+    console.log(`[MASS] Export: Sample IDs:`, trackIds.slice(0, 3));
+
+    // Create export data
+    const exportData = {
+      name: playlist.name,
+      tracks: trackIds,
+      exported: new Date().toISOString()
+    };
+
+    // Generate compact code (MASS:base64json)
+    const jsonStr = JSON.stringify(exportData);
+    const base64 = Buffer.from(jsonStr, 'utf-8').toString('base64');
+    const compactCode = `MASS:${base64}`;
+    console.log(`[MASS] Export: Generated code of length ${compactCode.length}`);
+
+    res.json({
+      ok: true,
+      code: compactCode,
+      json: exportData,
+      trackCount: trackIds.length
+    });
+  } catch (err) {
+    console.error('[MASS] Export playlist failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to export playlist', detail: err?.message });
+  }
+});
+
+// Import playlist from compact code or track IDs
+app.post('/api/playlists/import', async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  try {
+    const userRecordId = normalizeRecordId(user.recordId);
+    const { name, code, trackIds } = req.body;
+
+    let playlistName = '';
+    let importedTrackIds = [];
+
+    // Parse compact code (MASS:base64json) or direct track IDs
+    if (code && typeof code === 'string') {
+      const trimmed = code.trim();
+
+      // Check for MASS: prefix
+      if (trimmed.startsWith('MASS:')) {
+        const base64Part = trimmed.substring(5);
+        try {
+          const jsonStr = Buffer.from(base64Part, 'base64').toString('utf-8');
+          const data = JSON.parse(jsonStr);
+          playlistName = data.name || 'Imported Playlist';
+          importedTrackIds = Array.isArray(data.tracks) ? data.tracks : [];
+        } catch (parseErr) {
+          return res.status(400).json({ ok: false, error: 'Invalid import code format' });
+        }
+      } else {
+        // Try parsing as plain JSON
+        try {
+          const data = JSON.parse(trimmed);
+          playlistName = data.name || 'Imported Playlist';
+          importedTrackIds = Array.isArray(data.tracks) ? data.tracks : [];
+        } catch {
+          return res.status(400).json({ ok: false, error: 'Invalid import code format' });
+        }
+      }
+    } else if (Array.isArray(trackIds)) {
+      // Direct track IDs provided
+      importedTrackIds = trackIds;
+      playlistName = typeof name === 'string' && name.trim() ? name.trim() : 'Imported Playlist';
+    } else {
+      return res.status(400).json({ ok: false, error: 'Provide either code or trackIds' });
+    }
+
+    if (!importedTrackIds.length) {
+      return res.status(400).json({ ok: false, error: 'No tracks found in import data' });
+    }
+
+    // Validate track IDs exist in FileMaker (fetch minimal data)
+    console.log(`[MASS] Import: Validating ${importedTrackIds.length} track IDs`);
+    const validTrackIds = [];
+    const failedIds = [];
+    for (const trackId of importedTrackIds.slice(0, 100)) { // Limit to 100 tracks
+      try {
+        const record = await fmGetRecordById(FM_LAYOUT, trackId);
+        if (record) {
+          console.log(`[MASS] Import: ✓ Found track ID: ${trackId}`);
+          validTrackIds.push(trackId);
+        } else {
+          console.log(`[MASS] Import: ✗ Track ID not found: ${trackId}`);
+          failedIds.push(trackId);
+        }
+      } catch (err) {
+        console.error(`[MASS] Import: ✗ Error fetching track ${trackId}:`, err.message);
+        failedIds.push(trackId);
+      }
+    }
+
+    console.log(`[MASS] Import: Valid IDs: ${validTrackIds.length}, Failed IDs: ${failedIds.length}`);
+    if (failedIds.length > 0) {
+      console.log(`[MASS] Import: Failed ID samples:`, failedIds.slice(0, 5));
+    }
+
+    if (!validTrackIds.length) {
+      return res.status(400).json({
+        ok: false,
+        error: 'None of the imported tracks were found',
+        detail: `Tried ${importedTrackIds.length} track IDs, none found in FileMaker`
+      });
+    }
+
+    // Create new playlist
+    const now = new Date().toISOString();
+    const playlists = await loadPlaylists();
+    const newPlaylist = {
+      id: randomUUID(),
+      userId: userRecordId,
+      name: playlistName,
+      tracks: [], // Will be populated below
+      createdAt: now,
+      updatedAt: now
+    };
+
+    // Fetch full track data for valid IDs
+    for (const trackId of validTrackIds) {
+      try {
+        const record = await fmGetRecordById(FM_LAYOUT, trackId);
+
+        if (record) {
+          const fields = record.fieldData || {};
+
+          // Build track object
+          const trackObj = {
+            trackRecordId: trackId,
+            name: fields['Track Name'] || fields['Tape Files::Track Name'] || 'Unknown Track',
+            albumTitle: fields['Album'] || fields['Tape Files::Album'] || '',
+            albumArtist: fields['Album Artist'] || fields['Artist'] || fields['Tape Files::Album Artist'] || '',
+            trackArtist: fields['Track Artist'] || fields['Album Artist'] || '',
+            catalogue: fields['Catalogue #'] || fields['Catalogue'] || '',
+            addedAt: now
+          };
+
+          // Find audio and artwork fields
+          const audioField = AUDIO_FIELD_CANDIDATES.find(f => fields[f]);
+          const artworkField = ARTWORK_FIELD_CANDIDATES.find(f => fields[f]);
+
+          if (audioField) {
+            trackObj.mp3 = fields[audioField];
+            trackObj.audioField = audioField;
+          }
+          if (artworkField) {
+            trackObj.artwork = fields[artworkField];
+            trackObj.artworkField = artworkField;
+          }
+
+          newPlaylist.tracks.push(trackObj);
+        }
+      } catch (err) {
+        console.error(`[MASS] Failed to fetch track ${trackId}:`, err);
+      }
+    }
+
+    playlists.push(newPlaylist);
+    await savePlaylists(playlists);
+
+    res.json({
+      ok: true,
+      playlist: newPlaylist,
+      imported: newPlaylist.tracks.length,
+      skipped: importedTrackIds.length - newPlaylist.tracks.length
+    });
+  } catch (err) {
+    console.error('[MASS] Import playlist failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to import playlist', detail: err?.message });
+  }
+});
+
 app.get('/api/shared-playlists/:shareId', async (req, res) => {
   try {
     const shareId = normalizeShareId(req.params?.shareId);
@@ -2558,22 +2761,42 @@ app.get('/api/explore', async (req, res) => {
 
 /* ========= Random Songs: Get random individual songs with artwork ========= */
 app.get('/api/random-songs', async (req, res) => {
-  // Prevent browser caching - always get fresh random songs
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-
   try {
     const count = Math.max(1, Math.min(50, parseInt(req.query.count || '8', 10)));
 
+    // If _t parameter is present, user clicked "Load More" - bypass cache for fresh songs
+    const isLoadMore = !!req.query._t;
+    const maxOffset = 5000;
+    let randomOffset;
+
+    // Only use cache for initial page loads (no _t parameter)
+    if (!isLoadMore) {
+      // Cache key that rotates every 30 seconds for fresh randomness
+      const cacheSlot = Math.floor(Date.now() / 30000);
+      randomOffset = (cacheSlot % maxOffset) + 1; // Deterministic offset based on time slot
+      const cacheKey = `random-songs:${count}:${cacheSlot}`;
+      const cached = searchCache.get(cacheKey);
+
+      if (cached) {
+        console.log(`[CACHE HIT] random-songs (30s window)`);
+        res.setHeader('X-Cache-Hit', 'true');
+        res.setHeader('Cache-Control', 'public, max-age=30');
+        return res.json(cached);
+      }
+    } else {
+      // Load More: use truly random offset, no caching
+      randomOffset = Math.floor(Math.random() * maxOffset) + 1;
+      console.log(`[LOAD MORE] Bypassing cache, random offset: ${randomOffset}`);
+      // Prevent browser caching of Load More requests
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+
     // Get a random sample of records
     // FileMaker doesn't have a built-in random function, so we'll get a larger set and shuffle
-    // Fetch 20x to ensure we have enough artist diversity (aim for 12 different artists)
-    const fetchLimit = Math.min(300, count * 20); // Get 20x more records for artist diversity
-
-    // Get random offset to vary results
-    const maxOffset = 5000; // Assume there are at least 5000 records
-    const randomOffset = Math.floor(Math.random() * maxOffset) + 1;
+    // Fetch 15x for better artist diversity (8 songs = 120 records)
+    const fetchLimit = Math.min(150, count * 15); // Get 15x more records for diversity
 
     // Find all records with wildcard (gets any record)
     const payload = {
@@ -2608,14 +2831,14 @@ app.get('/api/random-songs', async (req, res) => {
       artistMap.get(artist).push(record);
     }
 
-    // Get one random track from each artist
+    // Get one random track from each artist (for diversity)
     const selected = [];
     const artists = Array.from(artistMap.keys());
 
     // Shuffle artists for randomness
     artists.sort(() => Math.random() - 0.5);
 
-    // Pick one track from each artist until we have enough
+    // First pass: Pick one track from each artist until we have enough
     for (const artist of artists) {
       if (selected.length >= count) break;
 
@@ -2624,13 +2847,85 @@ app.get('/api/random-songs', async (req, res) => {
       selected.push(randomTrack);
     }
 
+    // Second pass: If we don't have enough songs, do ONE retry to find more unique artists
+    if (selected.length < count) {
+      console.log(`[random-songs] Only found ${selected.length}/${count} unique artists, fetching more (1 retry max)`);
+
+      // Track which artists we've already used
+      const usedArtists = new Set(
+        selected.map(s => {
+          const fields = s.fieldData || {};
+          return fields['Album Artist'] || fields['Artist'] || fields['Tape Files::Album Artist'] || 'Unknown';
+        })
+      );
+
+      // Fetch another batch from a different random offset
+      const additionalOffset = Math.floor(Math.random() * maxOffset) + 1;
+      const additionalPayload = {
+        query: [{ 'Album Title': '*' }],
+        limit: fetchLimit,
+        offset: additionalOffset
+      };
+
+      const r2 = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, additionalPayload);
+      const json2 = await r2.json().catch(() => ({}));
+
+      if (r2.ok) {
+        const additionalRawData = json2?.response?.data || [];
+        const additionalDataWithAudio = additionalRawData.filter(record => hasValidAudio(record.fieldData || {}));
+
+        // Add tracks from NEW artists only
+        const selectedIds = new Set(selected.map(s => s.recordId));
+        const shuffledTracks = additionalDataWithAudio.sort(() => Math.random() - 0.5);
+
+        for (const track of shuffledTracks) {
+          if (selected.length >= count) break;
+
+          const fields = track.fieldData || {};
+          const artist = fields['Album Artist'] || fields['Artist'] || fields['Tape Files::Album Artist'] || 'Unknown';
+
+          // Only add if artist is NOT already used and track is not a duplicate
+          if (!usedArtists.has(artist) && !selectedIds.has(track.recordId)) {
+            selected.push(track);
+            selectedIds.add(track.recordId);
+            usedArtists.add(artist);
+          }
+        }
+      }
+    }
+
+    // Log final result
+    const uniqueArtistCount = new Set(selected.map(s => {
+      const fields = s.fieldData || {};
+      return fields['Album Artist'] || fields['Artist'] || fields['Tape Files::Album Artist'] || 'Unknown';
+    })).size;
+
+    if (selected.length < count) {
+      console.log(`[random-songs] Could only find ${selected.length}/${count} songs (${uniqueArtistCount} unique artists)`);
+    } else {
+      console.log(`[random-songs] Returning ${count} songs from ${uniqueArtistCount} unique artists!`);
+    }
+
     const items = selected.map((d) => ({
       recordId: d.recordId,
       modId: d.modId,
       fields: d.fieldData || {}
     }));
 
-    return res.json({ ok: true, items, total: items.length });
+    const result = { ok: true, items, total: items.length };
+
+    // Cache the result only for initial page loads (not Load More clicks)
+    if (!isLoadMore) {
+      const cacheSlot = Math.floor(Date.now() / 30000);
+      const cacheKey = `random-songs:${count}:${cacheSlot}`;
+      searchCache.set(cacheKey, result);
+      console.log(`[CACHE MISS] random-songs - Fetched ${items.length} songs (${fetchLimit} records scanned), cached`);
+      res.setHeader('Cache-Control', 'public, max-age=30');
+    } else {
+      console.log(`[LOAD MORE] Fetched ${items.length} songs (${fetchLimit} records scanned), not cached`);
+    }
+
+    return res.json(result);
   } catch (err) {
     const detail = err?.message || String(err);
     return res.status(500).json({ error: 'Random songs failed', status: 500, detail });

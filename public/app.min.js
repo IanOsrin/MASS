@@ -102,6 +102,21 @@
     const shareLinkInput = document.getElementById('shareLinkInput');
     const shareModalClose = document.getElementById('shareModalClose');
 
+    const exportPlaylistButton = document.getElementById('exportPlaylistButton');
+    const exportModal = document.getElementById('exportModal');
+    const exportCodeInput = document.getElementById('exportCodeInput');
+    const exportCopyBtn = document.getElementById('exportCopyBtn');
+    const exportDownloadBtn = document.getElementById('exportDownloadBtn');
+    const exportModalClose = document.getElementById('exportModalClose');
+
+    const importPlaylistButton = document.getElementById('importPlaylistButton');
+    const importModal = document.getElementById('importModal');
+    const importCodeInput = document.getElementById('importCodeInput');
+    const importFileInput = document.getElementById('importFileInput');
+    const importSubmitBtn = document.getElementById('importSubmitBtn');
+    const importStatus = document.getElementById('importStatus');
+    const importModalClose = document.getElementById('importModalClose');
+
     const trackInfoFocusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
     let trackInfoReturnFocus = null;
     let trackInfoFocusables = [];
@@ -925,6 +940,7 @@
       if (deletePlaylistButton) deletePlaylistButton.hidden = true;
       if (togglePlaylistTracksButton) togglePlaylistTracksButton.hidden = true;
       if (sharePlaylistButton) sharePlaylistButton.hidden = true;
+      if (exportPlaylistButton) exportPlaylistButton.hidden = true;
       if (shareLinkOutput) updateShareLinkDisplay(null);
       return;
     }
@@ -938,6 +954,7 @@
       if (deletePlaylistButton) deletePlaylistButton.hidden = true;
       if (togglePlaylistTracksButton) togglePlaylistTracksButton.hidden = true;
       if (sharePlaylistButton) sharePlaylistButton.hidden = true;
+      if (exportPlaylistButton) exportPlaylistButton.hidden = true;
       if (shareLinkOutput) updateShareLinkDisplay(null);
       playlistTracksSection.hidden = true;
       return;
@@ -971,6 +988,17 @@
           sharePlaylistButton.title = 'Add at least one track before sharing a playlist';
         } else {
           sharePlaylistButton.title = '';
+        }
+      }
+
+      if (exportPlaylistButton) {
+        exportPlaylistButton.hidden = false;
+        const hasTracks = count > 0;
+        exportPlaylistButton.disabled = playlistsLoading || !hasTracks;
+        if (!hasTracks) {
+          exportPlaylistButton.title = 'Add at least one track before exporting a playlist';
+        } else {
+          exportPlaylistButton.title = '';
         }
       }
 
@@ -1466,6 +1494,123 @@
       }
     }
 
+    async function exportActivePlaylist() {
+      const playlist = getActivePlaylist();
+      if (!playlist) return;
+      if (!Array.isArray(playlist.tracks) || playlist.tracks.length === 0) {
+        window.alert('Add tracks before exporting a playlist.');
+        return;
+      }
+      if (exportPlaylistButton) {
+        exportPlaylistButton.disabled = true;
+      }
+      try {
+        const res = await fetch(`/api/playlists/${encodeURIComponent(playlist.id)}/export`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          currentUser = null;
+          clearPlaylists();
+          updateAuthUI();
+          throw new Error('Please log in to manage playlists');
+        }
+        if (res.status === 400) {
+          throw new Error(data?.error || 'Cannot export empty playlist');
+        }
+        if (!res.ok || !data?.ok) {
+          const detail = typeof data?.detail === 'string' && data.detail.trim() ? data.detail.trim() : '';
+          const message = typeof data?.error === 'string' && data.error.trim() ? data.error.trim() : 'Unable to export playlist';
+          throw new Error(detail || message);
+        }
+        if (!data.code) {
+          throw new Error('Server did not return export code');
+        }
+        // Show export modal with code
+        showExportModal(data.code, data.json);
+      } catch (err) {
+        console.error('Export playlist failed', err);
+        window.alert(err?.message || 'Unable to export playlist');
+      } finally {
+        if (exportPlaylistButton) {
+          exportPlaylistButton.disabled = false;
+        }
+      }
+    }
+
+    async function importPlaylistFromCode() {
+      const code = importCodeInput?.value?.trim() || '';
+      if (!code && !importFileInput?.files?.[0]) {
+        if (importStatus) importStatus.textContent = 'Please provide a code or select a file';
+        return;
+      }
+
+      let importData = null;
+
+      // Handle file upload
+      if (importFileInput?.files?.[0]) {
+        try {
+          const file = importFileInput.files[0];
+          const text = await file.text();
+          importData = { code: text };
+        } catch (err) {
+          if (importStatus) importStatus.textContent = 'Failed to read file';
+          return;
+        }
+      } else {
+        importData = { code };
+      }
+
+      if (importSubmitBtn) importSubmitBtn.disabled = true;
+      if (importStatus) importStatus.textContent = 'Importing...';
+
+      try {
+        const res = await fetch('/api/playlists/import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(importData)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          currentUser = null;
+          clearPlaylists();
+          updateAuthUI();
+          throw new Error('Please log in to import playlists');
+        }
+        if (!res.ok || !data?.ok) {
+          const message = typeof data?.error === 'string' && data.error.trim() ? data.error.trim() : 'Unable to import playlist';
+          throw new Error(message);
+        }
+        if (!data.playlist) {
+          throw new Error('Server did not return playlist data');
+        }
+
+        // Add imported playlist to local list
+        playlists.push(data.playlist);
+        renderPlaylistsPanel();
+        closeImportModal();
+
+        const imported = data.imported || 0;
+        const skipped = data.skipped || 0;
+        window.alert(`Imported playlist "${data.playlist.name}" with ${imported} track${imported !== 1 ? 's' : ''}` + (skipped > 0 ? ` (${skipped} skipped)` : ''));
+      } catch (err) {
+        console.error('Import playlist failed', err);
+        if (importStatus) {
+          importStatus.textContent = err?.message || 'Import failed';
+        } else {
+          window.alert(err?.message || 'Unable to import playlist');
+        }
+      } finally {
+        if (importSubmitBtn) importSubmitBtn.disabled = false;
+      }
+    }
+
     function buildPlaylistTrackPayload(album, track, playableSrc){
       const recordId = track?.recordId;
       return {
@@ -1631,6 +1776,43 @@
       if (!shareModal) return;
       shareModal.classList.remove('open');
       shareLinkInput.value = '';
+    }
+
+    // Export modal functions
+    function showExportModal(compactCode, exportData) {
+      if (!exportModal || !exportCodeInput) return;
+      exportCodeInput.value = compactCode;
+      exportCodeInput.dataset.exportJson = JSON.stringify(exportData, null, 2);
+      exportModal.classList.add('open');
+      setTimeout(() => {
+        exportCodeInput.focus();
+        exportCodeInput.select();
+      }, 100);
+    }
+
+    function closeExportModal() {
+      if (!exportModal) return;
+      exportModal.classList.remove('open');
+      exportCodeInput.value = '';
+      delete exportCodeInput.dataset.exportJson;
+    }
+
+    // Import modal functions
+    function showImportModal() {
+      if (!importModal) return;
+      importCodeInput.value = '';
+      importFileInput.value = '';
+      if (importStatus) importStatus.textContent = '';
+      importModal.classList.add('open');
+      setTimeout(() => importCodeInput.focus(), 100);
+    }
+
+    function closeImportModal() {
+      if (!importModal) return;
+      importModal.classList.remove('open');
+      importCodeInput.value = '';
+      importFileInput.value = '';
+      if (importStatus) importStatus.textContent = '';
     }
 
     async function refreshCurrentUser(){
@@ -2527,23 +2709,22 @@
     async function loadRandomSongs() {
       console.log('[loadRandomSongs] Starting...');
       const perfStart = performance.now();
-      // Show loading indicator
-      if (loadingIndicator) loadingIndicator.hidden = false;
-      if (albumsEl) albumsEl.style.display = 'none';
+
+      // Don't show full-screen loading indicator for lazy load
+      // Just ensure albums area is visible and show subtle loading state
+      if (loadingIndicator) loadingIndicator.hidden = true;
+      if (albumsEl) albumsEl.style.display = '';
+
+      // Show subtle busy state
+      showBusy('Loading songs...');
 
       try {
         const fetchStart = performance.now();
-        // Add timestamp to prevent browser caching
+        // Add timestamp to bust browser cache (server still caches for 30s)
         const timestamp = Date.now();
-        const url = `/api/random-songs?count=12&_t=${timestamp}`;
+        const url = `/api/random-songs?count=8&_t=${timestamp}`;
         console.log('[loadRandomSongs] Fetching from', url);
-        const r = await fetch(url, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
+        const r = await fetch(url);
         const fetchTime = performance.now() - fetchStart;
         if (!r.ok) {
           console.error('[loadRandomSongs] API returned error:', r.status, r.statusText);
@@ -2597,6 +2778,7 @@
         errorEl.textContent = `Error loading songs: ${err.message || err}`;
       } finally {
         // Always hide loading indicator and restore albumsEl display
+        hideBusy();
         if (loadingIndicator) loadingIndicator.hidden = true;
         if (albumsEl) albumsEl.style.display = '';
       }
@@ -4349,6 +4531,58 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         if (e.target === shareModal) closeShareModal();
       });
     }
+
+    // Export modal event listeners
+    if (exportModalClose) exportModalClose.addEventListener('click', () => closeExportModal());
+    if (exportModal) {
+      exportModal.addEventListener('click', (e) => {
+        if (e.target === exportModal) closeExportModal();
+      });
+    }
+    if (exportCopyBtn) {
+      exportCopyBtn.addEventListener('click', async () => {
+        const code = exportCodeInput?.value || '';
+        if (!code) return;
+        const copied = await copyTextToClipboard(code);
+        if (copied) {
+          window.alert('Export code copied to clipboard');
+        } else {
+          window.alert('Failed to copy code');
+        }
+      });
+    }
+    if (exportDownloadBtn) {
+      exportDownloadBtn.addEventListener('click', () => {
+        const jsonStr = exportCodeInput?.dataset?.exportJson || '';
+        if (!jsonStr) return;
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const playlist = getActivePlaylist();
+        const filename = playlist?.name ? `${playlist.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.json` : 'playlist.json';
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+    }
+
+    // Import modal event listeners
+    if (importModalClose) importModalClose.addEventListener('click', () => closeImportModal());
+    if (importModal) {
+      importModal.addEventListener('click', (e) => {
+        if (e.target === importModal) closeImportModal();
+      });
+    }
+    if (importSubmitBtn) {
+      importSubmitBtn.addEventListener('click', () => {
+        if (importSubmitBtn.disabled) return;
+        importPlaylistFromCode();
+      });
+    }
+
     if (authForm) authForm.addEventListener('submit', submitAuthForm);
     if (authSwitch) {
       authSwitch.addEventListener('click', () => {
@@ -4394,6 +4628,17 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       sharePlaylistButton.addEventListener('click', () => {
         if (sharePlaylistButton.disabled) return;
         copyActivePlaylistShareLink();
+      });
+    }
+    if (exportPlaylistButton) {
+      exportPlaylistButton.addEventListener('click', () => {
+        if (exportPlaylistButton.disabled) return;
+        exportActivePlaylist();
+      });
+    }
+    if (importPlaylistButton) {
+      importPlaylistButton.addEventListener('click', () => {
+        showImportModal();
       });
     }
     if (shareLinkOutput) {
@@ -5406,11 +5651,16 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
     });
 
     // Defer initial load to allow browser to paint UI first
+    // Hide loading screen immediately for instant page display
+    if (loadingIndicator) loadingIndicator.hidden = true;
+
     requestAnimationFrame(() => {
       const initialShareId = getShareIdFromLocation();
       if (initialShareId) {
         activateSharedPlaylist(initialShareId, { updateUrl: false });
       } else {
-        loadRandomSongs();
+        // Load random songs after page is visible (lazy load)
+        // This allows the UI to render immediately
+        setTimeout(() => loadRandomSongs(), 0);
       }
     });
