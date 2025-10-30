@@ -304,22 +304,6 @@
         "addedAt": "2025-10-20T12:37:51.556Z"
       },
       {
-        "id": "d55e1b77-d4c0-4a58-9b1f-6242383b62ce",
-        "trackRecordId": "80725",
-        "name": "Woza Mthandazo",
-        "albumTitle": "Awasekh' Amadoda",
-        "albumArtist": "Izintombi Zase Mahlabathini",
-        "catalogue": "CDGMP 40670",
-        "trackArtist": "Izintombi Zase Mahlabathini",
-        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/ABCCE915E5B92C58552449D7C1EE4B359604648FE657442721346ECC24BF367E.wav?RCType=RCFileProcessor",
-        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2FABCCE915E5B92C58552449D7C1EE4B359604648FE657442721346ECC24BF367E.wav%3FRCType%3DRCFileProcessor",
-        "seq": 2,
-        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/B3659FD420D42806C44E8C1DF59399490B5F5B354E671781629367763C46BC22.jpg?RCType=RCFileProcessor",
-        "audioField": "Audio File",
-        "artworkField": "Artwork::Picture",
-        "addedAt": "2025-10-20T12:38:01.546Z"
-      },
-      {
         "id": "bd04ec40-026c-4111-b6b6-c221cc1bc767",
         "trackRecordId": "80726",
         "name": "Emendweni",
@@ -657,7 +641,7 @@
       }
     ],
     "createdAt": "2025-10-20T12:37:42.527Z",
-    "updatedAt": "2025-10-26T12:02:06.477Z",
+    "updatedAt": "2025-10-29T20:38:44.542Z",
     "shareId": "a5d7ee189c7343bf9e845f8856fce473",
     "sharedAt": "2025-10-20T12:38:46.341Z"
   },
@@ -745,9 +729,132 @@
         "audioField": "mp3",
         "artworkField": "Artwork::Picture",
         "addedAt": "2025-10-29T19:34:32.947Z"
+      },
+      {
+        "id": "5d56d1ed-24b3-4cfd-9ddf-98382bde41e9",
+        "trackRecordId": "1959",
+        "name": "Come Back Sophie",
+        "albumTitle": "",
+        "albumArtist": "Shamaday",
+        "catalogue": "",
+        "trackArtist": "Shamaday",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/282F9138111474BAC195D27D59331F13A9B3C7462B34596197584C0D9B2A669B.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F282F9138111474BAC195D27D59331F13A9B3C7462B34596197584C0D9B2A669B.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "",
+        "audioField": "mp3",
+        "artworkField": "",
+        "addedAt": "2025-10-30T13:21:39.228Z"
+      },
+      {
+        "id": "1f1beabc-4548-4642-982f-b3fadfd14110",
+        "trackRecordId": "7781",
+        "name": "Ishitshi",
+        "albumTitle": "Sigiya Ngengoma",
+        "albumArtist": "Moses Mchunu",
+        "catalogue": "BL 252",
+        "trackArtist": "Moses Mchunu",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/7488FE9C309F1E09CE131C7DBB33590B89098CC45DC365D07A1F7389B98A3BD3.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F7488FE9C309F1E09CE131C7DBB33590B89098CC45DC365D07A1F7389B98A3BD3.mp3%3FRCType%3DRCFileProcessor",
+        "seq": 1,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/003BB2774F448E9A6C358DB29419AB1CB8D8E689F26E243549063F46B9F3F951.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-10-30T13:25:37.465Z"
+      },
+      {
+        "id": "0c38a0a7-8258-4f06-9f3f-6d0285dc4940",
+        "trackRecordId": "5977",
+        "name": "Dance Sing",
+        "albumTitle": "",
+        "albumArtist": "Harari",
+        "catalogue": "",
+        "trackArtist": "Harari",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/CF7987E00805F99B7C578CCB9F77EB2AFEDE5CDF5E19462624FC59B493EC21FD.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2FCF7987E00805F99B7C578CCB9F77EB2AFEDE5CDF5E19462624FC59B493EC21FD.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/1663402252B4A771649213BA0DA9554BAB09280925D2D8A0FB64557C6ACF5ED9.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-10-30T13:38:00.875Z"
       }
     ],
     "createdAt": "2025-10-29T18:48:34.237Z",
-    "updatedAt": "2025-10-29T19:34:32.947Z"
+    "updatedAt": "2025-10-30T13:38:00.875Z",
+    "shareId": "dce9378b75a7417697076a9cd411ea3b",
+    "sharedAt": "2025-10-30T13:41:43.331Z"
+  },
+  {
+    "id": "9580ab7b-fd22-415a-84eb-3480b865b2f4",
+    "userId": "4",
+    "name": "IanOPlayo",
+    "tracks": [
+      {
+        "id": "91b6e3ec-f477-4423-af06-284d02f625bb",
+        "trackRecordId": "2592",
+        "name": "Diterateng",
+        "albumTitle": "",
+        "albumArtist": "Dikgarebe",
+        "catalogue": "",
+        "trackArtist": "Dikgarebe",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/F6386F53A86E007F4374BC5552D5E71440193646282A06958CC66B164FDF4762.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2FF6386F53A86E007F4374BC5552D5E71440193646282A06958CC66B164FDF4762.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/75849248F4F1BF04128F4EE1145312BD296A589111C92C87DB9876759AD409D9.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-10-30T11:50:28.997Z"
+      },
+      {
+        "id": "8a66d017-a817-4966-b572-c199792c5489",
+        "trackRecordId": "4031",
+        "name": "Maliyamina",
+        "albumTitle": "",
+        "albumArtist": "Norman Mathebula and Machingha Sisters",
+        "catalogue": "",
+        "trackArtist": "Norman Mathebula and Machingha Sisters",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/083089B994C07BA5584B8E3690C3A3AB8FE152422C23BBA05F16F61DE8C255DE.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F083089B994C07BA5584B8E3690C3A3AB8FE152422C23BBA05F16F61DE8C255DE.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/49E99313A92447221D48E599DD2E4CBDF40FDDC96C977B52DD30D1532400DF6D.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-10-30T11:52:25.248Z"
+      },
+      {
+        "id": "4076f0c7-bb5b-4588-81e7-3b9f39ed2712",
+        "trackRecordId": "4790",
+        "name": "Deborah",
+        "albumTitle": "",
+        "albumArtist": "Wendy",
+        "catalogue": "",
+        "trackArtist": "Wendy",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/0FAA3E22DDD9237303D1F10490E58D9DA6B715FD9760678BDE97919D83E1C02B.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F0FAA3E22DDD9237303D1F10490E58D9DA6B715FD9760678BDE97919D83E1C02B.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/72CFD0248F6C98EC32F6E368E2F38D5771AB002FAA7DC80DD0C08A87952FE999.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-10-30T12:32:08.136Z"
+      },
+      {
+        "id": "676fdf91-6d86-4723-991f-8e90ea332131",
+        "trackRecordId": "4611",
+        "name": "Lungada Lila",
+        "albumTitle": "",
+        "albumArtist": "Boeti Simoni",
+        "catalogue": "",
+        "trackArtist": "Boeti Simoni",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/B6D214D08CE57E79ED8F364F36B3E1DF83302AB64DDA70A181431409A0A00FBD.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2FB6D214D08CE57E79ED8F364F36B3E1DF83302AB64DDA70A181431409A0A00FBD.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/BB398BAB645C34CD5103E292519880A91EE755D7DE2815C9A594064A7C84108D.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-10-30T12:32:41.253Z"
+      }
+    ],
+    "createdAt": "2025-10-30T11:50:23.222Z",
+    "updatedAt": "2025-10-30T12:32:41.253Z"
   }
 ]

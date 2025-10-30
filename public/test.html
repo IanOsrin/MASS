@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Button Test</title>
+</head>
+<body>
+  <h1>Button Test Page</h1>
+  <button id="testClear">Test Clear Button</button>
+  <button id="testLoadMore">Test Load More Button</button>
+  <div id="output"></div>
+
+  <script>
+    console.log('Test page loaded');
+
+    document.getElementById('testClear').addEventListener('click', async () => {
+      const output = document.getElementById('output');
+      output.innerHTML = '<p>Clear button clicked! Testing API...</p>';
+
+      try {
+        const response = await fetch('/api/random-songs?count=12');
+        const data = await response.json();
+        output.innerHTML += `<p>✅ API works! Got ${data.items?.length || 0} songs</p>`;
+      } catch (err) {
+        output.innerHTML += `<p>❌ Error: ${err.message}</p>`;
+      }
+    });
+
+    document.getElementById('testLoadMore').addEventListener('click', async () => {
+      const output = document.getElementById('output');
+      output.innerHTML = '<p>Load More button clicked! Testing API...</p>';
+
+      try {
+        const response = await fetch('/api/explore?start=1980&end=1989&limit=50');
+        const data = await response.json();
+        output.innerHTML += `<p>✅ API works! Got ${data.items?.length || 0} albums</p>`;
+      } catch (err) {
+        output.innerHTML += `<p>❌ Error: ${err.message}</p>`;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -7,7 +7,7 @@
   <style>
     :root {
       --bg:#0f0f12; --fg:#f5f6f7; --muted:#a7abb3; --card:#17181c; --accent:#62f5a9; --border:#24262c;
-      --cover-size: 68px; /* smaller, tidy covers */
+      --cover-size: 110px; /* bigger covers for random songs */
       --overlay: rgba(0,0,0,.6);
       --btn-gradient-start:#3a7bd5;
       --btn-gradient-end:#00d2ff;
@@ -83,13 +83,18 @@
     }
     .albums{display:grid;grid-template-columns:repeat(4,150px);grid-template-rows:auto auto;gap:14px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
     .albums.single-album{display:flex;flex-direction:column;align-items:center;gap:24px;}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:9px;display:flex;flex-direction:column;gap:6px;overflow:hidden;scroll-margin-top:128px;min-height:220px;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:9px;display:flex;flex-direction:column;gap:6px;overflow:hidden;scroll-margin-top:128px;min-height:220px;position:relative;padding-bottom:62px;}
     .card > .btn{margin-top:auto;}
+    .card-buttons{position:absolute;bottom:9px;left:9px;right:9px;display:flex;flex-direction:column;gap:4px;}
+    .card .play-button{border-radius:10px;padding:6px 10px;cursor:pointer;font-weight:600;background:var(--accent);border:none;color:var(--btn-text);width:100%;font-size:13px;}
+    .card .play-button:hover{filter:brightness(1.1);}
+    .card .btn.secondary.small{font-size:11px;padding:4px 6px;}
     .card.pending-audio{opacity:0.8;}
     .card.no-audio{display:none !important;}
 
     /* Cover: small, centered square; never bleeds */
-    .cover-wrap{position:relative;width:var(--cover-size);height:var(--cover-size);border-radius:6px;overflow:hidden;border:1px solid var(--border);background:#101215;margin:0 auto;}
+    .cover-wrap{position:relative;width:var(--cover-size);height:var(--cover-size);border-radius:6px;overflow:hidden;border:1px solid var(--border);background:#101215;margin:0 auto;cursor:pointer;transition:transform 0.15s ease,box-shadow 0.15s ease;}
+    .cover-wrap:hover{transform:scale(1.05);box-shadow:0 4px 12px rgba(0,0,0,0.4);}
     .cover-wrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
     .albums.single-album .cover-wrap{width:260px;height:260px;margin:0 auto 16px;}
 
@@ -195,12 +200,15 @@
     .now-playing.collapsed .now-playing-controls{display:none;}
 
     /* Landing placeholder */
-    .loading-indicator{display:flex;flex-direction:column;align-items:center;justify-content:center;position:fixed;inset:0;z-index:50;}
+    .loading-indicator{display:flex;flex-direction:column;align-items:center;justify-content:center;position:fixed;inset:0;z-index:50;background:var(--bg);}
     .loading-indicator[hidden]{display:none;}
-    .loading-background{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.3;}
-    .loading-spinner{width:64px;height:64px;border:5px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;position:relative;z-index:2;}
+    .loading-background{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.85;filter:brightness(1.1) contrast(1.15);}
+    .loading-spinner{width:80px;height:80px;border:6px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;position:relative;z-index:2;box-shadow:0 8px 24px rgba(98,245,169,0.3);}
     @keyframes spin{to{transform:rotate(360deg);}}
-    .loading-text{color:var(--text);font-size:16px;font-weight:500;margin-top:20px;position:relative;z-index:2;}
+    .loading-text{color:var(--fg);font-size:18px;font-weight:700;margin-top:24px;position:relative;z-index:2;text-shadow:0 2px 8px rgba(0,0,0,0.5);letter-spacing:0.5px;}
+
+    /* Placeholder images - bold and dominant style */
+    img.placeholder-image, img[src*="placeholder.png"]{opacity:0.85 !important;filter:brightness(1.1) contrast(1.15) !important;}
 
     /* ======= Modal (centered track window) ======= */
     .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--overlay);z-index:100;}
@@ -375,25 +383,6 @@
   <main>
     <div class="layout-grid">
       <aside id="playlistColumn" class="playlist-column" hidden>
-        <section id="playlistsPanel" class="playlists-panel" hidden>
-          <div class="playlists-header">
-            <h2>My Playlists</h2>
-            <span id="playlistsStatus" class="muted"></span>
-          </div>
-          <div id="playlistsList" class="playlists-list"></div>
-          <form id="playlistCreateForm" class="playlist-create" autocomplete="off">
-            <input id="playlistNameInput" type="text" placeholder="Create new playlist" maxlength="80" />
-            <button type="submit" class="btn small">Create</button>
-          </form>
-          <div id="playlistsEmpty" class="playlist-empty" hidden>No playlists yet. Create one to start saving tracks.</div>
-        </section>
-        <section id="publicPlaylistsPanel" class="public-playlists" hidden>
-          <div class="playlists-header">
-            <h2>Featured Playlists</h2>
-          </div>
-          <ul id="publicPlaylistsList" class="public-playlists-list"></ul>
-          <div id="publicPlaylistsEmpty" class="playlist-empty" hidden>No curated playlists yet.</div>
-        </section>
         <section id="nowPlayingCard" class="now-playing" hidden>
           <div class="now-playing-header">
             <span class="label">Now Playing</span>
@@ -415,6 +404,25 @@
           <div class="now-playing-progress">
             <div id="nowPlayingProgressFill" class="fill"></div>
           </div>
+        </section>
+        <section id="playlistsPanel" class="playlists-panel" hidden>
+          <div class="playlists-header">
+            <h2>My Playlists</h2>
+            <span id="playlistsStatus" class="muted"></span>
+          </div>
+          <div id="playlistsList" class="playlists-list"></div>
+          <form id="playlistCreateForm" class="playlist-create" autocomplete="off">
+            <input id="playlistNameInput" type="text" placeholder="Create new playlist" maxlength="80" />
+            <button type="submit" class="btn small">Create</button>
+          </form>
+          <div id="playlistsEmpty" class="playlist-empty" hidden>No playlists yet. Create one to start saving tracks.</div>
+        </section>
+        <section id="publicPlaylistsPanel" class="public-playlists" hidden>
+          <div class="playlists-header">
+            <h2>Featured Playlists</h2>
+          </div>
+          <ul id="publicPlaylistsList" class="public-playlists-list"></ul>
+          <div id="publicPlaylistsEmpty" class="playlist-empty" hidden>No curated playlists yet.</div>
         </section>
         <section id="playlistTracksSection" class="playlist-tracks" hidden>
           <div class="playlists-header">
@@ -548,5 +556,5 @@
 
   <audio id="player" preload="none"></audio>
 
-  <script src="/app.min.js" defer></script></body>
+  <script src="/app.min.js?v=10" defer></script></body>
 </html>

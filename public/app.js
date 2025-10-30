@@ -630,10 +630,18 @@
           img.src = artSrc;
           img.alt = 'Artwork';
           img.loading = 'lazy';
-          img.onerror = () => { nowPlayingThumb.innerHTML = 'No art'; };
+          img.onerror = () => {
+            img.src = '/img/placeholder.png';
+            img.classList.add('placeholder-image');
+          };
           nowPlayingThumb.appendChild(img);
         } else {
-          nowPlayingThumb.textContent = 'No art';
+          // Show placeholder when no artwork
+          const img = document.createElement('img');
+          img.src = '/img/placeholder.png';
+          img.alt = 'No artwork';
+          img.classList.add('placeholder-image');
+          nowPlayingThumb.appendChild(img);
         }
       }
     }
@@ -1131,6 +1139,53 @@
 
           li.appendChild(btnPlay);
           li.appendChild(wrapper);
+
+          // Add delete button for playlist tracks
+          const btnDelete = document.createElement('button');
+          btnDelete.type = 'button';
+          btnDelete.className = 'btn small btn-error icon';
+          btnDelete.textContent = '×';
+          btnDelete.title = 'Remove from playlist';
+          btnDelete.setAttribute('aria-label', `Remove ${readable} from playlist`);
+          btnDelete.style.marginLeft = 'auto';
+          btnDelete.addEventListener('click', async () => {
+            if (!confirm(`Remove "${trackName}" from this playlist?`)) {
+              return;
+            }
+            try {
+              btnDelete.disabled = true;
+              btnDelete.textContent = '⏳';
+              const response = await fetch(`/api/playlists/${playlist.id}/tracks/${encodeURIComponent(track.addedAt)}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+              });
+              const result = await response.json();
+              if (result.ok) {
+                // Remove track from UI
+                li.remove();
+                // Update playlist metadata
+                if (result.playlist) {
+                  const count = Array.isArray(result.playlist.tracks) ? result.playlist.tracks.length : 0;
+                  if (playlistTracksMeta) {
+                    playlistTracksMeta.textContent = `${count} track${count !== 1 ? 's' : ''}`;
+                  }
+                  if (playlistTracksEmpty) {
+                    playlistTracksEmpty.hidden = count > 0;
+                  }
+                }
+              } else {
+                window.alert(result.error || 'Failed to remove track from playlist.');
+                btnDelete.disabled = false;
+                btnDelete.textContent = '×';
+              }
+            } catch (err) {
+              console.error('Failed to delete track:', err);
+              window.alert('Failed to remove track from playlist.');
+              btnDelete.disabled = false;
+              btnDelete.textContent = '×';
+            }
+          });
+          li.appendChild(btnDelete);
 
           const baseMeta = { ...track };
           baseMeta.trackName = trackName;
@@ -2478,10 +2533,22 @@
 
       try {
         const fetchStart = performance.now();
-        console.log('[loadRandomSongs] Fetching from /api/random-songs?count=12');
-        const r = await fetch('/api/random-songs?count=12');
+        // Add timestamp to prevent browser caching
+        const timestamp = Date.now();
+        const url = `/api/random-songs?count=12&_t=${timestamp}`;
+        console.log('[loadRandomSongs] Fetching from', url);
+        const r = await fetch(url, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
         const fetchTime = performance.now() - fetchStart;
         if (!r.ok) {
+          console.error('[loadRandomSongs] API returned error:', r.status, r.statusText);
+          errorEl.hidden = false;
+          errorEl.textContent = `Failed to load songs: ${r.statusText || r.status}`;
           return;
         }
 
@@ -2490,11 +2557,21 @@
         const parseTime = performance.now() - parseStart;
 
         if (!j || !Array.isArray(j.items) || j.items.length === 0) {
+          console.error('[loadRandomSongs] No songs in response:', j);
+          errorEl.hidden = false;
+          errorEl.textContent = 'No songs available. Please try again.';
           return;
         }
 
         const totalTime = performance.now() - perfStart;
         console.log(`[loadRandomSongs] Loaded ${j.items.length} songs in ${totalTime.toFixed(0)}ms (fetch: ${fetchTime.toFixed(0)}ms)`);
+
+        // Log first 3 song names to verify we're getting different songs
+        const songNames = j.items.slice(0, 3).map(item => {
+          const fields = item?.fields || {};
+          return fields['Track Name'] || fields['Tape Files::Track Name'] || 'Unknown';
+        });
+        console.log('[loadRandomSongs] First 3 songs:', songNames.join(', '));
 
         // Set mode
         currentMode = 'songs';
@@ -2515,22 +2592,29 @@
         } catch {}
 
       } catch (err) {
-        console.warn('[loadRandomSongs]', err);
+        console.error('[loadRandomSongs] Exception:', err);
+        errorEl.hidden = false;
+        errorEl.textContent = `Error loading songs: ${err.message || err}`;
       } finally {
-        // Always hide loading indicator
+        // Always hide loading indicator and restore albumsEl display
         if (loadingIndicator) loadingIndicator.hidden = true;
+        if (albumsEl) albumsEl.style.display = '';
       }
     }
 
     function renderSongsGrid(songs) {
       console.log('[renderSongsGrid] Called with', songs.length, 'songs');
+      console.log('[renderSongsGrid] shuffleBtn exists:', !!shuffleBtn, 'current hidden state:', shuffleBtn?.hidden);
       if (loadingIndicator) loadingIndicator.hidden = true;
       if (albumsEl) albumsEl.style.display = '';
 
       albumsEl.innerHTML = '';
       countEl.textContent = `${songs.length} Random Songs`;
       pagerEl.hidden = true;
-      if (shuffleBtn) shuffleBtn.hidden = false;
+      if (shuffleBtn) {
+        shuffleBtn.hidden = false;
+        console.log('[renderSongsGrid] Set shuffleBtn.hidden = false');
+      }
 
       for (const song of songs) {
         try {
@@ -2573,13 +2657,26 @@
           const img = document.createElement('img');
           if (picture) {
             img.src = `/api/container?u=${encodeURIComponent(picture)}`;
-            img.onerror = () => { img.src = '/img/placeholder.png'; }; // Fallback on error
+            img.onerror = () => {
+              img.src = '/img/placeholder.png';
+              img.classList.add('placeholder-image'); // Style placeholder boldly
+            };
           } else {
             img.src = '/img/placeholder.png'; // No artwork - use placeholder
+            img.classList.add('placeholder-image'); // Style placeholder boldly
           }
           img.alt = 'Cover';
           img.loading = 'lazy';
           wrap.appendChild(img);
+
+          // Click cover to search by artist
+          wrap.addEventListener('click', () => {
+            console.log('[Cover Click] Searching for artist:', artist);
+            if (searchEl) searchEl.value = artist;
+            run(artist);
+          });
+          wrap.title = `Search for ${artist}`;
+
           card.appendChild(wrap);
 
           // Track title and artist
@@ -2598,6 +2695,10 @@
 
           card.appendChild(heading);
 
+          // Button container - positioned at bottom of card
+          const buttonContainer = document.createElement('div');
+          buttonContainer.className = 'card-buttons';
+
           // Play button
           if (audioField.value && playableSrc) {
             const playBtn = document.createElement('button');
@@ -2607,14 +2708,13 @@
             playBtn.addEventListener('click', () => {
               handlePlay(playBtn, card, playableSrc);
             });
-            card.appendChild(playBtn);
+            buttonContainer.appendChild(playBtn);
           }
 
           // Add to playlist button
           const addBtn = document.createElement('button');
           addBtn.className = 'btn secondary small';
           addBtn.textContent = '+ Playlist';
-          addBtn.style.marginTop = '8px';
           addBtn.addEventListener('click', () => {
             // Build album and track objects for handleAddToPlaylist
             const albumData = {
@@ -2638,7 +2738,9 @@
             const playableSrc = resolvePlayableSrc(audioField.value);
             handleAddToPlaylist(albumData, trackData, playableSrc);
           });
-          card.appendChild(addBtn);
+          buttonContainer.appendChild(addBtn);
+
+          card.appendChild(buttonContainer);
 
           albumsEl.appendChild(card);
           console.log('[renderSongsGrid] Card added for', trackTitle);
@@ -4005,14 +4107,26 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         img.src = `/api/container?u=${encodeURIComponent(fullAlbum.picture)}`;
         img.alt = 'Cover';
         img.loading = 'lazy';
-        img.onerror = () => { modalCover.innerHTML = ''; };
+        img.onerror = () => {
+          img.src = '/img/placeholder.png';
+          img.classList.add('placeholder-image');
+        };
         wrap.appendChild(img);
         modalCover.innerHTML = '';
         modalCover.appendChild(wrap);
         modalCover.style.display = 'block';
       } else {
+        // Show placeholder when no album picture
+        const wrap = document.createElement('div');
+        wrap.className = 'cover-wrap';
+        const img = document.createElement('img');
+        img.src = '/img/placeholder.png';
+        img.alt = 'No cover';
+        img.classList.add('placeholder-image');
+        wrap.appendChild(img);
         modalCover.innerHTML = '';
-        modalCover.style.display = 'none';
+        modalCover.appendChild(wrap);
+        modalCover.style.display = 'block';
       }
 
       // Build track list
@@ -4378,6 +4492,12 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
 
     /* ================= Rendering albums (cards) ================= */
     function renderAlbumPage(){
+      // Skip album rendering when in songs mode - songs have their own renderer
+      if (currentMode === 'songs') {
+        console.log('[renderAlbumPage] Skipping - in songs mode');
+        return;
+      }
+
       // Hide loading indicator when rendering
       if (loadingIndicator) loadingIndicator.hidden = true;
       if (albumsEl) albumsEl.style.display = '';
@@ -4481,22 +4601,28 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       const maxPage = Math.max(1, Math.ceil(Math.max(totalPool, 1) / ALBUMS_PER_PAGE));
       albumPage = Math.min(albumPage, maxPage - 1);
 
-      // Show shuffle button for explore mode, pagination for search mode
-      const isExploreMode = currentMode === 'explore' || currentMode === 'landing';
-      console.log(`[renderAlbumPage] mode=${currentMode}, isExploreMode=${isExploreMode}, shuffleBtn=${!!shuffleBtn}`);
-      if (isExploreMode) {
+      // Show shuffle button for explore/landing/songs mode, pagination for search mode
+      const shouldShowShuffle = currentMode === 'explore' || currentMode === 'landing' || currentMode === 'songs';
+      console.log(`[renderAlbumPage] mode=${currentMode}, shouldShowShuffle=${shouldShowShuffle}, shuffleBtn=${!!shuffleBtn}`);
+      if (shouldShowShuffle) {
         pagerEl.hidden = true;
-        if (shuffleBtn) shuffleBtn.hidden = false;
+        if (shuffleBtn) {
+          console.log('[renderAlbumPage] Setting shuffleBtn.hidden = false (shouldShowShuffle=true)');
+          shuffleBtn.hidden = false;
+        }
       } else {
         pagerEl.hidden = totalPool <= ALBUMS_PER_PAGE;
-        if (shuffleBtn) shuffleBtn.hidden = true;
+        if (shuffleBtn) {
+          console.log('[renderAlbumPage] Setting shuffleBtn.hidden = true (shouldShowShuffle=false)');
+          shuffleBtn.hidden = true;
+        }
         pageInfo.textContent = `Page ${albumPage + 1} / ${maxPage}`;
         prevEl.disabled = albumPage <= 0;
         nextEl.disabled = albumPage >= maxPage - 1 && rawItems.length >= rawTotalFound;
       }
 
       // Debug pagination
-      if (totalPool > ALBUMS_PER_PAGE && !isExploreMode) {
+      if (totalPool > ALBUMS_PER_PAGE && !shouldShowShuffle) {
         console.log(`[PAGINATION] Showing pager: ${totalPool} albums (${maxPage} pages)`);
       }
 
@@ -4577,37 +4703,43 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
 
 
 
-        if (album.picture) {
-          const proxied = `/api/container?u=${encodeURIComponent(album.picture)}`;
-          const wrap = document.createElement('div');
-          wrap.className = 'cover-wrap';
-          const img = document.createElement('img');
-          img.src = proxied;
-          img.alt = 'Cover';
-          img.loading = 'lazy';
-          img.onerror = () => { wrap.remove(); };
-          wrap.appendChild(img);
-          wrap.tabIndex = 0;
-          wrap.setAttribute('role','button');
-          try { wrap.setAttribute('aria-label', `Open tracks for ${album.title}`); } catch {}
-          const triggerSearch = () => {
-            if (totalAlbums > 1) {
-              const term = album.title || '';
-              if (searchEl) searchEl.value = term;
-              run(term);
-            } else {
-              openTracksModal(album, card);
-            }
-          };
-          wrap.addEventListener('click', triggerSearch);
-          wrap.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ' ) {
-              e.preventDefault();
-              triggerSearch();
-            }
-          });
-          card.appendChild(wrap);
+        // Always show album cover (or placeholder)
+        const proxied = album.picture ? `/api/container?u=${encodeURIComponent(album.picture)}` : '/img/placeholder.png';
+        const wrap = document.createElement('div');
+        wrap.className = 'cover-wrap';
+        const img = document.createElement('img');
+        img.src = proxied;
+        img.alt = 'Cover';
+        img.loading = 'lazy';
+        if (!album.picture) {
+          img.classList.add('placeholder-image');
         }
+        img.onerror = () => {
+          // Show bold placeholder if image fails to load
+          img.src = '/img/placeholder.png';
+          img.classList.add('placeholder-image');
+        };
+        wrap.appendChild(img);
+        wrap.tabIndex = 0;
+        wrap.setAttribute('role','button');
+        try { wrap.setAttribute('aria-label', `Open tracks for ${album.title}`); } catch {}
+        const triggerSearch = () => {
+          if (totalAlbums > 1) {
+            const term = album.title || '';
+            if (searchEl) searchEl.value = term;
+            run(term);
+          } else {
+            openTracksModal(album, card);
+          }
+        };
+        wrap.addEventListener('click', triggerSearch);
+        wrap.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ' ) {
+            e.preventDefault();
+            triggerSearch();
+          }
+        });
+        card.appendChild(wrap);
 
         const heading = document.createElement('div');
         heading.className = 'heading';
@@ -5200,7 +5332,9 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         });
         }
 
-    goEl.addEventListener('click', () => { const q = searchEl.value.trim(); run(q); });
+    if (goEl) {
+      goEl.addEventListener('click', () => { const q = searchEl.value.trim(); run(q); });
+    }
     if (searchEl) {
       searchEl.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -5209,10 +5343,19 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
         }
       });
         }
-    clearEl.addEventListener('click', () => { searchEl.value=''; loadRandomSongs(); });
+    console.log('[INIT] Attaching clearEl event listener, button exists:', !!clearEl);
+    if (clearEl) {
+      clearEl.addEventListener('click', () => {
+        console.log('[clearEl] Button clicked!');
+        searchEl.value='';
+        loadRandomSongs();
+      });
+    }
 
+    console.log('[INIT] Attaching shuffleBtn event listener, button exists:', !!shuffleBtn);
     if (shuffleBtn) {
       shuffleBtn.addEventListener('click', () => {
+        console.log('[shuffleBtn] Button clicked! currentExploreDecade:', currentExploreDecade, 'currentMode:', currentMode);
         if (currentExploreDecade !== null) {
           // Reload the same decade with different random offset
           runExplore(currentExploreDecade);
@@ -5226,14 +5369,17 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       });
     }
 
-    prevEl.addEventListener('click', () => {
-      if (albumPage > 0) {
-        albumPage--;
-        shouldScrollAlbums = true;
-        renderAlbumPage();
-      }
-    });
-    nextEl.addEventListener('click', async () => {
+    if (prevEl) {
+      prevEl.addEventListener('click', () => {
+        if (albumPage > 0) {
+          albumPage--;
+          shouldScrollAlbums = true;
+          renderAlbumPage();
+        }
+      });
+    }
+    if (nextEl) {
+      nextEl.addEventListener('click', async () => {
       const maxPage = Math.max(1, Math.ceil((albumGroups.length||0) / ALBUMS_PER_PAGE));
       // If at the last page but FM has more rows, fetch next chunk first
       if (albumPage >= maxPage - 1 && rawItems.length < rawTotalFound) {
@@ -5247,6 +5393,7 @@ function hideLanding(){ /* no-op: placeholder removed */ }function doSearch(q){
       shouldScrollAlbums = true;
       renderAlbumPage();
     });
+    }
 
     window.addEventListener('popstate', () => {
       const shareId = getShareIdFromLocation();

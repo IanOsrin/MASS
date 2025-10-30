@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Button Debug Test</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+    .log { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; max-height: 300px; overflow-y: auto; }
+    .log div { margin: 5px 0; font-family: monospace; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Button Debug Test</h1>
+
+  <div>
+    <button id="testClear">Test Clear Button</button>
+    <button id="testShuffle" hidden>Test Shuffle Button (should be hidden initially)</button>
+    <button id="showShuffle">Show Shuffle Button</button>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <h2>API Test</h2>
+  <button id="testAPI">Test /api/random-songs</button>
+  <div id="apiResult"></div>
+
+  <script>
+    const log = document.getElementById('log');
+    function addLog(msg) {
+      const div = document.createElement('div');
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      log.insertBefore(div, log.firstChild);
+    }
+
+    addLog('Page loaded');
+
+    const testClear = document.getElementById('testClear');
+    const testShuffle = document.getElementById('testShuffle');
+    const showShuffle = document.getElementById('showShuffle');
+
+    addLog(`testClear exists: ${!!testClear}`);
+    addLog(`testShuffle exists: ${!!testShuffle}`);
+
+    if (testClear) {
+      testClear.addEventListener('click', () => {
+        addLog('Clear button clicked!');
+        fetch('/api/random-songs?count=2')
+          .then(r => r.json())
+          .then(data => addLog(`Fetched ${data?.items?.length || 0} songs`))
+          .catch(err => addLog(`Error: ${err.message}`));
+      });
+      addLog('Clear button event listener attached');
+    }
+
+    if (testShuffle) {
+      testShuffle.addEventListener('click', () => {
+        addLog('Shuffle button clicked!');
+      });
+      addLog('Shuffle button event listener attached');
+    }
+
+    if (showShuffle) {
+      showShuffle.addEventListener('click', () => {
+        testShuffle.hidden = false;
+        addLog('Shuffle button shown');
+      });
+    }
+
+    document.getElementById('testAPI').addEventListener('click', async () => {
+      const result = document.getElementById('apiResult');
+      result.textContent = 'Loading...';
+      try {
+        const response = await fetch('/api/random-songs?count=3');
+        const data = await response.json();
+        result.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        addLog(`API returned ${data?.items?.length || 0} items`);
+      } catch (err) {
+        result.textContent = 'Error: ' + err.message;
+        addLog('API error: ' + err.message);
+      }
+    });
+  </script>
+</body>
+</html>

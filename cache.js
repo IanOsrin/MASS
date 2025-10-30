@@ -79,8 +79,8 @@ export class LRUCache {
   }
 }
 
-// Global cache instances
-export const searchCache = new LRUCache(200, 3 * 60 * 1000); // 200 items, 3 min TTL
-export const exploreCache = new LRUCache(100, 5 * 60 * 1000); // 100 items, 5 min TTL
-export const albumCache = new LRUCache(500, 10 * 60 * 1000); // 500 items, 10 min TTL
-export const publicPlaylistsCache = new LRUCache(50, 5 * 60 * 1000); // 50 items, 5 min TTL
+// Global cache instances - Optimized for faster performance
+export const searchCache = new LRUCache(300, 10 * 60 * 1000); // 300 items, 10 min TTL
+export const exploreCache = new LRUCache(150, 15 * 60 * 1000); // 150 items, 15 min TTL
+export const albumCache = new LRUCache(500, 20 * 60 * 1000); // 500 items, 20 min TTL
+export const publicPlaylistsCache = new LRUCache(100, 15 * 60 * 1000); // 100 items, 15 min TTL

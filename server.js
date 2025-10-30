@@ -55,6 +55,15 @@ app.use((req, res, next) => {
 app.use(compression()); // Enable gzip compression
 app.use(express.json());
 
+// Add Cache-Control headers for API responses
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    // Set cache headers for API responses
+    res.setHeader('Cache-Control', 'public, max-age=180'); // 3 minutes browser cache
+  }
+  next();
+});
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -731,7 +740,7 @@ function firstNonEmpty(fields, candidates) {
   return '';
 }
 
-async function fetchPublicPlaylistRecords({ limit = 600 } = {}) {
+async function fetchPublicPlaylistRecords({ limit = 100 } = {}) {
   // Robust version: try each candidate PublicPlaylist field individually, skip 102 errors,
   // merge and dedupe results.
   if (!FM_HOST || !FM_DB || !FM_USER || !FM_PASS) {
@@ -1789,6 +1798,53 @@ app.get('/api/shared-playlists/:shareId', async (req, res) => {
   }
 });
 
+app.delete('/api/playlists/:playlistId/tracks/:addedAt', async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  try {
+    const userRecordId = normalizeRecordId(user.recordId);
+    const playlistId = req.params?.playlistId;
+    const addedAt = req.params?.addedAt;
+
+    if (!playlistId) {
+      res.status(400).json({ ok: false, error: 'Playlist ID required' });
+      return;
+    }
+    if (!addedAt) {
+      res.status(400).json({ ok: false, error: 'Track addedAt timestamp required' });
+      return;
+    }
+
+    const playlists = await loadPlaylists();
+    const playlistIndex = playlists.findIndex((p) => p && p.id === playlistId && playlistOwnerMatches(p.userId, userRecordId));
+    if (playlistIndex === -1) {
+      res.status(404).json({ ok: false, error: 'Playlist not found' });
+      return;
+    }
+
+    const playlist = playlists[playlistIndex];
+    playlist.tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+
+    const trackIndex = playlist.tracks.findIndex((t) => t && t.addedAt === addedAt);
+    if (trackIndex === -1) {
+      res.status(404).json({ ok: false, error: 'Track not found in playlist' });
+      return;
+    }
+
+    const [deletedTrack] = playlist.tracks.splice(trackIndex, 1);
+    playlist.updatedAt = new Date().toISOString();
+
+    playlists[playlistIndex] = playlist;
+    await savePlaylists(playlists);
+
+    res.json({ ok: true, playlist, track: deletedTrack });
+  } catch (err) {
+    console.error('[MASS] Delete track from playlist failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to delete track from playlist' });
+  }
+});
+
 app.delete('/api/playlists/:playlistId', async (req, res) => {
   const user = await requireUser(req, res);
   if (!user) return;
@@ -1902,7 +1958,20 @@ app.get('/api/cache/stats', (req, res) => {
 });
 
 /* ========= Static site ========= */
-app.use(express.static(PUBLIC_DIR));
+// Serve static files with caching for images only, not JS/HTML for easier development
+app.use(express.static(PUBLIC_DIR, {
+  setHeaders: (res, filePath) => {
+    // Cache images and fonts for 1 hour
+    if (filePath.match(/\.(jpg|jpeg|png|gif|svg|webp|woff|woff2|ttf|eot)$/i)) {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+    } else {
+      // Don't cache HTML/JS/CSS files for development
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+  etag: true,
+  lastModified: true
+}));
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
 /* ========= Search ========= */
@@ -1991,7 +2060,7 @@ app.get('/api/search', async (req, res) => {
     const artist = (req.query.artist || '').toString().trim();
     const album = (req.query.album || '').toString().trim();
     const track = (req.query.track || '').toString().trim();
-    const limit = Math.max(1, Math.min(300, parseInt(req.query.limit || '60', 10)));
+    const limit = Math.max(1, Math.min(300, parseInt(req.query.limit || '30', 10)));
     const uiOff0 = Math.max(0, parseInt(req.query.offset || '0', 10));
     const fmOff = uiOff0 + 1;
 
@@ -2095,8 +2164,8 @@ app.get('/api/search', async (req, res) => {
 app.get('/api/public-playlists', async (req, res) => {
   try {
     const nameParam = (req.query.name || '').toString().trim();
-    const limitParam = Number.parseInt((req.query.limit || '600'), 10);
-    const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(2000, limitParam)) : 600;
+    const limitParam = Number.parseInt((req.query.limit || '100'), 10);
+    const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(2000, limitParam)) : 100;
 
     // Check cache
     const cacheKey = `public-playlists:${nameParam}:${limit}`;
@@ -2354,7 +2423,7 @@ app.get('/api/explore', async (req, res) => {
   try {
     const start = parseInt((req.query.start || '0'), 10);
     const end = parseInt((req.query.end || '0'), 10);
-    const reqLimit = Math.max(1, Math.min(300, parseInt((req.query.limit || '200'), 10)));
+    const reqLimit = Math.max(1, Math.min(300, parseInt((req.query.limit || '50'), 10)));
     if (!start || !end || end < start) return res.status(400).json({ error: 'bad decade', start, end });
 
     // Note: Random offset means we cache by decade/limit but accept different random results
@@ -2489,6 +2558,11 @@ app.get('/api/explore', async (req, res) => {
 
 /* ========= Random Songs: Get random individual songs with artwork ========= */
 app.get('/api/random-songs', async (req, res) => {
+  // Prevent browser caching - always get fresh random songs
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   try {
     const count = Math.max(1, Math.min(50, parseInt(req.query.count || '8', 10)));
 
@@ -2569,7 +2643,7 @@ app.get('/api/album', async (req, res) => {
     const cat = (req.query.cat || '').toString().trim();
     const title = (req.query.title || '').toString().trim();
     const artist = (req.query.artist || '').toString().trim();
-    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit || '800', 10)));
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit || '100', 10)));
 
     // Check cache
     const cacheKey = `album:${cat}:${title}:${artist}:${limit}`;
