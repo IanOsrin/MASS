@@ -154,6 +154,23 @@ const PUBLIC_PLAYLIST_FIELDS = [
 let publicPlaylistFieldCache = null; // Caches which field name works in FileMaker
 let yearFieldCache = null; // Caches which year field name works in FileMaker
 
+// Memoized regex patterns (performance optimization - avoids recompilation)
+const REGEX_WHITESPACE = /\s+/g;
+const REGEX_CURLY_SINGLE_QUOTES = /[\u2018\u2019]/g;
+const REGEX_CURLY_DOUBLE_QUOTES = /[\u201C\u201D]/g;
+const REGEX_LEADING_TRAILING_NONWORD = /^\W+|\W+$/g;
+const REGEX_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const REGEX_HTTP_HTTPS = /^https?:\/\//i;
+const REGEX_EXTRACT_NUMBERS = /[^0-9.-]/g;
+const REGEX_TRACK_SONG = /(track|song)/;
+const REGEX_NUMBER_INDICATORS = /(no|num|#|seq|order|pos)/;
+const REGEX_TABLE_MISSING = /table is missing/i;
+const REGEX_STATIC_FILES = /\.(jpg|jpeg|png|gif|svg|webp|woff|woff2|ttf|eot)$/i;
+const REGEX_SLUGIFY_NONALPHA = /[^a-z0-9]+/g;
+const REGEX_SLUGIFY_TRIM_DASHES = /^-+|-+$/g;
+const REGEX_UUID_DASHES = /-/g;
+const REGEX_NORMALIZE_FIELD = /[^a-z0-9]/gi;
+
 const TRACK_SEQUENCE_FIELDS = [
   'Track Number',
   'TrackNumber',
@@ -247,8 +264,8 @@ const slugifyPlaylistName = (name) =>
   String(name || '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(REGEX_SLUGIFY_NONALPHA, '-')
+    .replace(REGEX_SLUGIFY_TRIM_DASHES, '');
 
 const normalizeShareId = (value) => {
   if (typeof value !== 'string') return '';
@@ -257,7 +274,7 @@ const normalizeShareId = (value) => {
 
 const generateShareId = () => {
   if (typeof randomUUID === 'function') {
-    return randomUUID().replace(/-/g, '');
+    return randomUUID().replace(REGEX_UUID_DASHES, '');
   }
   return randomBytes(16).toString('hex');
 };
@@ -703,7 +720,7 @@ async function createUserRecord(email, passwordHash) {
   };
 }
 
-const normalizeFieldKey = (name) => (typeof name === 'string' ? name.replace(/[^a-z0-9]/gi, '').toLowerCase() : '');
+const normalizeFieldKey = (name) => (typeof name === 'string' ? name.replace(REGEX_NORMALIZE_FIELD, '').toLowerCase() : '');
 
 function pickFieldValueCaseInsensitive(fields = {}, candidates = []) {
   const entries = Object.entries(fields);
@@ -737,7 +754,7 @@ function resolvePlayableSrc(raw) {
   const src = raw.trim();
   if (!src) return '';
   if (src.startsWith('/api/container?')) return src;
-  if (/^https?:\/\//i.test(src)) return `/api/container?u=${encodeURIComponent(src)}`;
+  if (REGEX_HTTP_HTTPS.test(src)) return `/api/container?u=${encodeURIComponent(src)}`;
   if (src.startsWith('/')) return src;
   return `/api/container?u=${encodeURIComponent(src)}`;
 }
@@ -746,16 +763,16 @@ function resolveArtworkSrc(raw) {
   if (!raw || typeof raw !== 'string') return '';
   const src = raw.trim();
   if (!src) return '';
-  if (src.startsWith('/api/container?') || /^https?:\/\//i.test(src)) return src;
+  if (src.startsWith('/api/container?') || REGEX_HTTP_HTTPS.test(src)) return src;
   return `/api/container?u=${encodeURIComponent(src)}`;
 }
 
 function normTitle(str) {
   return String(str || '')
-    .replace(/\s+/g, ' ')
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u201C\u201D]/g, '"')
-    .replace(/^\W+|\W+$/g, '')
+    .replace(REGEX_WHITESPACE, ' ')
+    .replace(REGEX_CURLY_SINGLE_QUOTES, "'")
+    .replace(REGEX_CURLY_DOUBLE_QUOTES, '"')
+    .replace(REGEX_LEADING_TRAILING_NONWORD, '')
     .trim();
 }
 
@@ -776,19 +793,19 @@ function parseTrackSequence(fields = {}) {
     if (!str) continue;
     const numeric = Number(str);
     if (Number.isFinite(numeric)) return numeric;
-    const cleaned = Number(str.replace(/[^0-9.-]/g, ''));
+    const cleaned = Number(str.replace(REGEX_EXTRACT_NUMBERS, ''));
     if (Number.isFinite(cleaned)) return cleaned;
   }
   for (const [key, value] of Object.entries(fields)) {
     if (value === undefined || value === null) continue;
     const lower = key.toLowerCase();
-    if (!/(track|song)/.test(lower)) continue;
-    if (!/(no|num|#|seq|order|pos)/.test(lower)) continue;
+    if (!REGEX_TRACK_SONG.test(lower)) continue;
+    if (!REGEX_NUMBER_INDICATORS.test(lower)) continue;
     const str = String(value).trim();
     if (!str) continue;
     const numeric = Number(str);
     if (Number.isFinite(numeric)) return numeric;
-    const cleaned = Number(str.replace(/[^0-9.-]/g, ''));
+    const cleaned = Number(str.replace(REGEX_EXTRACT_NUMBERS, ''));
     if (Number.isFinite(cleaned)) return cleaned;
   }
   return Number.POSITIVE_INFINITY;
@@ -916,7 +933,7 @@ async function fetchPublicPlaylistRecords({ limit = 100 } = {}) {
         if (!response.ok) {
           const msg = json?.messages?.[0]?.message || 'FM error';
           const code = json?.messages?.[0]?.code;
-          const tableMissing = typeof msg === 'string' && /table is missing/i.test(msg);
+          const tableMissing = typeof msg === 'string' && REGEX_TABLE_MISSING.test(msg);
           // Skip missing field errors (102) and move to next candidate
           if (String(code) === '102') {
             console.warn(`[MASS] Skipping playlist field "${field}" (FileMaker code 102: Field is missing on layout ${FM_LAYOUT})`);
@@ -936,7 +953,7 @@ async function fetchPublicPlaylistRecords({ limit = 100 } = {}) {
         }
       } catch (err) {
         const msg = err?.message || '';
-        if (/table is missing/i.test(msg)) {
+        if (REGEX_TABLE_MISSING.test(msg)) {
           if (!loggedPublicPlaylistFieldErrors.has(field)) {
             loggedPublicPlaylistFieldErrors.add(field);
             console.warn(
@@ -1071,7 +1088,7 @@ async function authenticateRequest(req) {
 function validateEmail(email) {
   const normalized = normalizeEmail(email);
   if (!normalized) return { ok: false, reason: 'Email required' };
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+  if (!REGEX_EMAIL.test(normalized)) {
     return { ok: false, reason: 'Invalid email address' };
   }
   return { ok: true, email: normalized };
@@ -2315,7 +2332,7 @@ app.get('/api/cache/stats', (req, res) => {
 app.use(express.static(PUBLIC_DIR, {
   setHeaders: (res, filePath) => {
     // Cache images and fonts for 1 hour
-    if (filePath.match(/\.(jpg|jpeg|png|gif|svg|webp|woff|woff2|ttf|eot)$/i)) {
+    if (REGEX_STATIC_FILES.test(filePath)) {
       res.setHeader('Cache-Control', 'public, max-age=3600');
     } else {
       // Don't cache HTML/JS/CSS files for development
@@ -2678,7 +2695,7 @@ app.get('/api/container', async (req, res) => {
     upstreamUrl = `${fmBase}/records/${encodeURIComponent(rid)}/containers/${encodeURIComponent(field)}/${encodeURIComponent(rep || '1')}`;
     requiresAuth = true;
   } else if (direct) {
-    upstreamUrl = direct.match(/^https?:\/\//i)
+    upstreamUrl = REGEX_HTTP_HTTPS.test(direct)
       ? direct
       : `${FM_HOST.replace(/\/?$/, '')}/${direct.replace(/^\//, '')}`;
     requiresAuth = upstreamUrl.startsWith(FM_HOST);
