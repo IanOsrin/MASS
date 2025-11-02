@@ -171,6 +171,70 @@ const REGEX_SLUGIFY_TRIM_DASHES = /^-+|-+$/g;
 const REGEX_UUID_DASHES = /-/g;
 const REGEX_NORMALIZE_FIELD = /[^a-z0-9]/gi;
 
+// Input validation helpers (security - prevent injection/XSS)
+const validators = {
+  searchQuery: (value) => {
+    if (typeof value !== 'string') return { valid: false, error: 'Must be string' };
+    const trimmed = value.trim();
+    if (trimmed.length > 200) return { valid: false, error: 'Too long (max 200 chars)' };
+    // Reject FileMaker operators to prevent query injection
+    if (/[=<>!]|\s(OR|AND|NOT)\s/i.test(trimmed)) {
+      return { valid: false, error: 'Invalid characters in search query' };
+    }
+    return { valid: true, value: trimmed };
+  },
+
+  playlistName: (value) => {
+    if (typeof value !== 'string') return { valid: false, error: 'Must be string' };
+    const trimmed = value.trim();
+    if (trimmed.length < 1) return { valid: false, error: 'Playlist name required' };
+    if (trimmed.length > 100) return { valid: false, error: 'Too long (max 100 chars)' };
+    // Prevent XSS by rejecting HTML tags
+    if (/<[^>]*>/g.test(trimmed)) {
+      return { valid: false, error: 'HTML tags not allowed' };
+    }
+    return { valid: true, value: trimmed };
+  },
+
+  recordId: (value) => {
+    const str = String(value).trim();
+    if (!/^\d+$/.test(str)) {
+      return { valid: false, error: 'Record ID must be numeric' };
+    }
+    if (str.length > 20) {
+      return { valid: false, error: 'Record ID too long' };
+    }
+    return { valid: true, value: str };
+  },
+
+  limit: (value, max = 1000) => {
+    const num = parseInt(value, 10);
+    if (isNaN(num) || num < 1) return { valid: false, error: 'Limit must be positive integer' };
+    if (num > max) return { valid: false, error: `Limit exceeds maximum (${max})` };
+    return { valid: true, value: num };
+  },
+
+  offset: (value) => {
+    const num = parseInt(value, 10);
+    if (isNaN(num) || num < 0) return { valid: false, error: 'Offset must be non-negative integer' };
+    if (num > 1000000) return { valid: false, error: 'Offset too large' };
+    return { valid: true, value: num };
+  },
+
+  url: (value) => {
+    if (typeof value !== 'string') return { valid: false, error: 'URL must be string' };
+    const trimmed = value.trim();
+    // Reject directory traversal attempts
+    if (trimmed.includes('..') || trimmed.includes('\\')) {
+      return { valid: false, error: 'Invalid URL path' };
+    }
+    if (trimmed.length > 2000) {
+      return { valid: false, error: 'URL too long' };
+    }
+    return { valid: true, value: trimmed };
+  }
+};
+
 const TRACK_SEQUENCE_FIELDS = [
   'Track Number',
   'TrackNumber',
@@ -1693,11 +1757,18 @@ app.post('/api/playlists', async (req, res) => {
   try {
     const userRecordId = normalizeRecordId(user.recordId);
     const nameRaw = req.body?.name;
-    const name = typeof nameRaw === 'string' ? nameRaw.trim() : '';
-    if (!name) {
+
+    // Validate playlist name (prevent XSS and enforce limits)
+    if (!nameRaw) {
       res.status(400).json({ ok: false, error: 'Playlist name required' });
       return;
     }
+    const nameValidation = validators.playlistName(nameRaw);
+    if (!nameValidation.valid) {
+      res.status(400).json({ ok: false, error: nameValidation.error });
+      return;
+    }
+    const name = nameValidation.value;
 
     const now = new Date().toISOString();
     const playlists = await loadPlaylists();
@@ -2426,6 +2497,36 @@ const begins = (s) => (s ? `${s}*` : '');
 
 app.get('/api/search', async (req, res) => {
   try {
+    // Validate search inputs (prevent injection)
+    const validationErrors = {};
+    if (req.query.q && req.query.q !== '') {
+      const qResult = validators.searchQuery(req.query.q);
+      if (!qResult.valid) validationErrors.q = qResult.error;
+    }
+    if (req.query.artist && req.query.artist !== '') {
+      const artistResult = validators.searchQuery(req.query.artist);
+      if (!artistResult.valid) validationErrors.artist = artistResult.error;
+    }
+    if (req.query.album && req.query.album !== '') {
+      const albumResult = validators.searchQuery(req.query.album);
+      if (!albumResult.valid) validationErrors.album = albumResult.error;
+    }
+    if (req.query.track && req.query.track !== '') {
+      const trackResult = validators.searchQuery(req.query.track);
+      if (!trackResult.valid) validationErrors.track = trackResult.error;
+    }
+    if (req.query.limit) {
+      const limitResult = validators.limit(req.query.limit, 300);
+      if (!limitResult.valid) validationErrors.limit = limitResult.error;
+    }
+    if (req.query.offset) {
+      const offsetResult = validators.offset(req.query.offset);
+      if (!offsetResult.valid) validationErrors.offset = offsetResult.error;
+    }
+    if (Object.keys(validationErrors).length > 0) {
+      return res.status(400).json({ error: 'Invalid input', details: validationErrors });
+    }
+
     const q = (req.query.q || '').toString().trim();
     const artist = (req.query.artist || '').toString().trim();
     const album = (req.query.album || '').toString().trim();
@@ -2692,12 +2793,52 @@ app.get('/api/container', async (req, res) => {
   let requiresAuth = false;
 
   if (rid && field) {
+    // Validate record ID
+    const ridValidation = validators.recordId(rid);
+    if (!ridValidation.valid) {
+      res.status(400).json({ error: 'invalid_input', detail: `Invalid record ID: ${ridValidation.error}` });
+      return;
+    }
     upstreamUrl = `${fmBase}/records/${encodeURIComponent(rid)}/containers/${encodeURIComponent(field)}/${encodeURIComponent(rep || '1')}`;
     requiresAuth = true;
   } else if (direct) {
-    upstreamUrl = REGEX_HTTP_HTTPS.test(direct)
-      ? direct
-      : `${FM_HOST.replace(/\/?$/, '')}/${direct.replace(/^\//, '')}`;
+    // Validate URL to prevent directory traversal and SSRF
+    const urlValidation = validators.url(direct);
+    if (!urlValidation.valid) {
+      res.status(400).json({ error: 'invalid_input', detail: urlValidation.error });
+      return;
+    }
+
+    // If absolute URL, validate hostname is not private/internal
+    if (REGEX_HTTP_HTTPS.test(direct)) {
+      try {
+        const url = new URL(direct);
+        const hostname = url.hostname;
+
+        // Reject private IP ranges and localhost (prevent SSRF)
+        if (
+          hostname === 'localhost' ||
+          hostname === '127.0.0.1' ||
+          hostname.match(/^10\./) ||
+          hostname.match(/^172\.(1[6-9]|2[0-9]|3[01])\./) ||
+          hostname.match(/^192\.168\./) ||
+          hostname.match(/^169\.254\./) || // AWS metadata
+          hostname.match(/^::1$/) || // IPv6 localhost
+          hostname.match(/^fe80:/i) || // IPv6 link-local
+          hostname.match(/^fc00:/i) // IPv6 private
+        ) {
+          res.status(403).json({ error: 'forbidden', detail: 'Access to private/internal IPs not allowed' });
+          return;
+        }
+        upstreamUrl = direct;
+      } catch (err) {
+        res.status(400).json({ error: 'invalid_input', detail: 'Invalid URL format' });
+        return;
+      }
+    } else {
+      // FileMaker container path - already validated for directory traversal by validators.url
+      upstreamUrl = `${FM_HOST.replace(/\/?$/, '')}/${direct.replace(/^\//, '')}`;
+    }
     requiresAuth = upstreamUrl.startsWith(FM_HOST);
   } else {
     res.status(400).json({ error: 'invalid_input', detail: 'Missing rid/field or u parameter.' });
