@@ -36,8 +36,49 @@ process.on('uncaughtException', (err) => {
   console.error('uncaughtException', err);
 });
 
+function parseTrustProxy(value) {
+  if (value === undefined || value === null) return 'loopback';
+  if (typeof value === 'boolean' || typeof value === 'number' || Array.isArray(value)) return value;
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+  if (lower === 'true') return true;
+  if (lower === 'false') return false;
+  if (/^\d+$/.test(trimmed)) {
+    const num = Number(trimmed);
+    return Number.isNaN(num) ? false : num;
+  }
+  if (trimmed.startsWith('[')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed;
+    }
+  }
+  return trimmed;
+}
+
+const trustProxySetting = parseTrustProxy(process.env.TRUST_PROXY);
+
+function parsePositiveInt(value, fallback) {
+  const num = Number.parseInt(value, 10);
+  if (Number.isFinite(num) && num > 0) {
+    return num;
+  }
+  return fallback;
+}
+
+const FM_TIMEOUT_MS = parsePositiveInt(process.env.FM_TIMEOUT_MS, 45000);
+const fmDefaultFetchOptions = { timeoutMs: FM_TIMEOUT_MS, retries: 1 };
+
+function fmSafeFetch(url, options, overrides = {}) {
+  const finalOptions = { ...fmDefaultFetchOptions, ...overrides };
+  return safeFetch(url, options, finalOptions);
+}
+
 const app = express();
-app.set('trust proxy', true);
+app.set('trust proxy', trustProxySetting);
 
 // Force HTTPS in production (security - prevent credential leakage)
 if (process.env.NODE_ENV === 'production') {
@@ -151,26 +192,96 @@ const STREAM_TIME_FIELD_LEGACY = 'PositionSec';
 
 const STREAM_RECORD_CACHE_TTL_MS = 30 * 60 * 1000;
 const streamRecordCache = new Map();
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const DATA_DIR = path.join(__dirname, 'data');
+const PLAYLISTS_PATH = path.join(DATA_DIR, 'playlists.json');
+const fallbackAuthSecretPath = path.join(DATA_DIR, '.auth_secret');
+const RANDOM_SONG_CACHE_PATH = path.join(DATA_DIR, 'random-songs-cache.json');
+const RANDOM_SONG_SEED_LOCK_PATH = path.join(DATA_DIR, '.random-songs-cache.lock');
+
+let randomSongPersistedCache = { items: [], updatedAt: 0 };
+try {
+  const persistedRaw = await fs.readFile(RANDOM_SONG_CACHE_PATH, 'utf8');
+  const persistedJson = JSON.parse(persistedRaw);
+  if (Array.isArray(persistedJson?.items) && persistedJson.items.length) {
+    randomSongPersistedCache = {
+      items: persistedJson.items,
+      updatedAt: Number(persistedJson.updatedAt) || Date.now()
+    };
+    console.log(`[random-songs] Loaded persisted cache with ${randomSongPersistedCache.items.length} items`);
+  }
+} catch (err) {
+  if (err?.code !== 'ENOENT') {
+    console.warn('[random-songs] Failed to read persisted cache', err);
+  }
+}
+class HttpError extends Error {
+  constructor(status, body, meta = {}) {
+    super(body?.error || `HTTP ${status}`);
+    this.status = status;
+    this.body = body;
+    this.meta = meta;
+  }
+}
 
 let AUTH_SECRET = process.env.AUTH_SECRET;
+let authSecretSource = AUTH_SECRET ? 'AUTH_SECRET environment variable' : null;
+
+if (!AUTH_SECRET && process.env.AUTH_SECRET_FILE) {
+  try {
+    const fileSecret = (await fs.readFile(process.env.AUTH_SECRET_FILE, 'utf8')).trim();
+    if (fileSecret) {
+      AUTH_SECRET = fileSecret;
+      authSecretSource = `AUTH_SECRET_FILE (${process.env.AUTH_SECRET_FILE})`;
+    } else {
+      console.error(`[MASS] AUTH_SECRET_FILE ${process.env.AUTH_SECRET_FILE} is empty`);
+    }
+  } catch (err) {
+    console.error(`[MASS] Failed to read AUTH_SECRET_FILE ${process.env.AUTH_SECRET_FILE}: ${err.message}`);
+  }
+}
+
+if (!AUTH_SECRET && process.env.NODE_ENV === 'production') {
+  try {
+    const fileSecret = (await fs.readFile(fallbackAuthSecretPath, 'utf8')).trim();
+    if (fileSecret) {
+      AUTH_SECRET = fileSecret;
+      authSecretSource = `persisted file (${fallbackAuthSecretPath})`;
+      console.warn(`[MASS] Loaded AUTH_SECRET from ${fallbackAuthSecretPath}. Configure AUTH_SECRET in the environment to manage rotation explicitly.`);
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.error(`[MASS] Failed to read fallback auth secret file ${fallbackAuthSecretPath}: ${err.message}`);
+    }
+  }
+}
+
+if (!AUTH_SECRET && process.env.NODE_ENV === 'production') {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    AUTH_SECRET = randomBytes(32).toString('hex');
+    await fs.writeFile(fallbackAuthSecretPath, AUTH_SECRET, { encoding: 'utf8', mode: 0o600 });
+    authSecretSource = 'generated ephemeral secret';
+    console.warn('[MASS] Generated AUTH_SECRET at runtime because none was provided. Sessions will reset on redeploy; set AUTH_SECRET in the environment for stability.');
+  } catch (err) {
+    console.error('[MASS] FATAL: AUTH_SECRET is required in production and could not be generated', err);
+    process.exit(1);
+  }
+}
 
 if (!AUTH_SECRET) {
-  if (process.env.NODE_ENV === 'production') {
-    console.error('[MASS] FATAL: AUTH_SECRET is required in production');
-    console.error('[MASS] Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
-    process.exit(1);
-  } else {
-    console.warn('[MASS] WARNING: Using insecure development secret. DO NOT use in production!');
-    console.warn('[MASS] Generate a secret: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
-    AUTH_SECRET = 'development-secret-change-me';
-  }
+  console.warn('[MASS] WARNING: Using insecure development secret. DO NOT use in production!');
+  console.warn('[MASS] Generate a secret: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  AUTH_SECRET = 'development-secret-change-me';
+  authSecretSource = 'development fallback';
+}
+
+if (authSecretSource && process.env.NODE_ENV !== 'production') {
+  console.info(`[MASS] AUTH_SECRET source: ${authSecretSource}`);
 }
 const AUTH_COOKIE_NAME = 'mass_session';
 const AUTH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 const AUTH_COOKIE_SECURE = process.env.AUTH_COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production';
-const PUBLIC_DIR = path.join(__dirname, 'public');
-const DATA_DIR = path.join(__dirname, 'data');
-const PLAYLISTS_PATH = path.join(DATA_DIR, 'playlists.json');
 const PUBLIC_PLAYLIST_FIELDS = [
   'PublicPlaylist',
   'Public Playlist',
@@ -598,7 +709,7 @@ async function lookupASN(ip) {
 }
 
 async function fmLogin() {
-  const res = await safeFetch(`${fmBase}/sessions`, {
+  const res = await fmSafeFetch(`${fmBase}/sessions`, {
     method: 'POST',
     headers: {
       'Accept': 'application/json',
@@ -606,7 +717,7 @@ async function fmLogin() {
       'Authorization': 'Basic ' + Buffer.from(`${FM_USER}:${FM_PASS}`).toString('base64')
     },
     body: JSON.stringify({})
-  });
+  }, { retries: 1 });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = json?.messages?.[0]?.message || `HTTP ${res.status}`;
@@ -635,7 +746,7 @@ async function fmPost(pathSuffix, body) {
     'Authorization': `Bearer ${fmToken}`
   };
 
-  let res = await safeFetch(url, {
+  let res = await fmSafeFetch(url, {
     method: 'POST',
     headers: baseHeaders,
     body: JSON.stringify(body)
@@ -643,7 +754,7 @@ async function fmPost(pathSuffix, body) {
 
   if (res.status === 401) {
     await fmLogin();
-    res = await safeFetch(url, {
+    res = await fmSafeFetch(url, {
       method: 'POST',
       headers: {
         ...baseHeaders,
@@ -663,11 +774,11 @@ async function fmGetAbsolute(u, { signal } = {}) {
     headers.set('Authorization', `Bearer ${fmToken}`);
   }
 
-  let res = await safeFetch(u, { headers, signal }, { timeoutMs: 30000, retries: 1 });
+  let res = await fmSafeFetch(u, { headers, signal }, { retries: 1 });
   if (res.status === 401 && typeof u === 'string' && u.startsWith(FM_HOST)) {
     await fmLogin();
     headers.set('Authorization', `Bearer ${fmToken}`);
-    res = await safeFetch(u, { headers, signal }, { timeoutMs: 30000, retries: 1 });
+    res = await fmSafeFetch(u, { headers, signal }, { retries: 1 });
   }
   return res;
 }
@@ -681,7 +792,7 @@ async function fmCreateRecord(layout, fieldData) {
     'Authorization': `Bearer ${fmToken}`
   });
 
-  let res = await safeFetch(url, {
+  let res = await fmSafeFetch(url, {
     method: 'POST',
     headers: makeHeaders(),
     body: JSON.stringify({ fieldData })
@@ -689,7 +800,7 @@ async function fmCreateRecord(layout, fieldData) {
 
   if (res.status === 401) {
     await fmLogin();
-    res = await safeFetch(url, {
+    res = await fmSafeFetch(url, {
       method: 'POST',
       headers: makeHeaders(),
       body: JSON.stringify({ fieldData })
@@ -715,7 +826,7 @@ async function fmUpdateRecord(layout, recordId, fieldData) {
     'Authorization': `Bearer ${fmToken}`
   });
 
-  let res = await safeFetch(url, {
+  let res = await fmSafeFetch(url, {
     method: 'PATCH',
     headers: makeHeaders(),
     body: JSON.stringify({ fieldData })
@@ -723,7 +834,7 @@ async function fmUpdateRecord(layout, recordId, fieldData) {
 
   if (res.status === 401) {
     await fmLogin();
-    res = await safeFetch(url, {
+    res = await fmSafeFetch(url, {
       method: 'PATCH',
       headers: makeHeaders(),
       body: JSON.stringify({ fieldData })
@@ -748,11 +859,11 @@ async function fmGetRecordById(layout, recordId) {
     'Authorization': `Bearer ${fmToken}`
   });
 
-  let res = await safeFetch(url, { method: 'GET', headers: makeHeaders() });
+  let res = await fmSafeFetch(url, { method: 'GET', headers: makeHeaders() });
 
   if (res.status === 401) {
     await fmLogin();
-    res = await safeFetch(url, { method: 'GET', headers: makeHeaders() });
+    res = await fmSafeFetch(url, { method: 'GET', headers: makeHeaders() });
   }
 
   const json = await res.json().catch(() => ({}));
@@ -3118,52 +3229,490 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
   }
 });
 
-/* ========= Random Songs: Get random individual songs with artwork ========= */
-app.get('/api/random-songs', async (req, res) => {
-  try {
-    const count = Math.max(1, Math.min(50, parseInt(req.query.count || '8', 10)));
+const RANDOM_SONG_BUFFER_MAX_RECORDS = 500;
+const RANDOM_SONG_BUFFER_WARM_COUNT = 24;
+const randomSongBuffer = {
+  recordsById: new Map(),
+  recordIdsByArtist: new Map(),
+  insertionQueue: [],
+  removedIds: new Set(),
+  warmPromise: null
+};
+void warmRandomSongBuffer(RANDOM_SONG_BUFFER_WARM_COUNT * 2);
 
-    // If _t parameter is present, user clicked "Load More" - bypass cache for fresh songs
-    const isLoadMore = !!req.query._t;
-    const maxOffset = 5000;
-    let randomOffset;
+const RANDOM_SONG_PERSIST_MAX_AGE_MS = 30 * 60 * 1000;
+const RANDOM_SONG_PERSIST_MAX_ITEMS = 80;
+let randomSongPersistWritePromise = null;
+let randomSongRefreshPromise = null;
 
-    // Only use cache for initial page loads (no _t parameter)
-    if (!isLoadMore) {
-      // Cache key that rotates every 30 seconds for fresh randomness
-      const cacheSlot = Math.floor(Date.now() / 30000);
-      randomOffset = (cacheSlot % maxOffset) + 1; // Deterministic offset based on time slot
-      const cacheKey = `random-songs:${count}:${cacheSlot}`;
-      const cached = searchCache.get(cacheKey);
+function resolveArtist(fields = {}) {
+  return (
+    fields['Album Artist'] ||
+    fields['Artist'] ||
+    fields['Tape Files::Album Artist'] ||
+    'Unknown'
+  );
+}
 
-      if (cached) {
-        console.log(`[CACHE HIT] random-songs (30s window)`);
-        res.setHeader('X-Cache-Hit', 'true');
-        res.setHeader('Cache-Control', 'public, max-age=30');
-        return res.json(cached);
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function isAbortError(err) {
+  if (!err) return false;
+  if (err.name === 'AbortError') return true;
+  if (typeof err.code === 'string' && err.code.toUpperCase() === 'UND_ERR_ABORTED') return true;
+  const message = typeof err.message === 'string' ? err.message.toLowerCase() : '';
+  return message.includes('aborted') || message.includes('aborterror');
+}
+
+function bufferTrimOverflow() {
+  while (randomSongBuffer.insertionQueue.length) {
+    const firstId = randomSongBuffer.insertionQueue[0];
+    if (!randomSongBuffer.removedIds.has(firstId) && randomSongBuffer.recordsById.has(firstId)) {
+      break;
+    }
+    randomSongBuffer.removedIds.delete(firstId);
+    randomSongBuffer.insertionQueue.shift();
+  }
+
+  while (randomSongBuffer.insertionQueue.length > RANDOM_SONG_BUFFER_MAX_RECORDS) {
+    const oldestId = randomSongBuffer.insertionQueue.shift();
+    if (oldestId) {
+      randomSongBuffer.removedIds.delete(oldestId);
+      bufferRemoveRecordId(oldestId);
+    }
+  }
+}
+
+function bufferRemoveRecordId(recordId) {
+  if (!recordId) return;
+  const record = randomSongBuffer.recordsById.get(recordId);
+  if (!record) {
+    randomSongBuffer.removedIds.add(recordId);
+    return;
+  }
+
+  randomSongBuffer.recordsById.delete(recordId);
+  randomSongBuffer.removedIds.add(recordId);
+
+  const artist = resolveArtist(record.fieldData || {});
+  const set = randomSongBuffer.recordIdsByArtist.get(artist);
+  if (set) {
+    set.delete(recordId);
+    if (!set.size) {
+      randomSongBuffer.recordIdsByArtist.delete(artist);
+    }
+  }
+}
+
+function bufferAddRecords(records = []) {
+  let added = 0;
+  for (const record of records) {
+    if (!record || !record.recordId) continue;
+    if (randomSongBuffer.recordsById.has(record.recordId)) continue;
+
+    const artist = resolveArtist(record.fieldData || {});
+    randomSongBuffer.recordsById.set(record.recordId, record);
+    if (!randomSongBuffer.recordIdsByArtist.has(artist)) {
+      randomSongBuffer.recordIdsByArtist.set(artist, new Set());
+    }
+    randomSongBuffer.recordIdsByArtist.get(artist).add(record.recordId);
+    randomSongBuffer.insertionQueue.push(record.recordId);
+    randomSongBuffer.removedIds.delete(record.recordId);
+    added += 1;
+  }
+
+  if (added) {
+    bufferTrimOverflow();
+  }
+  return added;
+}
+
+function bufferAddItems(items = []) {
+  if (!Array.isArray(items) || !items.length) return 0;
+  const records = items.map((item) => ({
+    recordId: item.recordId,
+    modId: item.modId,
+    fieldData: { ...(item.fields || {}) }
+  }));
+  return bufferAddRecords(records);
+}
+
+function bufferUniqueArtistCount() {
+  return randomSongBuffer.recordIdsByArtist.size;
+}
+
+function bufferTake(count) {
+  if (!count || count <= 0) return [];
+  if (bufferUniqueArtistCount() < count) return null;
+
+  const artists = shuffleArray(Array.from(randomSongBuffer.recordIdsByArtist.keys()));
+  const selected = [];
+  const idsToConsume = [];
+
+  for (const artist of artists) {
+    if (selected.length >= count) break;
+    const set = randomSongBuffer.recordIdsByArtist.get(artist);
+    if (!set || !set.size) continue;
+    const ids = Array.from(set);
+    const recordId = ids[Math.floor(Math.random() * ids.length)];
+    const record = randomSongBuffer.recordsById.get(recordId);
+    if (!record) {
+      set.delete(recordId);
+      continue;
+    }
+    selected.push(record);
+    idsToConsume.push(recordId);
+  }
+
+  if (selected.length < count) {
+    return null;
+  }
+
+  for (const recordId of idsToConsume) {
+    bufferRemoveRecordId(recordId);
+  }
+
+  bufferTrimOverflow();
+  return selected;
+}
+
+if (randomSongPersistedCache.items.length) {
+  const added = bufferAddItems(randomSongPersistedCache.items);
+  if (added) {
+    console.log(`[random-songs] Primed buffer with ${added} persisted records`);
+  }
+}
+
+async function warmRandomSongBuffer(targetCount) {
+  if (randomSongBuffer.warmPromise) {
+    return randomSongBuffer.warmPromise;
+  }
+
+  const desiredCount = Math.max(RANDOM_SONG_BUFFER_WARM_COUNT, targetCount || 0);
+  randomSongBuffer.warmPromise = (async () => {
+    try {
+      let batch;
+      try {
+        batch = await fetchRandomSongsBatch({
+          count: desiredCount,
+          mode: 'loadMore'
+        });
+      } catch (err) {
+        if (!isAbortError(err)) throw err;
+        console.warn('[random-songs] Buffer warm primary fetch aborted; falling back to legacy fetch');
+        batch = await fetchRandomSongsLegacy({
+          count: desiredCount,
+          isLoadMore: true
+        });
       }
-    } else {
-      // Load More: use truly random offset, no caching
-      randomOffset = Math.floor(Math.random() * maxOffset) + 1;
-      console.log(`[LOAD MORE] Bypassing cache, random offset: ${randomOffset}`);
-      // Prevent browser caching of Load More requests
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
+
+      if ((!batch.selected || !batch.selected.length) && !(batch.extras && batch.extras.length)) {
+        console.warn('[random-songs] Buffer warm primary fetch empty; falling back to legacy fetch');
+        batch = await fetchRandomSongsLegacy({
+          count: desiredCount,
+          isLoadMore: true
+        });
+      }
+      const recordsToStore = [
+        ...(batch.selected || []),
+        ...((batch.extras && batch.extras.length) ? batch.extras : [])
+      ];
+      if (recordsToStore.length) {
+        bufferAddRecords(recordsToStore);
+        console.log(`[random-songs] Buffer warmed with ${recordsToStore.length} records`);
+      } else {
+        console.log('[random-songs] Buffer warm produced no records');
+      }
+    } catch (err) {
+      console.error('[random-songs] Buffer warm failed', err);
+    } finally {
+      randomSongBuffer.warmPromise = null;
+    }
+  })();
+
+  return randomSongBuffer.warmPromise;
+}
+
+function mapRecordsToItems(records = []) {
+  return records.map((record) => ({
+    recordId: record.recordId,
+    modId: record.modId,
+    fields: record.fieldData || {}
+  }));
+}
+
+function cloneRandomSongItems(items = [], count = items.length) {
+  return items.slice(0, Math.min(count, items.length)).map((item) => ({
+    recordId: item.recordId,
+    modId: item.modId,
+    fields: { ...(item.fields || {}) }
+  }));
+}
+
+function getPersistedRandomSongs(count) {
+  if (!randomSongPersistedCache.items.length) return null;
+  if (Date.now() - randomSongPersistedCache.updatedAt > RANDOM_SONG_PERSIST_MAX_AGE_MS) {
+    return null;
+  }
+  if (randomSongPersistedCache.items.length < count) return null;
+  const items = cloneRandomSongItems(randomSongPersistedCache.items, count);
+  return { ok: true, items, total: items.length };
+}
+
+function updatePersistedRandomSongs(items = []) {
+  if (!Array.isArray(items) || !items.length) return;
+  const trimmed = cloneRandomSongItems(items, RANDOM_SONG_PERSIST_MAX_ITEMS);
+  randomSongPersistedCache = {
+    items: trimmed,
+    updatedAt: Date.now()
+  };
+  bufferAddItems(trimmed);
+  const payload = JSON.stringify({
+    items: trimmed,
+    updatedAt: randomSongPersistedCache.updatedAt
+  });
+  playlistSeedCache = { items: [], updatedAt: 0 };
+  randomSongPersistWritePromise = (async () => {
+    try {
+      await fs.mkdir(DATA_DIR, { recursive: true });
+      await fs.writeFile(RANDOM_SONG_CACHE_PATH, payload, { encoding: 'utf8', mode: 0o600 });
+    } catch (err) {
+      console.warn('[random-songs] Failed to persist random song cache', err);
+    }
+  })();
+}
+
+async function waitForPersistedCache(timeoutMs = 45000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (randomSongPersistedCache.items.length) return true;
+    try {
+      const raw = await fs.readFile(RANDOM_SONG_CACHE_PATH, 'utf8');
+      const json = JSON.parse(raw);
+      if (Array.isArray(json?.items) && json.items.length) {
+        randomSongPersistedCache = {
+          items: json.items,
+          updatedAt: Number(json.updatedAt) || Date.now()
+        };
+        bufferAddItems(json.items);
+        return true;
+      }
+    } catch (err) {
+      if (err?.code !== 'ENOENT') {
+        console.warn('[random-songs] Waiting for cache read failed', err);
+      }
+    }
+    await sleep(1000);
+  }
+  return false;
+}
+
+function computeCacheKey(count, cacheSlot) {
+  if (typeof cacheSlot !== 'number') return null;
+  return `random-songs:${count}:${cacheSlot}`;
+}
+
+function refreshRandomSongsInBackground({ count, isLoadMore = false, cacheSlot = null }) {
+  if (randomSongRefreshPromise) {
+    return randomSongRefreshPromise;
+  }
+  randomSongRefreshPromise = (async () => {
+    try {
+      let batch;
+      try {
+        batch = await fetchRandomSongsBatch({
+          count,
+          mode: isLoadMore ? 'loadMore' : 'initial',
+          cacheSlot
+        });
+      } catch (err) {
+        if (!isAbortError(err)) throw err;
+        console.warn('[random-songs] Background fetch aborted; falling back to legacy');
+        batch = await fetchRandomSongsLegacy({
+          count,
+          isLoadMore,
+          cacheSlot
+        });
+      }
+
+      if (!batch.selected.length) {
+        batch = await fetchRandomSongsLegacy({
+          count,
+          isLoadMore,
+          cacheSlot
+        });
+      }
+
+      if (!batch.selected.length) {
+        console.warn('[random-songs] Background refresh produced no songs');
+        return;
+      }
+
+      const items = mapRecordsToItems(batch.selected);
+      updatePersistedRandomSongs(items);
+      if (batch.extras && batch.extras.length) {
+        bufferAddRecords(batch.extras);
+      }
+      const cacheKey = computeCacheKey(count, cacheSlot);
+      if (cacheKey) {
+        searchCache.set(cacheKey, { ok: true, items, total: items.length });
+      }
+    } catch (err) {
+      if (!isAbortError(err)) {
+        console.error('[random-songs] Background refresh failed', err);
+      }
+    } finally {
+      randomSongRefreshPromise = null;
+    }
+  })();
+  return randomSongRefreshPromise;
+}
+
+async function ensureRandomSongSeed(count = RANDOM_SONG_BUFFER_WARM_COUNT * 2) {
+  if (randomSongPersistedCache.items.length) {
+    return;
+  }
+  await fs.mkdir(DATA_DIR, { recursive: true });
+
+  let lockHandle = null;
+  try {
+    lockHandle = await fs.open(RANDOM_SONG_SEED_LOCK_PATH, 'wx').catch((err) => {
+      if (err?.code === 'EEXIST') {
+        return null;
+      }
+      throw err;
+    });
+
+    if (!lockHandle) {
+      console.log('[random-songs] Another worker is seeding random songs; waiting for cache');
+      const ready = await waitForPersistedCache();
+      if (!ready) {
+        console.warn('[random-songs] Cache still empty after waiting; proceeding without seed');
+      }
+      return;
     }
 
-    // Get a random sample of records
-    // FileMaker doesn't have a built-in random function, so we'll get a larger set and shuffle
-    // Fetch 6x for diversity; reduced to speed up FM query (8 songs ≈ 48 records)
-    const fetchLimit = Math.min(60, count * 4); // Reduced oversample for faster responses
+    console.log('[random-songs] Seeding persisted random songs cache (cold start)');
+    const seedCount = Math.max(count, RANDOM_SONG_BUFFER_WARM_COUNT);
+    const playlistSeed = await buildPlaylistSeedItems(seedCount);
+    if (playlistSeed.length) {
+      updatePersistedRandomSongs(playlistSeed);
+      if (randomSongPersistWritePromise) {
+        await randomSongPersistWritePromise;
+      }
+      console.log(`[random-songs] Seeded persisted cache with ${playlistSeed.length} playlist tracks`);
+    } else {
+      console.warn('[random-songs] No playlist seed available for initial cache');
+    }
 
-    // Find all records with wildcard (gets any record)
-    const baseQuery = { 'Album Title': '*' };
+    void refreshRandomSongsInBackground({ count: seedCount, isLoadMore: false, cacheSlot: null });
+  } finally {
+    if (lockHandle) {
+      await lockHandle.close().catch(() => {});
+      await fs.unlink(RANDOM_SONG_SEED_LOCK_PATH).catch(() => {});
+    }
+  }
+}
+
+function mapPlaylistTrackToRandomItem(track = {}, playlist = {}) {
+  const mp3 = track.mp3 || track.resolvedSrc || track.audioUrl || '';
+  if (!mp3) return null;
+  const artwork = track.artwork || track.coverArt || '';
+  const playlistId = normalizeRecordId(playlist.id || '');
+  const recordId =
+    normalizeRecordId(track.trackRecordId || track.recordId) ||
+    `playlist-${playlistId || 'seed'}-${track.seq || track.addedAt || randomUUID()}`;
+  const albumArtist = track.albumArtist || track.trackArtist || track.artist || '';
+  const trackName = track.name || track.trackName || track.title || 'Unknown Track';
+  const fields = {
+    'Track Name': trackName,
+    'Tape Files::Track Name': trackName,
+    'Album Title': track.albumTitle || track.album || '',
+    Album: track.albumTitle || track.album || '',
+    'Album Artist': albumArtist,
+    Artist: track.trackArtist || albumArtist,
+    'Track Artist': track.trackArtist || albumArtist,
+    'Catalogue #': track.catalogue || track.catalog || '',
+    Catalogue: track.catalogue || track.catalog || '',
+    mp3,
+    MP3: mp3,
+    'Audio File': mp3,
+    'Artwork::Picture': artwork,
+    Artwork: artwork,
+    Visibility: FM_VISIBILITY_VALUE || 'show',
+    'Tape Files::Visibility': FM_VISIBILITY_VALUE || 'show',
+    'Playlist Name': playlist.name || '',
+    'Playlist ID': playlistId,
+    'Seed Source': 'playlist'
+  };
+  return {
+    recordId,
+    modId: track.modId || '1',
+    fields
+  };
+}
+
+async function buildPlaylistSeedItems(count) {
+  const now = Date.now();
+  if (
+    playlistSeedCache.items.length >= count &&
+    now - playlistSeedCache.updatedAt < PLAYLIST_SEED_CACHE_TTL_MS
+  ) {
+    return cloneRandomSongItems(playlistSeedCache.items, count);
+  }
+
+  const playlists = await loadPlaylists();
+  const collected = [];
+  for (const playlist of playlists) {
+    const tracks = Array.isArray(playlist?.tracks) ? playlist.tracks : [];
+    for (const track of tracks) {
+      const item = mapPlaylistTrackToRandomItem(track, playlist);
+      if (item) {
+        collected.push(item);
+      }
+    }
+  }
+
+  if (!collected.length) {
+    return [];
+  }
+
+  shuffleArray(collected);
+  playlistSeedCache = { items: collected, updatedAt: now };
+  return cloneRandomSongItems(collected, count);
+}
+
+async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = null }) {
+  const maxOffset = 5000;
+  const fetchLimit = Math.min(120, Math.max(count * 5, 30));
+  const baseQuery = { 'Album Title': '*' };
+
+  let randomOffset;
+  if (mode === 'initial' && typeof cacheSlot === 'number') {
+    randomOffset = (cacheSlot % maxOffset) + 1;
+  } else {
+    randomOffset = Math.floor(Math.random() * maxOffset) + 1;
+  }
+
+  const state = {
+    selected: [],
+    usedArtists: new Set(),
+    selectedIds: new Set(),
+    extrasMap: new Map()
+  };
+
+  const runQuery = async (offset) => {
     let queryWithVisibility = [applyVisibility(baseQuery)];
     let r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
       query: queryWithVisibility,
       limit: fetchLimit,
-      offset: randomOffset
+      offset
     });
     let json = await r.json().catch(() => ({}));
 
@@ -3173,7 +3722,7 @@ app.get('/api/random-songs', async (req, res) => {
       r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
         query: queryWithVisibility,
         limit: fetchLimit,
-        offset: randomOffset
+        offset
       });
       json = await r.json().catch(() => ({}));
     }
@@ -3181,154 +3730,388 @@ app.get('/api/random-songs', async (req, res) => {
     if (!r.ok) {
       const msg = json?.messages?.[0]?.message || 'FM error';
       const code = json?.messages?.[0]?.code;
-      return res.status(500).json({ error: 'Random songs failed', status: r.status, detail: `${msg} (${code})` });
+      throw new HttpError(500, { error: 'Random songs failed', status: r.status, detail: `${msg} (${code})` }, { offset, fetchLimit });
     }
 
-    let rawData = json?.response?.data || [];
-    let dataWithVisibility = rawData.filter(record => recordIsVisible(record.fieldData || {}));
+    const rawData = json?.response?.data || [];
+    return rawData.filter(record => recordIsVisible(record.fieldData || {}));
+  };
 
-    if (!dataWithVisibility.length) {
-      console.warn(`[random-songs] Empty batch at offset ${randomOffset}, retrying from start`);
-      const retryPayload = {
-        query: [applyVisibility({ 'Album Title': '*' })],
-        limit: fetchLimit,
-        offset: 1
-      };
-      const retryResponse = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, retryPayload);
-      const retryJson = await retryResponse.json().catch(() => ({}));
-      if (retryResponse.ok) {
-        rawData = retryJson?.response?.data || [];
-        dataWithVisibility = rawData.filter(record => recordIsVisible(record.fieldData || {}));
-      } else {
-        console.warn('[random-songs] Retry fetch failed', retryJson?.messages?.[0]);
+  let dataWithVisibility = await runQuery(randomOffset);
+
+  if (!dataWithVisibility.length) {
+    console.warn(`[random-songs] Empty batch at offset ${randomOffset}, retrying from start`);
+    dataWithVisibility = await runQuery(1);
+  }
+
+  selectUniqueRecords(dataWithVisibility, count, state);
+
+  if (state.selected.length < count) {
+    console.log(`[random-songs] Only found ${state.selected.length}/${count} unique artists, fetching more (1 retry max)`);
+    const additionalOffset = Math.floor(Math.random() * maxOffset) + 1;
+    let additionalData = await runQuery(additionalOffset);
+    additionalData = additionalData.filter(record => !state.selectedIds.has(record.recordId));
+    selectUniqueRecords(additionalData, count, state);
+  }
+
+  const extras = Array.from(state.extrasMap.values()).filter(record => !state.selectedIds.has(record.recordId));
+  const uniqueArtistCount = state.usedArtists.size;
+
+  if (state.selected.length < count) {
+    console.log(`[random-songs] Could only find ${state.selected.length}/${count} songs (${uniqueArtistCount} unique artists)`);
+  } else {
+    console.log(`[random-songs] Returning ${state.selected.length} songs from ${uniqueArtistCount} unique artists (offset ${randomOffset}, limit ${fetchLimit})`);
+  }
+
+  return {
+    selected: state.selected,
+    extras,
+    meta: {
+      randomOffset,
+      fetchLimit,
+      uniqueArtistCount
+    }
+  };
+}
+
+async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot }) {
+  const maxOffset = 5000;
+  let randomOffset;
+  if (!isLoadMore && typeof cacheSlot === 'number') {
+    randomOffset = (cacheSlot % maxOffset) + 1;
+  } else {
+    randomOffset = Math.floor(Math.random() * maxOffset) + 1;
+  }
+
+  const fetchLimit = Math.min(60, count * 4);
+  const baseQuery = { 'Album Title': '*' };
+
+  let queryWithVisibility = [applyVisibility(baseQuery)];
+  let response = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
+    query: queryWithVisibility,
+    limit: fetchLimit,
+    offset: randomOffset
+  });
+  let json = await response.json().catch(() => ({}));
+
+  if (!response.ok && shouldFallbackVisibility(json)) {
+    console.warn('[random-songs] Visibility field not available; retrying without filter (legacy)');
+    queryWithVisibility = [baseQuery];
+    response = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
+      query: queryWithVisibility,
+      limit: fetchLimit,
+      offset: randomOffset
+    });
+    json = await response.json().catch(() => ({}));
+  }
+
+  if (!response.ok) {
+    const msg = json?.messages?.[0]?.message || 'FM error';
+    const code = json?.messages?.[0]?.code;
+    throw new HttpError(500, { error: 'Random songs failed', status: response.status, detail: `${msg} (${code})` }, { offset: randomOffset, fetchLimit });
+  }
+
+  let rawData = json?.response?.data || [];
+  let visible = rawData.filter(record => recordIsVisible(record.fieldData || {}));
+
+  if (!visible.length) {
+    console.warn(`[random-songs] Legacy fetch empty at offset ${randomOffset}, retrying from start`);
+    const retryPayload = {
+      query: [applyVisibility(baseQuery)],
+      limit: fetchLimit,
+      offset: 1
+    };
+    const retryResponse = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, retryPayload);
+    const retryJson = await retryResponse.json().catch(() => ({}));
+    if (retryResponse.ok) {
+      rawData = retryJson?.response?.data || [];
+      visible = rawData.filter(record => recordIsVisible(record.fieldData || {}));
+    } else {
+      console.warn('[random-songs] Legacy retry fetch failed', retryJson?.messages?.[0]);
+    }
+  }
+
+  if (!visible.length) {
+    return {
+      selected: [],
+      extras: [],
+      meta: {
+        randomOffset,
+        fetchLimit,
+        uniqueArtistCount: 0
       }
+    };
+  }
+
+  const artistMap = new Map();
+  for (const record of visible) {
+    const artist = resolveArtist(record.fieldData || {});
+    if (!artistMap.has(artist)) {
+      artistMap.set(artist, []);
     }
+    artistMap.get(artist).push(record);
+  }
 
-    if (!dataWithVisibility.length) {
-      return res.status(200).json({ ok: true, items: [], total: 0 });
-    }
+  const artists = shuffleArray(Array.from(artistMap.keys()));
+  const selected = [];
 
-    // Group by artist to maximize diversity
-    const artistMap = new Map();
-    for (const record of dataWithVisibility) {
-      const fields = record.fieldData || {};
-      const artist = fields['Album Artist'] || fields['Artist'] || fields['Tape Files::Album Artist'] || 'Unknown';
+  for (const artist of artists) {
+    if (selected.length >= count) break;
+    const tracks = artistMap.get(artist);
+    if (!tracks || !tracks.length) continue;
+    const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
+    selected.push(randomTrack);
+  }
 
-      if (!artistMap.has(artist)) {
-        artistMap.set(artist, []);
-      }
-      artistMap.get(artist).push(record);
-    }
+  if (selected.length < count) {
+    console.log(`[random-songs] Legacy fetch only found ${selected.length}/${count} unique artists, attempting secondary fetch`);
+    const usedArtists = new Set(selected.map(record => resolveArtist(record.fieldData || {})));
+    const selectedIds = new Set(selected.map(record => record.recordId));
+    const additionalOffset = Math.floor(Math.random() * maxOffset) + 1;
+    let secondQueryUsesVisibility = Boolean(FM_VISIBILITY_FIELD);
+    let secondQueryPayload = {
+      query: [secondQueryUsesVisibility ? applyVisibility(baseQuery) : baseQuery],
+      limit: fetchLimit,
+      offset: additionalOffset
+    };
 
-    // Get one random track from each artist (for diversity)
-    const selected = [];
-    const artists = Array.from(artistMap.keys());
-
-    // Shuffle artists for randomness
-    artists.sort(() => Math.random() - 0.5);
-
-    // First pass: Pick one track from each artist until we have enough
-    for (const artist of artists) {
-      if (selected.length >= count) break;
-
-      const tracks = artistMap.get(artist);
-      const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
-      selected.push(randomTrack);
-    }
-
-    // Second pass: If we don't have enough songs, do ONE retry to find more unique artists
-    if (selected.length < count) {
-      console.log(`[random-songs] Only found ${selected.length}/${count} unique artists, fetching more (1 retry max)`);
-
-      // Track which artists we've already used
-      const usedArtists = new Set(
-        selected.map(s => {
-          const fields = s.fieldData || {};
-          return fields['Album Artist'] || fields['Artist'] || fields['Tape Files::Album Artist'] || 'Unknown';
-        })
-      );
-
-      // Fetch another batch from a different random offset
-      const additionalOffset = Math.floor(Math.random() * maxOffset) + 1;
-      const retryQueryBase = { 'Album Title': '*' };
-      let secondQueryUsesVisibility = Boolean(FM_VISIBILITY_FIELD);
-      let secondQueryPayload = {
-        query: [secondQueryUsesVisibility ? applyVisibility(retryQueryBase) : retryQueryBase],
+    let secondResponse = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, secondQueryPayload);
+    let secondJson = await secondResponse.json().catch(() => ({}));
+    if (!secondResponse.ok && secondQueryUsesVisibility && shouldFallbackVisibility(secondJson)) {
+      console.warn('[random-songs] Visibility field not available for legacy retry; retrying without filter');
+      secondQueryUsesVisibility = false;
+      secondQueryPayload = {
+        query: [baseQuery],
         limit: fetchLimit,
         offset: additionalOffset
       };
-
-      let r2 = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, secondQueryPayload);
-      let json2 = await r2.json().catch(() => ({}));
-      if (!r2.ok && secondQueryUsesVisibility && shouldFallbackVisibility(json2)) {
-        console.warn('[random-songs] Visibility field not available for retry; retrying without filter');
-        secondQueryUsesVisibility = false;
-        secondQueryPayload = {
-          query: [retryQueryBase],
-          limit: fetchLimit,
-          offset: additionalOffset
-        };
-        r2 = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, secondQueryPayload);
-        json2 = await r2.json().catch(() => ({}));
-      }
-
-      if (r2.ok) {
-        let additionalRawData = json2?.response?.data || [];
-        if (secondQueryUsesVisibility) {
-          additionalRawData = additionalRawData.filter(record => recordIsVisible(record.fieldData || {}));
-        }
-        const selectedIds = new Set(selected.map(s => s.recordId));
-        const shuffledTracks = additionalRawData.sort(() => Math.random() - 0.5);
-
-        for (const track of shuffledTracks) {
-          if (selected.length >= count) break;
-
-          const fields = track.fieldData || {};
-          const artist = fields['Album Artist'] || fields['Artist'] || fields['Tape Files::Album Artist'] || 'Unknown';
-
-          // Only add if artist is NOT already used and track is not a duplicate
-          if (!usedArtists.has(artist) && !selectedIds.has(track.recordId)) {
-            selected.push(track);
-            selectedIds.add(track.recordId);
-            usedArtists.add(artist);
-          }
-        }
-      }
+      secondResponse = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, secondQueryPayload);
+      secondJson = await secondResponse.json().catch(() => ({}));
     }
 
-    // Log final result
-    const uniqueArtistCount = new Set(selected.map(s => {
-      const fields = s.fieldData || {};
-      return fields['Album Artist'] || fields['Artist'] || fields['Tape Files::Album Artist'] || 'Unknown';
-    })).size;
+    if (secondResponse.ok) {
+      let additionalRawData = secondJson?.response?.data || [];
+      if (secondQueryUsesVisibility) {
+        additionalRawData = additionalRawData.filter(record => recordIsVisible(record.fieldData || {}));
+      }
+      const shuffledTracks = shuffleArray(additionalRawData.slice());
 
-    if (selected.length < count) {
-      console.log(`[random-songs] Could only find ${selected.length}/${count} songs (${uniqueArtistCount} unique artists)`);
+      for (const track of shuffledTracks) {
+        if (selected.length >= count) break;
+        const artist = resolveArtist(track.fieldData || {});
+        if (usedArtists.has(artist) || selectedIds.has(track.recordId)) continue;
+        selected.push(track);
+        selectedIds.add(track.recordId);
+        usedArtists.add(artist);
+      }
     } else {
-      console.log(`[random-songs] Returning ${count} songs from ${uniqueArtistCount} unique artists!`);
+      console.warn('[random-songs] Legacy secondary fetch failed', secondJson?.messages?.[0]);
+    }
+  }
+
+  const uniqueArtistCount = new Set(selected.map(record => resolveArtist(record.fieldData || {}))).size;
+
+  if (selected.length < count) {
+    console.log(`[random-songs] Legacy fetch returning ${selected.length}/${count} songs (${uniqueArtistCount} unique artists)`);
+  } else {
+    console.log(`[random-songs] Legacy fetch returning ${selected.length} songs from ${uniqueArtistCount} unique artists (offset ${randomOffset}, limit ${fetchLimit})`);
+  }
+
+  return {
+    selected,
+    extras: [],
+    meta: {
+      randomOffset,
+      fetchLimit,
+      uniqueArtistCount
+    }
+  };
+}
+
+function selectUniqueRecords(records, desiredCount, state) {
+  if (!Array.isArray(records) || !records.length) {
+    return state;
+  }
+
+  const { selected, usedArtists, selectedIds, extrasMap } = state;
+  const artistBuckets = new Map();
+
+  for (const record of records) {
+    if (!record || !record.recordId || selectedIds.has(record.recordId)) continue;
+    const artist = resolveArtist(record.fieldData || {});
+    if (!artistBuckets.has(artist)) {
+      artistBuckets.set(artist, []);
+    }
+    artistBuckets.get(artist).push(record);
+  }
+
+  const artists = shuffleArray(Array.from(artistBuckets.keys()));
+
+  for (const artist of artists) {
+    if (selected.length >= desiredCount) break;
+    const bucket = artistBuckets.get(artist);
+    if (!bucket || !bucket.length) continue;
+
+    if (usedArtists.has(artist)) {
+      for (const record of bucket) {
+        extrasMap.set(record.recordId, record);
+      }
+      continue;
     }
 
-    const items = selected.map((d) => ({
-      recordId: d.recordId,
-      modId: d.modId,
-      fields: d.fieldData || {}
-    }));
+    const pick = bucket[Math.floor(Math.random() * bucket.length)];
+    selected.push(pick);
+    selectedIds.add(pick.recordId);
+    usedArtists.add(artist);
 
+    for (const record of bucket) {
+      if (record.recordId !== pick.recordId) {
+        extrasMap.set(record.recordId, record);
+      }
+    }
+  }
+
+  for (const bucket of artistBuckets.values()) {
+    for (const record of bucket) {
+      if (!record || selectedIds.has(record.recordId)) continue;
+      extrasMap.set(record.recordId, record);
+    }
+  }
+
+  return state;
+}
+
+/* ========= Random Songs: Get random individual songs with artwork ========= */
+app.get('/api/random-songs', async (req, res) => {
+  try {
+    const count = Math.max(1, Math.min(50, parseInt(req.query.count || '8', 10)));
+
+    // If _t parameter is present, user clicked "Load More" - bypass cache for fresh songs
+    const isLoadMore = !!req.query._t;
+    const cacheSlot = !isLoadMore ? Math.floor(Date.now() / 30000) : null;
+    const cacheKey = computeCacheKey(count, cacheSlot);
+
+    if (!isLoadMore && cacheKey) {
+      const cached = searchCache.get(cacheKey);
+      if (cached) {
+        console.log('[CACHE HIT] random-songs (30s window)');
+        res.setHeader('X-Cache-Hit', 'true');
+        res.setHeader('Cache-Control', 'public, max-age=30');
+        return res.json(cached);
+      }
+    }
+
+    if (!isLoadMore) {
+      const persisted = getPersistedRandomSongs(count);
+      if (persisted) {
+        console.log('[random-songs] Served initial songs from persisted cache');
+        res.setHeader('X-Cache-Hit', 'persisted');
+        res.setHeader('Cache-Control', 'public, max-age=15');
+        void refreshRandomSongsInBackground({ count, cacheSlot });
+        if (bufferUniqueArtistCount() < RANDOM_SONG_BUFFER_WARM_COUNT) {
+          void warmRandomSongBuffer(count * 2);
+        }
+        return res.json(persisted);
+      }
+
+      const playlistSeed = await buildPlaylistSeedItems(count);
+      if (playlistSeed.length) {
+        console.log('[random-songs] Served initial songs from playlist seed');
+        updatePersistedRandomSongs(playlistSeed);
+        res.setHeader('X-Cache-Hit', 'playlist-seed');
+        res.setHeader('Cache-Control', 'public, max-age=15');
+        void refreshRandomSongsInBackground({ count, cacheSlot });
+        if (bufferUniqueArtistCount() < RANDOM_SONG_BUFFER_WARM_COUNT) {
+          void warmRandomSongBuffer(count * 2);
+        }
+        return res.json({ ok: true, items: cloneRandomSongItems(playlistSeed, count), total: Math.min(count, playlistSeed.length) });
+      }
+    }
+
+    if (isLoadMore) {
+      const buffered = bufferTake(count);
+      if (buffered && buffered.length === count) {
+        console.log(`[random-songs] Served ${count} songs from buffer (unique artists: ${bufferUniqueArtistCount()})`);
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        void warmRandomSongBuffer(count * 2);
+        return res.json({ ok: true, items: mapRecordsToItems(buffered), total: buffered.length });
+      }
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+
+    let batch;
+    try {
+      batch = await fetchRandomSongsBatch({
+        count,
+        mode: isLoadMore ? 'loadMore' : 'initial',
+        cacheSlot
+      });
+    } catch (err) {
+      if (!isAbortError(err)) throw err;
+      console.warn('[random-songs] Primary fetch aborted; falling back to legacy implementation');
+      batch = await fetchRandomSongsLegacy({
+        count,
+        isLoadMore,
+        cacheSlot
+      });
+    }
+
+    if (!batch.selected.length) {
+      console.warn('[random-songs] Primary fetch returned no songs; falling back to legacy implementation');
+      batch = await fetchRandomSongsLegacy({
+        count,
+        isLoadMore,
+        cacheSlot
+      });
+    }
+
+    if (!batch.selected.length) {
+      console.warn('[random-songs] Legacy fallback also returned no songs');
+      const emptyResult = { ok: true, items: [], total: 0 };
+      if (!isLoadMore && cacheKey) {
+        res.setHeader('Cache-Control', 'public, max-age=5');
+        searchCache.set(cacheKey, emptyResult);
+      }
+      return res.json(emptyResult);
+    }
+
+    if (batch.extras && batch.extras.length) {
+      bufferAddRecords(batch.extras);
+    }
+
+    const items = mapRecordsToItems(batch.selected);
     const result = { ok: true, items, total: items.length };
 
-    // Cache the result only for initial page loads (not Load More clicks)
-    if (!isLoadMore) {
-      const cacheSlot = Math.floor(Date.now() / 30000);
-      const cacheKey = `random-songs:${count}:${cacheSlot}`;
+    if (!isLoadMore && cacheKey) {
       searchCache.set(cacheKey, result);
-      console.log(`[CACHE MISS] random-songs - Fetched ${items.length} songs (${fetchLimit} records scanned), cached`);
+      res.setHeader('X-Cache-Hit', 'false');
       res.setHeader('Cache-Control', 'public, max-age=30');
-    } else {
-      console.log(`[LOAD MORE] Fetched ${items.length} songs (${fetchLimit} records scanned), not cached`);
+      console.log(`[CACHE MISS] random-songs - cached result (offset ${batch.meta?.randomOffset ?? 'n/a'})`);
+    }
+
+    if (isLoadMore) {
+      console.log(`[LOAD MORE] Fetched ${items.length} songs (offset ${batch.meta?.randomOffset ?? 'n/a'}, limit ${batch.meta?.fetchLimit ?? 'n/a'})`);
+    }
+
+    updatePersistedRandomSongs(items);
+    if (bufferUniqueArtistCount() < RANDOM_SONG_BUFFER_WARM_COUNT) {
+      void warmRandomSongBuffer(count * 2);
     }
 
     return res.json(result);
   } catch (err) {
+    if (err instanceof HttpError) {
+      if (!res.headersSent && err.meta?.headers) {
+        for (const [key, value] of Object.entries(err.meta.headers)) {
+          res.setHeader(key, value);
+        }
+      }
+      return res.status(err.status).json(err.body);
+    }
     const detail = err?.message || String(err);
     return res.status(500).json({ error: 'Random songs failed', status: 500, detail });
   }
@@ -3418,6 +4201,14 @@ if (FM_HOST && FM_DB && FM_USER && FM_PASS) {
   }
 } else {
   console.warn('[MASS] Skipping initial FileMaker login; missing FM environment variables');
+}
+
+if (!randomSongPersistedCache.items.length) {
+  try {
+    await ensureRandomSongSeed();
+  } catch (err) {
+    console.warn('[random-songs] Initial seed failed', err);
+  }
 }
 
 app.listen(PORT, HOST, () => {

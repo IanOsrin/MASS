@@ -11,3 +11,6 @@ tmp/
 .env
 .DS_Store
 **/.DS_Store
+data/.auth_secret
+data/random-songs-cache.json
+data/.random-songs-cache.lock
