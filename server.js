@@ -149,6 +149,10 @@ const PUBLIC_PLAYLIST_FIELDS = [
   'Playlist Name',
   'Playlist::Public'
 ];
+
+// Cache for discovered field names (performance optimization)
+let publicPlaylistFieldCache = null; // Caches which field name works in FileMaker
+
 const TRACK_SEQUENCE_FIELDS = [
   'Track Number',
   'TrackNumber',
@@ -827,7 +831,12 @@ async function fetchPublicPlaylistRecords({ limit = 100 } = {}) {
   const batchSize = Math.max(1, Math.min(100, limit));
   const candidates = Array.isArray(PUBLIC_PLAYLIST_FIELDS) ? PUBLIC_PLAYLIST_FIELDS : ['PublicPlaylist'];
 
-  for (const field of candidates) {
+  // Try cached field first, then others (performance optimization)
+  const fieldsToTry = publicPlaylistFieldCache
+    ? [publicPlaylistFieldCache, ...candidates.filter(f => f !== publicPlaylistFieldCache)]
+    : candidates;
+
+  for (const field of fieldsToTry) {
     let offset = 1;
     let progressed = false;
     while (records.length < limit) {
@@ -892,6 +901,12 @@ async function fetchPublicPlaylistRecords({ limit = 100 } = {}) {
       }
 
       progressed = progressed || added > 0;
+
+      // Cache the working field name for future requests (performance optimization)
+      if (added > 0 && !publicPlaylistFieldCache) {
+        publicPlaylistFieldCache = field;
+        console.log(`[CACHE] Detected public playlist field: "${field}"`);
+      }
 
       if (data.length < currentLimit) break;
       offset += data.length;
