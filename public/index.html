@@ -7,7 +7,7 @@
   <style>
     :root {
       --bg:#0f0f12; --fg:#f5f6f7; --muted:#a7abb3; --card:#17181c; --accent:#62f5a9; --border:#24262c;
-      --cover-size: 110px; /* bigger covers for random songs */
+      --cover-size: 80px; /* compact cover for random songs */
       --overlay: rgba(0,0,0,.6);
       --btn-gradient-start:#3a7bd5;
       --btn-gradient-end:#00d2ff;
@@ -83,12 +83,11 @@
     }
     .albums{display:grid;grid-template-columns:repeat(4,150px);grid-template-rows:auto auto;gap:14px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
     .albums.single-album{display:flex;flex-direction:column;align-items:center;gap:24px;}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:9px;display:flex;flex-direction:column;gap:6px;overflow:hidden;scroll-margin-top:128px;min-height:220px;position:relative;padding-bottom:62px;}
-    .card > .btn{margin-top:auto;}
-    .card-buttons{position:absolute;bottom:9px;left:9px;right:9px;display:flex;flex-direction:column;gap:4px;}
-    .card .play-button{border-radius:10px;padding:6px 10px;cursor:pointer;font-weight:600;background:var(--accent);border:none;color:var(--btn-text);width:100%;font-size:13px;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px;display:flex;flex-direction:column;gap:4px;overflow:hidden;scroll-margin-top:128px;min-height:132px;}
+    .card-buttons{margin-top:6px;display:flex;flex-direction:column;gap:3px;}
+    .card .play-button{border-radius:8px;padding:3px 6px;cursor:pointer;font-weight:600;background:var(--accent);border:none;color:var(--btn-text);width:100%;font-size:10px;}
     .card .play-button:hover{filter:brightness(1.1);}
-    .card .btn.secondary.small{font-size:11px;padding:4px 6px;}
+    .card .btn.secondary.small{font-size:9px;padding:2px 4px;}
     .card.pending-audio{opacity:0.8;}
     .card.no-audio{display:none !important;}
 
@@ -98,8 +97,9 @@
     .cover-wrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
     .albums.single-album .cover-wrap{width:260px;height:260px;margin:0 auto 16px;}
 
-    .heading{display:flex;align-items:center;gap:5px;flex-wrap:wrap;justify-content:center;text-align:center;}
-    .card h3{margin:0;font-size:13px;line-height:1.2;}
+    .heading{display:flex;align-items:center;gap:2px;flex-direction:column;justify-content:center;text-align:center;width:100%;}
+    .card h3{margin:0;font-size:13px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;}
+    .card-artist{color:var(--muted);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;}
     .albums.single-album .card h3{font-size:26px;}
     .muted{color:var(--muted);font-size:11px;text-align:center;line-height:1.2;}
     .albums.single-album .muted{font-size:16px;}
@@ -352,6 +352,7 @@
         <button id="go">Search</button>
         <button id="clear">Clear</button>
         <button id="shuffleBtn" class="btn-accent" hidden>🔄 Load More</button>
+        <button id="shufflePlayBtn" class="btn-accent" hidden aria-pressed="false">▶ Shuffle Play</button>
         <span id="status" class="status" hidden aria-live="polite" role="status"><span class="pulse"></span><span id="statusText">Searching…</span></span>
       </div>
       <div class="explore-wrap">
@@ -399,6 +400,7 @@
           <div class="now-playing-controls">
             <span id="nowPlayingStatus" class="now-playing-status">Paused</span>
             <div id="nowPlayingMetaButtons" class="now-playing-meta-buttons"></div>
+            <button id="nowPlayingAdd" type="button" class="btn small" hidden>+ Playlist</button>
             <button id="nowPlayingToggle" type="button" class="btn small">Play</button>
           </div>
           <div class="now-playing-progress">
