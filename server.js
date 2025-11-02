@@ -39,6 +39,24 @@ process.on('uncaughtException', (err) => {
 const app = express();
 app.set('trust proxy', true);
 
+// Force HTTPS in production (security - prevent credential leakage)
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    const proto = req.headers['x-forwarded-proto'] || req.protocol;
+    if (proto !== 'https') {
+      console.warn(`[SECURITY] Redirecting HTTP request to HTTPS: ${req.method} ${req.path}`);
+      return res.redirect(301, `https://${req.get('host')}${req.url}`);
+    }
+    next();
+  });
+
+  // Add HSTS header (tell browsers to always use HTTPS)
+  app.use((req, res, next) => {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+  });
+}
+
 // Response time logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
@@ -112,8 +130,21 @@ const STREAM_EVENT_DEBUG =
   process.env.NODE_ENV === 'development' ||
   process.env.DEBUG?.includes('stream');
 const MASS_SESSION_COOKIE = 'mass.sid';
-const MASS_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
+const MASS_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days (reduced from 1 year for security)
 const STREAM_EVENT_TYPES = new Set(['PLAY', 'PROGRESS', 'PAUSE', 'SEEK', 'END', 'ERROR']);
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Validate session ID format (security - prevent session fixation)
+function validateSessionId(sessionId) {
+  if (!sessionId || typeof sessionId !== 'string') {
+    return null;
+  }
+  // Must be valid UUID format
+  if (!UUID_REGEX.test(sessionId)) {
+    return null;
+  }
+  return sessionId;
+}
 const STREAM_TERMINAL_EVENTS = new Set(['END', 'ERROR']);
 const STREAM_TIME_FIELD = 'TimeStreamed';
 const STREAM_TIME_FIELD_LEGACY = 'PositionSec';
@@ -1504,8 +1535,17 @@ app.post('/api/stream-events', async (req, res) => {
     if (!sessionId) {
       sessionId = cookies[MASS_SESSION_COOKIE] || '';
     }
-    if (!sessionId) {
+
+    // Validate session ID format (security - prevent session fixation)
+    const validatedSession = validateSessionId(sessionId);
+    if (!validatedSession) {
+      // Invalid or missing session ID - generate new one
       sessionId = randomUUID();
+      if (STREAM_EVENT_DEBUG && cookies[MASS_SESSION_COOKIE]) {
+        console.log(`[SECURITY] Invalid session ID rejected, generating new one`);
+      }
+    } else {
+      sessionId = validatedSession;
     }
 
     if (!cookies[MASS_SESSION_COOKIE] || cookies[MASS_SESSION_COOKIE] !== sessionId) {
