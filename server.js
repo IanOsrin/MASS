@@ -121,9 +121,18 @@ const STREAM_TIME_FIELD_LEGACY = 'PositionSec';
 const STREAM_RECORD_CACHE_TTL_MS = 30 * 60 * 1000;
 const streamRecordCache = new Map();
 
-const AUTH_SECRET = process.env.AUTH_SECRET || 'development-secret-change-me';
-if (!process.env.AUTH_SECRET) {
-  console.warn('[MASS] AUTH_SECRET not set; falling back to insecure development secret');
+let AUTH_SECRET = process.env.AUTH_SECRET;
+
+if (!AUTH_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[MASS] FATAL: AUTH_SECRET is required in production');
+    console.error('[MASS] Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+    process.exit(1);
+  } else {
+    console.warn('[MASS] WARNING: Using insecure development secret. DO NOT use in production!');
+    console.warn('[MASS] Generate a secret: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+    AUTH_SECRET = 'development-secret-change-me';
+  }
 }
 const AUTH_COOKIE_NAME = 'mass_session';
 const AUTH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
