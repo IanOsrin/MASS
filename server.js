@@ -152,6 +152,7 @@ const PUBLIC_PLAYLIST_FIELDS = [
 
 // Cache for discovered field names (performance optimization)
 let publicPlaylistFieldCache = null; // Caches which field name works in FileMaker
+let yearFieldCache = null; // Caches which year field name works in FileMaker
 
 const TRACK_SEQUENCE_FIELDS = [
   'Track Number',
@@ -2757,6 +2758,11 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
       'API_Albums::Year_Release_num'
     ];
 
+    // Try cached year field first, then others (performance optimization)
+    const fieldsToTry = yearFieldCache
+      ? [yearFieldCache, ...FIELDS.filter(f => f !== yearFieldCache)]
+      : FIELDS;
+
     async function tryFind(payload) {
       const r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
       const json = await r.json().catch(() => ({}));
@@ -2771,7 +2777,7 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
     }
 
     let chosenField = null;
-    for (const field of FIELDS) {
+    for (const field of fieldsToTry) {
       const probe = await tryFind({ query: [{ [field]: `${start}...${end}` }], limit: 1, offset: 1 });
       if (probe.ok && probe.total > 0) {
         chosenField = field;
@@ -2780,7 +2786,7 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
     }
     if (!chosenField) {
       const years = Array.from({ length: end - start + 1 }, (_, i) => start + i);
-      for (const field of FIELDS) {
+      for (const field of fieldsToTry) {
         const probe = await tryFind({ query: years.map((y) => ({ [field]: `==${y}` })), limit: 1, offset: 1 });
         if (probe.ok && probe.total > 0) {
           chosenField = field;
@@ -2789,7 +2795,7 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
       }
     }
     if (!chosenField) {
-      for (const field of FIELDS) {
+      for (const field of fieldsToTry) {
         const probe = await tryFind({ query: [{ [field]: `${start}*` }], limit: 1, offset: 1 });
         if (probe.ok && probe.total > 0) {
           chosenField = field;
@@ -2800,6 +2806,12 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
     if (!chosenField) {
       console.log(`[EXPLORE] No matching year field for ${start}-${end}`);
       return res.json({ ok: true, items: [], total: 0, offset: 0, limit: reqLimit });
+    }
+
+    // Cache the working year field for future requests (performance optimization)
+    if (chosenField && !yearFieldCache) {
+      yearFieldCache = chosenField;
+      console.log(`[CACHE] Detected year field: "${chosenField}"`);
     }
 
     const probe = await tryFind({ query: [{ [chosenField]: `${start}...${end}` }], limit: 1, offset: 1 });
