@@ -8,6 +8,7 @@ import { fetch } from 'undici';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import compression from 'compression';
+import rateLimit from 'express-rate-limit';
 import { searchCache, exploreCache, albumCache, publicPlaylistsCache } from './cache.js';
 const { AbortController } = globalThis;
 
@@ -55,6 +56,35 @@ app.use((req, res, next) => {
 app.use(compression()); // Enable gzip compression
 app.use(express.json());
 
+// Rate limiting configuration
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // 100 requests per window per IP
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for static files
+    return req.path.startsWith('/public/') || req.path === '/';
+  }
+});
+
+const expensiveLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 20, // 20 requests per window
+  message: { error: 'Rate limit exceeded for this endpoint' }
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 login attempts per window
+  message: { error: 'Too many login attempts, please try again later' },
+  skipSuccessfulRequests: true
+});
+
+// Apply general rate limiting to all API routes
+app.use('/api/', apiLimiter);
+
 // Add Cache-Control headers for API responses
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
@@ -101,9 +131,6 @@ const AUTH_COOKIE_SECURE = process.env.AUTH_COOKIE_SECURE === 'true' || process.
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
 const PLAYLISTS_PATH = path.join(DATA_DIR, 'playlists.json');
-const DEFAULT_AUDIO_FIELDS = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
-const AUDIO_FIELD_CANDIDATES = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
-const ARTWORK_FIELD_CANDIDATES = ['Artwork::Picture', 'Artwork Picture', 'Picture'];
 const PUBLIC_PLAYLIST_FIELDS = [
   'PublicPlaylist',
   'Public Playlist',
@@ -141,10 +168,55 @@ const TRACK_SEQUENCE_FIELDS = [
   'Tape Files::Track_No'
 ];
 const PUBLIC_PLAYLIST_NAME_SPLIT = /[,;|\r\n]+/;
+const FM_VISIBILITY_FIELD = (process.env.FM_VISIBILITY_FIELD || '').trim();
+const FM_VISIBILITY_VALUE = (process.env.FM_VISIBILITY_VALUE || 'show').trim();
+const FM_VISIBILITY_VALUE_LC = FM_VISIBILITY_VALUE.toLowerCase();
+
+
+function hasValidAudio(fields) {
+  if (!fields || typeof fields !== 'object') return false;
+  for (const field of AUDIO_FIELD_CANDIDATES) {
+    const raw = fields[field];
+    if (!raw) continue;
+    const resolved = resolvePlayableSrc(String(raw));
+    if (resolved) return true;
+  }
+  for (const field of DEFAULT_AUDIO_FIELDS) {
+    const raw = fields[field];
+    if (!raw) continue;
+    const resolved = resolvePlayableSrc(String(raw));
+    if (resolved) return true;
+  }
+  return false;
+}
+
+function applyVisibility(query = {}) {
+  if (!FM_VISIBILITY_FIELD) return { ...query };
+  return { ...query, [FM_VISIBILITY_FIELD]: FM_VISIBILITY_VALUE };
+}
+
+function shouldFallbackVisibility(json) {
+  const code = json?.messages?.[0]?.code;
+  return code === '102' || code === '121';
+}
+
+function recordIsVisible(fields = {}) {
+  if (!FM_VISIBILITY_FIELD) return true;
+  const raw = fields[FM_VISIBILITY_FIELD] ?? fields['Tape Files::Visibility'];
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (!value) return true;
+  return value === FM_VISIBILITY_VALUE_LC;
+}
+
+const DEFAULT_AUDIO_FIELDS = ['mp3', 'MP3'];
+const AUDIO_FIELD_CANDIDATES = ['mp3', 'MP3'];
+const ARTWORK_FIELD_CANDIDATES = ['Artwork::Picture', 'Artwork Picture', 'Picture'];
+
 const PUBLIC_PLAYLIST_LAYOUT = 'API_Album_Songs';
 const PLAYLIST_IMAGE_EXTS = ['.webp', '.jpg', '.jpeg', '.png', '.gif', '.svg'];
 const PLAYLIST_IMAGE_DIR = path.join(PUBLIC_DIR, 'img', 'Playlists');
 const playlistImageCache = new Map();
+
 let playlistsCache = { data: null, mtimeMs: 0 };
 const loggedPublicPlaylistFieldErrors = new Set();
 
@@ -654,14 +726,6 @@ function resolvePlayableSrc(raw) {
   if (/^https?:\/\//i.test(src)) return `/api/container?u=${encodeURIComponent(src)}`;
   if (src.startsWith('/')) return src;
   return `/api/container?u=${encodeURIComponent(src)}`;
-}
-
-function hasValidAudio(fields) {
-  if (!fields || typeof fields !== 'object') return false;
-  const audioInfo = pickFieldValueCaseInsensitive(fields, AUDIO_FIELD_CANDIDATES);
-  if (!audioInfo.value) return false;
-  const resolvedSrc = resolvePlayableSrc(audioInfo.value);
-  return resolvedSrc !== '';
 }
 
 function resolveArtworkSrc(raw) {
@@ -1417,7 +1481,7 @@ async function requireUser(req, res) {
   return user;
 }
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authLimiter, async (req, res) => {
   try {
     const emailRaw = req.body?.email;
     const passwordRaw = req.body?.password;
@@ -1453,7 +1517,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const emailRaw = req.body?.email;
     const passwordRaw = req.body?.password;
@@ -2364,7 +2428,7 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-app.get('/api/public-playlists', async (req, res) => {
+app.get('/api/public-playlists', expensiveLimiter, async (req, res) => {
   try {
     const nameParam = (req.query.name || '').toString().trim();
     const limitParam = Number.parseInt((req.query.limit || '100'), 10);
@@ -2622,7 +2686,7 @@ app.get('/api/container', async (req, res) => {
 });
 
 /* ========= Explore by decade ========= */
-app.get('/api/explore', async (req, res) => {
+app.get('/api/explore', expensiveLimiter, async (req, res) => {
   try {
     const start = parseInt((req.query.start || '0'), 10);
     const end = parseInt((req.query.end || '0'), 10);
@@ -2795,18 +2859,29 @@ app.get('/api/random-songs', async (req, res) => {
 
     // Get a random sample of records
     // FileMaker doesn't have a built-in random function, so we'll get a larger set and shuffle
-    // Fetch 15x for better artist diversity (8 songs = 120 records)
-    const fetchLimit = Math.min(150, count * 15); // Get 15x more records for diversity
+    // Fetch 6x for diversity; reduced to speed up FM query (8 songs ≈ 48 records)
+    const fetchLimit = Math.min(60, count * 4); // Reduced oversample for faster responses
 
     // Find all records with wildcard (gets any record)
-    const payload = {
-      query: [{ 'Album Title': '*' }], // Match any record with an album title
+    const baseQuery = { 'Album Title': '*' };
+    let queryWithVisibility = [applyVisibility(baseQuery)];
+    let r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
+      query: queryWithVisibility,
       limit: fetchLimit,
       offset: randomOffset
-    };
+    });
+    let json = await r.json().catch(() => ({}));
 
-    const r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
-    const json = await r.json().catch(() => ({}));
+    if (!r.ok && shouldFallbackVisibility(json)) {
+      console.warn('[random-songs] Visibility field not available; retrying without filter');
+      queryWithVisibility = [baseQuery];
+      r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
+        query: queryWithVisibility,
+        limit: fetchLimit,
+        offset: randomOffset
+      });
+      json = await r.json().catch(() => ({}));
+    }
 
     if (!r.ok) {
       const msg = json?.messages?.[0]?.message || 'FM error';
@@ -2814,14 +2889,33 @@ app.get('/api/random-songs', async (req, res) => {
       return res.status(500).json({ error: 'Random songs failed', status: r.status, detail: `${msg} (${code})` });
     }
 
-    const rawData = json?.response?.data || [];
+    let rawData = json?.response?.data || [];
+    let dataWithVisibility = rawData.filter(record => recordIsVisible(record.fieldData || {}));
 
-    // Filter to only include records with valid audio
-    const dataWithAudio = rawData.filter(record => hasValidAudio(record.fieldData || {}));
+    if (!dataWithVisibility.length) {
+      console.warn(`[random-songs] Empty batch at offset ${randomOffset}, retrying from start`);
+      const retryPayload = {
+        query: [applyVisibility({ 'Album Title': '*' })],
+        limit: fetchLimit,
+        offset: 1
+      };
+      const retryResponse = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, retryPayload);
+      const retryJson = await retryResponse.json().catch(() => ({}));
+      if (retryResponse.ok) {
+        rawData = retryJson?.response?.data || [];
+        dataWithVisibility = rawData.filter(record => recordIsVisible(record.fieldData || {}));
+      } else {
+        console.warn('[random-songs] Retry fetch failed', retryJson?.messages?.[0]);
+      }
+    }
+
+    if (!dataWithVisibility.length) {
+      return res.status(200).json({ ok: true, items: [], total: 0 });
+    }
 
     // Group by artist to maximize diversity
     const artistMap = new Map();
-    for (const record of dataWithAudio) {
+    for (const record of dataWithVisibility) {
       const fields = record.fieldData || {};
       const artist = fields['Album Artist'] || fields['Artist'] || fields['Tape Files::Album Artist'] || 'Unknown';
 
@@ -2861,22 +2955,35 @@ app.get('/api/random-songs', async (req, res) => {
 
       // Fetch another batch from a different random offset
       const additionalOffset = Math.floor(Math.random() * maxOffset) + 1;
-      const additionalPayload = {
-        query: [{ 'Album Title': '*' }],
+      const retryQueryBase = { 'Album Title': '*' };
+      let secondQueryUsesVisibility = Boolean(FM_VISIBILITY_FIELD);
+      let secondQueryPayload = {
+        query: [secondQueryUsesVisibility ? applyVisibility(retryQueryBase) : retryQueryBase],
         limit: fetchLimit,
         offset: additionalOffset
       };
 
-      const r2 = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, additionalPayload);
-      const json2 = await r2.json().catch(() => ({}));
+      let r2 = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, secondQueryPayload);
+      let json2 = await r2.json().catch(() => ({}));
+      if (!r2.ok && secondQueryUsesVisibility && shouldFallbackVisibility(json2)) {
+        console.warn('[random-songs] Visibility field not available for retry; retrying without filter');
+        secondQueryUsesVisibility = false;
+        secondQueryPayload = {
+          query: [retryQueryBase],
+          limit: fetchLimit,
+          offset: additionalOffset
+        };
+        r2 = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, secondQueryPayload);
+        json2 = await r2.json().catch(() => ({}));
+      }
 
       if (r2.ok) {
-        const additionalRawData = json2?.response?.data || [];
-        const additionalDataWithAudio = additionalRawData.filter(record => hasValidAudio(record.fieldData || {}));
-
-        // Add tracks from NEW artists only
+        let additionalRawData = json2?.response?.data || [];
+        if (secondQueryUsesVisibility) {
+          additionalRawData = additionalRawData.filter(record => recordIsVisible(record.fieldData || {}));
+        }
         const selectedIds = new Set(selected.map(s => s.recordId));
-        const shuffledTracks = additionalDataWithAudio.sort(() => Math.random() - 0.5);
+        const shuffledTracks = additionalRawData.sort(() => Math.random() - 0.5);
 
         for (const track of shuffledTracks) {
           if (selected.length >= count) break;
