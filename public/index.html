@@ -74,6 +74,9 @@
     .shared-playlist-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap;}
     .shared-playlist-actions .btn{min-width:140px;}
     .share-link-display{display:none !important;}
+    /* ======= RESPONSIVE DESIGN ======= */
+
+    /* Tablet & Small Desktop (600px - 900px) */
     @media (max-width:900px){
       .layout-grid{flex-direction:column;}
       .playlist-column{max-width:100%;order:initial;}
@@ -81,6 +84,135 @@
       .public-playlist-view{width:100%;max-width:none;}
       .public-featured-row{flex-direction:column;}
       .public-featured-row > .public-playlists{width:100%;max-width:none;}
+
+      /* Responsive album grid - 3 columns on tablets */
+      .albums{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));width:100%;justify-content:center;}
+
+      /* Stack search bar buttons vertically on smaller tablets */
+      .searchbar{grid-template-columns:1fr;gap:10px;}
+      .searchbar input{width:100%;}
+
+      /* Better modal sizing */
+      .modal{width:min(520px,90vw);max-height:70vh;}
+
+      /* Larger touch targets */
+      .btn,.searchbar button{min-height:44px;padding:12px 16px;font-size:15px;}
+      .card .play-button{padding:8px;font-size:12px;}
+
+      /* Header adjustments */
+      .header-main{flex-direction:column;gap:12px;}
+      .header-logo{max-height:80px;}
+      .explore-wrap{width:100%;justify-content:center;}
+      .auth-controls{justify-content:center;width:100%;}
+    }
+
+    /* Phone (< 600px) */
+    @media (max-width:600px){
+      /* Responsive album grid - 2 columns on phones */
+      .albums{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;width:100%;justify-content:center;}
+
+      /* Increase cover size slightly for better visibility */
+      :root{--cover-size:100px;}
+
+      /* Even larger touch targets for phones */
+      .btn,.searchbar button,.explore-buttons button{
+        min-height:48px;
+        padding:14px 18px;
+        font-size:16px;
+        min-width:auto;
+      }
+
+      /* Card buttons easier to tap */
+      .card .play-button{
+        padding:10px;
+        font-size:13px;
+        min-height:36px;
+      }
+
+      /* Full width modals on phone */
+      .modal,.info-modal,.share-modal{
+        width:95vw;
+        max-height:85vh;
+      }
+
+      /* Compact header */
+      header{padding:8px 12px;}
+      .header-logo{max-height:60px;}
+      .header-main{gap:10px;}
+
+      /* Stack search controls */
+      .searchbar{gap:8px;}
+      .searchbar button{width:100%;}
+
+      /* Explore panel full width */
+      .explore-panel{max-width:100%;width:100%;gap:12px;}
+      .explore-section{min-width:100%;}
+      .explore-buttons{gap:6px;}
+
+      /* Auth controls stacked */
+      .auth-controls{flex-direction:column;width:100%;gap:8px;}
+      .auth-controls .btn{width:100%;}
+
+      /* Playlist actions stacked */
+      .playlist-actions,.album-actions,.shared-playlist-actions,.playlist-footer-actions,.share-modal .actions,.export-modal .actions{
+        flex-direction:column;
+        gap:8px;
+      }
+      .playlist-actions .btn,.album-actions .btn,.shared-playlist-actions .btn,.playlist-footer-actions .btn,.share-modal .actions .btn{
+        width:100%;
+      }
+
+      /* Responsive track controls */
+      .controls{flex-wrap:wrap;justify-content:flex-start;}
+      .controls .btn{flex:1;min-width:80px;}
+
+      /* Seek bar smaller on mobile */
+      .seek{width:100%;max-width:200px;}
+
+      /* Now playing card adjustments */
+      .now-playing-controls{gap:6px;}
+      .now-playing-controls .btn{flex:1;}
+
+      /* Modal header responsive */
+      .modal header{flex-wrap:wrap;padding:10px 12px;}
+      .modal .cover-wrap{width:48px;height:48px;}
+      .modal h2{font-size:16px;}
+
+      /* Track list improvements */
+      .track{padding:10px;}
+      .track-top{flex-wrap:wrap;}
+
+      /* Public playlist items bigger touch targets */
+      .public-playlist-item button{padding:12px 14px;font-size:15px;}
+      .public-playlist-thumb{width:48px;height:48px;}
+
+      /* Playlist pills easier to tap */
+      .playlist-pill{padding:12px 14px;}
+
+      /* Single album view optimized */
+      .albums.single-album .cover-wrap{width:220px;height:220px;}
+
+      /* Main content padding */
+      main{padding:0 10px 30px;}
+    }
+
+    /* Very small phones (< 400px) */
+    @media (max-width:400px){
+      /* Single column layout for tiny screens */
+      .albums{grid-template-columns:1fr;max-width:280px;margin:0 auto;}
+
+      /* Larger cards on single column */
+      :root{--cover-size:120px;}
+
+      /* Compact spacing */
+      .header-main{gap:8px;}
+      .layout-grid{gap:12px;}
+
+      /* Minimum modal size */
+      .modal,.info-modal,.share-modal{width:98vw;}
+
+      /* Compact buttons */
+      .btn,.searchbar button{font-size:15px;padding:12px 14px;}
     }
     .albums{display:grid;grid-template-columns:repeat(4,150px);grid-template-rows:auto auto;gap:14px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
     .albums.single-album{display:flex;flex-direction:column;align-items:center;gap:24px;}
@@ -148,6 +280,19 @@
     .playlists-panel[hidden]{display:none;}
     .playlists-header{display:flex;align-items:center;gap:12px;justify-content:space-between;}
     .playlists-header h2{margin:0;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);}
+
+    /* Collapsible header styles */
+    .collapsible-header{cursor:pointer;user-select:none;transition:background .15s ease;}
+    .collapsible-header:hover{background:rgba(255,255,255,0.03);border-radius:8px;}
+    .collapse-toggle{background:none;border:none;color:var(--muted);font-size:12px;padding:4px;cursor:pointer;transition:transform .2s ease;min-width:auto;box-shadow:none !important;line-height:1;}
+    .collapse-toggle:hover{color:var(--fg);transform:none !important;}
+    .playlists-panel.collapsed .collapse-toggle{transform:rotate(-90deg);}
+    .public-playlists.collapsed .collapse-toggle{transform:rotate(-90deg);}
+
+    /* Collapsed content */
+    .playlists-content{display:flex;flex-direction:column;gap:10px;overflow:hidden;transition:max-height 0.3s ease, opacity 0.3s ease;max-height:2000px;opacity:1;}
+    .playlists-panel.collapsed .playlists-content{max-height:0;opacity:0;margin:0;padding:0;}
+    .public-playlists.collapsed .playlists-content{max-height:0;opacity:0;margin:0;padding:0;}
     .playlists-list{display:flex;flex-direction:column;gap:8px;}
     .playlist-pill{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#1b1c20;color:#f5f5f5;cursor:pointer;min-width:0;transition:transform .15s ease,box-shadow .15s ease;font-size:12px;}
     .playlist-pill:hover{transform:translateY(-1px);box-shadow:0 10px 20px rgba(0,0,0,.25);}
@@ -179,28 +324,28 @@
     .playlist-tracks.only-current .playlist-empty{display:none;}
     .playlist-tracks.only-current .now-playing-placeholder{display:none;}
 
-    .now-playing{width:100%;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:flex;flex-direction:column;gap:6px;box-sizing:border-box;}
+    .now-playing{width:100%;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:flex;flex-direction:column;gap:8px;box-sizing:border-box;}
     .now-playing[hidden]{display:none !important;}
     .now-playing-header{display:flex;align-items:center;justify-content:space-between;gap:4px;}
-    .now-playing-header .label{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
-    .now-playing-body{display:flex;align-items:center;gap:6px;}
-    .now-playing-thumb{width:28px;height:28px;border-radius:5px;overflow:hidden;flex-shrink:0;background:#0e1014;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--muted);}
+    .now-playing-header .label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+    .now-playing-body{display:flex;align-items:center;gap:8px;}
+    .now-playing-thumb{width:40px;height:40px;border-radius:6px;overflow:hidden;flex-shrink:0;background:#0e1014;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);}
     .now-playing-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
-    .now-playing-meta{display:flex;flex-direction:column;gap:1px;min-width:0;}
-    .now-playing-title{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .now-playing-sub{font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .now-playing-source{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .now-playing-controls{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
-    .now-playing-meta-buttons{display:flex;flex-wrap:wrap;gap:3px;}
-    .now-playing-meta-buttons .btn.small{padding:3px 5px;font-size:9px;min-width:auto;}
-    .now-playing-meta-list{display:flex;flex-direction:column;gap:2px;font-size:9px;}
+    .now-playing-meta{display:flex;flex-direction:column;gap:3px;min-width:0;}
+    .now-playing-title{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .now-playing-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .now-playing-source{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .now-playing-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+    .now-playing-meta-buttons{display:flex;flex-wrap:wrap;gap:4px;}
+    .now-playing-meta-buttons .btn.small{padding:4px 6px;font-size:11px;min-width:auto;}
+    .now-playing-meta-list{display:flex;flex-direction:column;gap:2px;font-size:11px;}
     .now-playing-meta-line{color:var(--muted);}
     .now-playing-meta-line strong{color:var(--fg);font-weight:600;}
-    .now-playing-status{font-size:9px;color:var(--muted);}
-    .now-playing-progress{width:100%;height:2px;background:#262830;border-radius:2px;overflow:hidden;position:relative;margin-top:3px;}
+    .now-playing-status{font-size:11px;color:var(--muted);}
+    .now-playing-progress{width:100%;height:3px;background:#262830;border-radius:2px;overflow:hidden;position:relative;margin-top:4px;}
     .now-playing-progress .fill{position:absolute;inset:0;background:linear-gradient(90deg,var(--accent),#6bd3ff);width:0%;border-radius:2px;transition:width .1s linear;}
-    .now-playing-controls .btn.small{padding:3px 6px;font-size:10px;min-width:auto;}
-    #nowPlayingCollapse{padding:2px 4px;font-size:8px;min-width:auto;}
+    .now-playing-controls .btn.small{padding:5px 8px;font-size:12px;min-width:auto;}
+    #nowPlayingCollapse{padding:4px 6px;font-size:10px;min-width:auto;}
     .now-playing.collapsed .now-playing-body,
     .now-playing.collapsed .now-playing-controls{display:none;}
 
@@ -413,25 +558,31 @@
             <div id="nowPlayingProgressFill" class="fill"></div>
           </div>
         </section>
-        <section id="playlistsPanel" class="playlists-panel" hidden>
-          <div class="playlists-header">
+        <section id="playlistsPanel" class="playlists-panel collapsed" hidden>
+          <div class="playlists-header collapsible-header" id="myPlaylistsHeader">
             <h2>My Playlists</h2>
             <span id="playlistsStatus" class="muted"></span>
+            <button type="button" class="collapse-toggle" aria-label="Expand">▼</button>
           </div>
-          <div id="playlistsList" class="playlists-list"></div>
-          <form id="playlistCreateForm" class="playlist-create" autocomplete="off">
-            <input id="playlistNameInput" type="text" placeholder="Create new playlist" maxlength="80" />
-            <button type="submit" class="btn small">Create</button>
-          </form>
-          <button id="importPlaylistButton" type="button" class="btn small" style="width:100%;margin-top:8px;">Import Playlist</button>
-          <div id="playlistsEmpty" class="playlist-empty" hidden>No playlists yet. Create one to start saving tracks.</div>
+          <div class="playlists-content" id="myPlaylistsContent">
+            <div id="playlistsList" class="playlists-list"></div>
+            <form id="playlistCreateForm" class="playlist-create" autocomplete="off">
+              <input id="playlistNameInput" type="text" placeholder="Create new playlist" maxlength="80" />
+              <button type="submit" class="btn small">Create</button>
+            </form>
+            <button id="importPlaylistButton" type="button" class="btn small" style="width:100%;margin-top:8px;">Import Playlist</button>
+            <div id="playlistsEmpty" class="playlist-empty" hidden>No playlists yet. Create one to start saving tracks.</div>
+          </div>
         </section>
-        <section id="publicPlaylistsPanel" class="public-playlists" hidden>
-          <div class="playlists-header">
+        <section id="publicPlaylistsPanel" class="public-playlists collapsed" hidden>
+          <div class="playlists-header collapsible-header" id="featuredPlaylistsHeader">
             <h2>Featured Playlists</h2>
+            <button type="button" class="collapse-toggle" aria-label="Expand">▼</button>
           </div>
-          <ul id="publicPlaylistsList" class="public-playlists-list"></ul>
-          <div id="publicPlaylistsEmpty" class="playlist-empty" hidden>No curated playlists yet.</div>
+          <div class="playlists-content" id="featuredPlaylistsContent">
+            <ul id="publicPlaylistsList" class="public-playlists-list"></ul>
+            <div id="publicPlaylistsEmpty" class="playlist-empty" hidden>No curated playlists yet.</div>
+          </div>
         </section>
         <section id="playlistTracksSection" class="playlist-tracks" hidden>
           <div class="playlists-header">
@@ -445,6 +596,7 @@
           <ul id="playlistTracksList" class="tracks"></ul>
           <div id="playlistTracksEmpty" class="playlist-empty" hidden>No tracks in this playlist yet.</div>
           <div class="playlist-footer-actions">
+            <button id="sharePlaylistButton" type="button" class="btn small">Share</button>
             <button id="exportPlaylistButton" type="button" class="btn small">Export</button>
           </div>
         </section>
@@ -555,9 +707,12 @@
   <div id="shareModal" class="share-modal-overlay">
     <div class="share-modal" role="dialog" aria-modal="true" aria-labelledby="shareModalTitle">
       <h3 id="shareModalTitle">Share Playlist</h3>
-      <p>Copy this link to share your playlist:</p>
+      <p>Share your playlist with friends:</p>
       <input id="shareLinkInput" type="text" readonly />
+      <div id="shareFeedback" style="color:var(--accent);font-size:13px;margin:8px 0;min-height:20px;text-align:center;"></div>
       <div class="actions">
+        <button type="button" id="shareCopyBtn" class="btn small">📋 Copy Link</button>
+        <button type="button" id="shareEmailBtn" class="btn small">📧 Email</button>
         <button type="button" id="shareModalClose" class="btn small">Close</button>
       </div>
     </div>
@@ -633,6 +788,82 @@
           })
           .catch(err => console.log('Failed to preload featured playlists'));
       }, 2000); // Wait 2 seconds after page load before preloading
+
+      // Enhanced playlist sharing functionality
+      const shareCopyBtn = document.getElementById('shareCopyBtn');
+      const shareEmailBtn = document.getElementById('shareEmailBtn');
+      const shareLinkInput = document.getElementById('shareLinkInput');
+      const shareFeedback = document.getElementById('shareFeedback');
+
+      // Copy to clipboard with feedback
+      if (shareCopyBtn && shareLinkInput && shareFeedback) {
+        shareCopyBtn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(shareLinkInput.value);
+            shareFeedback.textContent = '✓ Link copied to clipboard!';
+            shareFeedback.style.color = 'var(--accent)';
+            setTimeout(() => {
+              shareFeedback.textContent = '';
+            }, 3000);
+          } catch (err) {
+            // Fallback for older browsers
+            shareLinkInput.select();
+            document.execCommand('copy');
+            shareFeedback.textContent = '✓ Link copied!';
+            shareFeedback.style.color = 'var(--accent)';
+            setTimeout(() => {
+              shareFeedback.textContent = '';
+            }, 3000);
+          }
+        });
+      }
+
+      // Share via email
+      if (shareEmailBtn && shareLinkInput) {
+        shareEmailBtn.addEventListener('click', () => {
+          const shareLink = shareLinkInput.value;
+          const playlistName = document.getElementById('shareModalTitle')?.textContent || 'Playlist';
+
+          const subject = encodeURIComponent(`Check out this ${playlistName} on MASS`);
+          const body = encodeURIComponent(
+            `I wanted to share this playlist with you!\n\n` +
+            `${playlistName}\n\n` +
+            `Click here to listen:\n${shareLink}\n\n` +
+            `Enjoy the music!`
+          );
+
+          const mailtoLink = `mailto:?subject=${subject}&body=${body}`;
+          window.location.href = mailtoLink;
+
+          if (shareFeedback) {
+            shareFeedback.textContent = '📧 Opening your email app...';
+            shareFeedback.style.color = 'var(--muted)';
+            setTimeout(() => {
+              shareFeedback.textContent = '';
+            }, 3000);
+          }
+        });
+      }
+
+      // Collapsible playlist sections
+      const myPlaylistsHeader = document.getElementById('myPlaylistsHeader');
+      const featuredPlaylistsHeader = document.getElementById('featuredPlaylistsHeader');
+      const playlistsPanel = document.getElementById('playlistsPanel');
+      const publicPlaylistsPanel = document.getElementById('publicPlaylistsPanel');
+
+      // Toggle My Playlists - click anywhere on header to collapse/expand
+      if (myPlaylistsHeader && playlistsPanel) {
+        myPlaylistsHeader.addEventListener('click', (e) => {
+          playlistsPanel.classList.toggle('collapsed');
+        });
+      }
+
+      // Toggle Featured Playlists - click anywhere on header to collapse/expand
+      if (featuredPlaylistsHeader && publicPlaylistsPanel) {
+        featuredPlaylistsHeader.addEventListener('click', (e) => {
+          publicPlaylistsPanel.classList.toggle('collapsed');
+        });
+      }
     });
   </script>
   <script src="/app.min.js?v=14" defer></script></body>
