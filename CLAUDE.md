@@ -73,6 +73,16 @@ AUTH_COOKIE_SECURE=false  # set to true in production
 **worker.js** - Background worker process (currently a placeholder with heartbeat logging)
 
 **public/index.html** - Single-page application frontend (vanilla JS, no framework)
+- Responsive design with mobile/tablet breakpoints (900px, 600px, 400px)
+- Touch-friendly controls (48px minimum touch targets for phones)
+- Collapsible playlist sections (My Playlists, Featured Playlists)
+- Email sharing integration via mailto: links
+- Music note emoji favicon (🎵)
+
+**public/app.min.js** - Frontend JavaScript (minified)
+- Auto-advance logic for all playlist types
+- Container URL refresh during auto-advance for user playlists
+- Audio validation and caching
 
 **data/** - JSON file storage:
 - `playlists.json` - User-created playlists
@@ -226,6 +236,32 @@ The system tracks detailed playback analytics in FileMaker's Stream_Events layou
 - `loadPlaylists()` strips email addresses when loading
 - `savePlaylists()` strips email addresses before saving
 - `sanitizePlaylistForShare()` only includes track metadata, timestamps, and shareId
+
+### Playlist Auto-Advance
+
+The system automatically advances to the next track when a track finishes playing.
+
+**Implementation** (app.min.js:5573-5670):
+- Works for all playlist types: user playlists, public playlists, and shared playlists
+- Sets `currentMode` appropriately:
+  - `'user-playlist'` for user-created playlists (app.min.js:922)
+  - `'public-playlist'` for Featured playlists (app.min.js:3594)
+  - `'shared-playlist'` for shared playlists (app.min.js:4389)
+- Auto-advance enabled when `currentMode !== 'songs'` (random songs mode)
+
+**Container URL Refresh**:
+- FileMaker container URLs can expire (401 Unauthorized)
+- During auto-advance, user and shared playlist tracks automatically refresh their container URLs (app.min.js:5621-5644, 5677-5699)
+- Manual clicks also refresh URLs:
+  - User playlists: app.min.js:1125-1149
+  - Shared playlists: app.min.js:4155-4194
+- Uses `refreshTrackContainerSource()` with 30-minute cache
+- Prevents playback failures from expired URLs
+
+**Track Discovery**:
+1. Attempts sibling traversal via `findNextPlayableRow(currentRow)`
+2. Fallback: Searches appropriate container based on playlist type
+3. Skips tracks without valid audio sources
 
 ## Code Patterns & Conventions
 
