@@ -41,5 +41,8 @@
   "bugs": {
     "url": "https://github.com/IanOsrin/MASS/issues"
   },
-  "homepage": "https://github.com/IanOsrin/MASS#readme"
+  "homepage": "https://github.com/IanOsrin/MASS#readme",
+  "devDependencies": {
+    "sharp": "^0.34.4"
+  }
 }
