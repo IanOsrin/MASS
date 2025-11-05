@@ -583,6 +583,7 @@
         </div>
         <div id="authControls" class="auth-controls">
           <span id="userBadge" class="badge" hidden></span>
+          <button id="installButton" type="button" class="btn small btn-accent" hidden title="Install MASS as an app">📱 Install App</button>
           <button id="loginTrigger" type="button" class="btn small" title="Log in to save playlists and share music">Log in</button>
           <button id="signupTrigger" type="button" class="btn small" title="Subscribe to save playlists and share music">Subscribe</button>
           <button id="logoutButton" type="button" class="btn small" hidden title="Log out of your account">Log out</button>
@@ -861,6 +862,71 @@
           });
       });
     }
+
+    // PWA Install Button Handler
+    let deferredPrompt;
+    const installButton = document.getElementById('installButton');
+
+    // Detect if app is already installed
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+      // App is already installed, don't show install button
+      console.log('[PWA] App is already installed');
+    } else {
+      // Android: Show install button when prompt is available
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        if (installButton) {
+          installButton.hidden = false;
+          console.log('[PWA] Install prompt available (Android)');
+        }
+      });
+
+      // iOS: Show install button with instructions
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+
+      if (isIOS && isSafari && installButton) {
+        installButton.hidden = false;
+        console.log('[PWA] iOS Safari detected, showing install button');
+      }
+    }
+
+    // Handle install button click
+    if (installButton) {
+      installButton.addEventListener('click', async () => {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+        if (deferredPrompt) {
+          // Android: Use native install prompt
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          console.log(`[PWA] User ${outcome} the install prompt`);
+          if (outcome === 'accepted') {
+            installButton.hidden = true;
+          }
+          deferredPrompt = null;
+        } else if (isIOS) {
+          // iOS: Show instructions
+          const message =
+            `To install MASS on your iPhone:\n\n` +
+            `1. Tap the Share button (📤) at the bottom\n` +
+            `2. Scroll down and tap "Add to Home Screen"\n` +
+            `3. Tap "Add" in the top right\n\n` +
+            `The app will appear on your home screen!`;
+          alert(message);
+        } else {
+          // Fallback for other browsers
+          alert('To install MASS:\n\nLook for the install option in your browser menu, or visit this site on a mobile device.');
+        }
+      });
+    }
+
+    // Track successful install
+    window.addEventListener('appinstalled', () => {
+      console.log('[PWA] App was installed successfully');
+      if (installButton) installButton.hidden = true;
+    });
   </script>
 
   <script>
