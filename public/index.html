@@ -109,25 +109,26 @@
 
     /* Phone (< 600px) */
     @media (max-width:600px){
-      /* Responsive album grid - 2 columns on phones */
-      .albums{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;width:100%;justify-content:center;}
+      /* Responsive album grid - 3 columns on phones for more content */
+      .albums{grid-template-columns:repeat(3,1fr);gap:8px;width:100%;justify-content:center;}
 
-      /* Increase cover size slightly for better visibility */
-      :root{--cover-size:100px;}
+      /* Smaller cover size to fit 3 columns */
+      :root{--cover-size:85px;}
 
-      /* Even larger touch targets for phones */
+      /* More compact buttons */
       .btn,.searchbar button,.explore-buttons button{
-        min-height:48px;
-        padding:14px 18px;
-        font-size:16px;
+        min-height:40px;
+        padding:8px 12px;
+        font-size:14px;
         min-width:auto;
       }
 
-      /* Card buttons easier to tap */
+      /* Card buttons compact but tappable */
+      .card{padding:6px;gap:3px;min-height:auto;}
       .card .play-button{
-        padding:10px;
-        font-size:13px;
-        min-height:36px;
+        padding:6px;
+        font-size:11px;
+        min-height:32px;
       }
 
       /* Full width modals on phone */
@@ -136,65 +137,83 @@
         max-height:85vh;
       }
 
-      /* Compact header */
-      header{padding:8px 12px;}
-      .header-logo{max-height:60px;}
-      .header-main{gap:10px;}
+      /* Very compact header to maximize content area */
+      header{padding:6px 10px;}
+      .header-logo{max-height:48px;}
+      .header-main{gap:6px;}
 
-      /* Stack search controls */
-      .searchbar{gap:8px;}
-      .searchbar button{width:100%;}
+      /* Stack search controls compactly */
+      .searchbar{gap:6px;}
+      .searchbar button{width:100%;padding:6px 10px;font-size:13px;min-height:36px;}
+      .searchbar input{padding:8px 10px;font-size:14px;}
 
-      /* Explore panel full width */
-      .explore-panel{max-width:100%;width:100%;gap:12px;}
+      /* Explore panel full width and compact */
+      .explore-panel{max-width:100%;width:100%;gap:8px;}
       .explore-section{min-width:100%;}
-      .explore-buttons{gap:6px;}
+      .explore-buttons{gap:4px;flex-wrap:wrap;}
+      .explore-buttons button{padding:6px 10px;font-size:13px;min-height:36px;}
 
-      /* Auth controls stacked */
-      .auth-controls{flex-direction:column;width:100%;gap:8px;}
-      .auth-controls .btn{width:100%;}
+      /* Auth controls compact */
+      .auth-controls{flex-direction:row;width:100%;gap:6px;flex-wrap:wrap;}
+      .auth-controls .btn{flex:1;min-width:80px;padding:6px 10px;font-size:13px;min-height:36px;}
 
-      /* Playlist actions stacked */
-      .playlist-actions,.album-actions,.shared-playlist-actions,.playlist-footer-actions,.share-modal .actions,.export-modal .actions{
+      /* Playlist actions compact */
+      .playlist-actions,.album-actions,.shared-playlist-actions,.playlist-footer-actions{
+        gap:6px;
+        flex-wrap:wrap;
+      }
+      .playlist-actions .btn,.album-actions .btn,.shared-playlist-actions .btn,.playlist-footer-actions .btn{
+        padding:6px 10px;
+        font-size:13px;
+        min-height:36px;
+      }
+      .share-modal .actions,.export-modal .actions{
         flex-direction:column;
         gap:8px;
       }
-      .playlist-actions .btn,.album-actions .btn,.shared-playlist-actions .btn,.playlist-footer-actions .btn,.share-modal .actions .btn{
-        width:100%;
-      }
+      .share-modal .actions .btn{width:100%;}
 
       /* Responsive track controls */
-      .controls{flex-wrap:wrap;justify-content:flex-start;}
-      .controls .btn{flex:1;min-width:80px;}
+      .controls{flex-wrap:wrap;justify-content:flex-start;gap:4px;}
+      .controls .btn{flex:1;min-width:70px;padding:6px 8px;font-size:12px;}
 
       /* Seek bar smaller on mobile */
-      .seek{width:100%;max-width:200px;}
+      .seek{width:100%;max-width:180px;}
 
-      /* Now playing card adjustments */
-      .now-playing-controls{gap:6px;}
-      .now-playing-controls .btn{flex:1;}
+      /* Now playing card compact */
+      .now-playing{padding:10px;gap:6px;}
+      .now-playing-controls{gap:4px;}
+      .now-playing-controls .btn{flex:1;padding:4px 6px;font-size:11px;}
 
       /* Modal header responsive */
-      .modal header{flex-wrap:wrap;padding:10px 12px;}
-      .modal .cover-wrap{width:48px;height:48px;}
-      .modal h2{font-size:16px;}
+      .modal header{flex-wrap:wrap;padding:8px 10px;}
+      .modal .cover-wrap{width:40px;height:40px;}
+      .modal h2{font-size:15px;}
 
       /* Track list improvements */
-      .track{padding:10px;}
+      .track{padding:8px;}
       .track-top{flex-wrap:wrap;}
 
       /* Public playlist items bigger touch targets */
-      .public-playlist-item button{padding:12px 14px;font-size:15px;}
-      .public-playlist-thumb{width:48px;height:48px;}
+      .public-playlist-item button{padding:10px 12px;font-size:14px;}
+      .public-playlist-thumb{width:40px;height:40px;}
 
       /* Playlist pills easier to tap */
-      .playlist-pill{padding:12px 14px;}
+      .playlist-pill{padding:10px 12px;}
 
       /* Single album view optimized */
-      .albums.single-album .cover-wrap{width:220px;height:220px;}
+      .albums.single-album .cover-wrap{width:200px;height:200px;}
 
-      /* Main content padding */
-      main{padding:0 10px 30px;}
+      /* Minimal main content padding for maximum space */
+      main{padding:0 8px 20px;}
+
+      /* Reduce layout gap */
+      .layout-grid{gap:10px;}
+
+      /* Compact pager */
+      .pager{padding:8px 0;gap:8px;}
+      .pager button{padding:6px 12px;font-size:13px;}
+      .badge{padding:4px 8px;font-size:12px;}
     }
 
     /* Very small phones (< 400px) */
@@ -867,5 +886,5 @@
       }
     });
   </script>
-  <script src="/app.min.js?v=22" defer></script></body>
+  <script src="/app.min.js?v=23" defer></script></body>
 </html>
