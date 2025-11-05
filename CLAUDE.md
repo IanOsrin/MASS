@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MASS (Music Album Streaming System) is a Node.js music streaming application that integrates with FileMaker's Data API. It provides music search, playlist management, audio streaming, and playback event tracking.
 
-**Tech Stack**: Node.js (ESM), Express 5, FileMaker Data API, JWT authentication, undici for HTTP
+**Tech Stack**: Node.js (ESM), Express 5, FileMaker Data API, JWT authentication, undici for HTTP, PWA-enabled
+
+**PWA Support**: MASS is a Progressive Web App, allowing users to install it on their mobile devices directly from their browser. The PWA features are purely additive - the web app works identically in browsers while offering an optional install experience.
 
 ## Development Commands
 
@@ -25,6 +27,25 @@ SMOKE_BASE_URL=http://localhost:3000 npm run smoke
 
 # Remove email addresses from playlists (privacy migration)
 node scripts/remove-emails-from-playlists.js
+
+# Generate PWA icons (requires sharp: npm install --save-dev sharp)
+npm run generate-icons
+```
+
+## PWA (Progressive Web App)
+
+MASS can be installed as a Progressive Web App on mobile devices. See [PWA-SETUP.md](PWA-SETUP.md) for complete setup instructions.
+
+**Quick Start:**
+1. Install sharp: `npm install --save-dev sharp`
+2. Generate icons: `npm run generate-icons`
+3. Deploy with HTTPS (required for PWA in production)
+4. Users can "Add to Home Screen" from their mobile browser
+
+**Files:**
+- `public/manifest.json` - PWA configuration
+- `public/sw.js` - Service worker for caching
+- `scripts/generate-pwa-icons.js` - Icon generator
 ```
 
 ## Environment Configuration
@@ -197,7 +218,7 @@ This ensures users only see content they can actually stream.
 
 **Guest User Engagement**:
 - Guest users can browse freely without an account
-- After 10 minutes of browsing, a friendly prompt encourages signup/login (app.min.js:6186-6244)
+- After 10 minutes of browsing, a friendly prompt encourages subscription/login (app.min.js:6186-6244)
 - Prompt highlights benefits: save playlists, share with friends, never lose collection
 - Shows only once per session
 - Timer automatically cancels if user logs in before 10 minutes
@@ -205,9 +226,9 @@ This ensures users only see content they can actually stream.
 - **Humorous Ads for Guest Users** (index.html:624-662):
   - When not logged in, the playlist sidebar shows 4 funny music-themed advertisements
   - Ads are intentionally humorous and self-aware (e.g., "Learn Guitar in 3 Minutes!" → "Just kidding. It takes years.")
-  - Includes disclaimer encouraging account creation to remove ads
+  - Includes disclaimer encouraging subscription to remove ads
   - Automatically hidden when user logs in
-  - Provides engaging content while subtly encouraging signup
+  - Provides engaging content while subtly encouraging subscription
 
 ### Stream Event Tracking
 
