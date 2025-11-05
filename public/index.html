@@ -244,6 +244,34 @@
     .card.pending-audio{opacity:0.8;}
     .card.no-audio{display:none !important;}
 
+    /* Advertisement cards */
+    .ad-container{margin-bottom:14px;}
+    .ad-card{
+      background:linear-gradient(135deg,var(--card),rgba(98,245,169,0.05));
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+      text-align:center;
+    }
+    .ad-emoji{font-size:36px;margin-bottom:8px;}
+    .ad-card h3{
+      font-size:15px;
+      font-weight:700;
+      color:var(--fg);
+      margin:0 0 8px 0;
+    }
+    .ad-card p{
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.4;
+      margin:0 0 12px 0;
+    }
+    .ad-card .btn{
+      opacity:0.6;
+      cursor:not-allowed;
+    }
+    .ad-disclaimer{padding:12px 8px;}
+
     /* Cover: small, centered square; never bleeds */
     .cover-wrap{position:relative;width:var(--cover-size);height:var(--cover-size);border-radius:6px;overflow:hidden;border:1px solid var(--border);background:#101215;margin:0 auto;cursor:pointer;transition:transform 0.15s ease,box-shadow 0.15s ease;}
     .cover-wrap:hover{transform:scale(1.05);box-shadow:0 4px 12px rgba(0,0,0,0.4);}
@@ -621,6 +649,45 @@
           </div>
         </section>
       </aside>
+      <aside id="adsColumn" class="playlist-column" hidden>
+        <div class="ad-container">
+          <div class="ad-card">
+            <div class="ad-emoji">🎸</div>
+            <h3>Learn Guitar in 3 Minutes!</h3>
+            <p>Just kidding. It takes years. But we can teach you to <em>listen</em> to guitar in 3 seconds!</p>
+            <button class="btn small" disabled>Already Listening</button>
+          </div>
+        </div>
+        <div class="ad-container">
+          <div class="ad-card">
+            <div class="ad-emoji">🎹</div>
+            <h3>Piano Lessons From Professionals</h3>
+            <p>Professional procrastinators, that is. Still more productive than us though. 🤷</p>
+            <button class="btn small" disabled>Not Interested</button>
+          </div>
+        </div>
+        <div class="ad-container">
+          <div class="ad-card">
+            <div class="ad-emoji">🎤</div>
+            <h3>Sing Like Nobody's Listening</h3>
+            <p>Spoiler: They ARE listening. Your neighbors called. They want their peace back.</p>
+            <button class="btn small" disabled>Soundproofing?</button>
+          </div>
+        </div>
+        <div class="ad-container">
+          <div class="ad-card">
+            <div class="ad-emoji">💿</div>
+            <h3>Premium Vinyl Collection</h3>
+            <p>Why stream music when you can wrestle with a turntable and pretend it sounds "warmer"?</p>
+            <button class="btn small" disabled>Too Digital</button>
+          </div>
+        </div>
+        <div class="ad-disclaimer">
+          <p style="font-size:11px;color:var(--muted);text-align:center;margin-top:12px;">
+            These are joke ads. Create an account to remove them and save your favorite tracks! →
+          </p>
+        </div>
+      </aside>
       <section class="content-column">
         <div class="toolbar">
           <div id="count" class="count"></div>
@@ -886,5 +953,5 @@
       }
     });
   </script>
-  <script src="/app.min.js?v=23" defer></script></body>
+  <script src="/app.min.js?v=25" defer></script></body>
 </html>

@@ -195,6 +195,20 @@ This ensures users only see content they can actually stream.
 
 **Protected Routes**: Check user with `authenticateRequest()` and return 401 if null.
 
+**Guest User Engagement**:
+- Guest users can browse freely without an account
+- After 10 minutes of browsing, a friendly prompt encourages signup/login (app.min.js:6186-6244)
+- Prompt highlights benefits: save playlists, share with friends, never lose collection
+- Shows only once per session
+- Timer automatically cancels if user logs in before 10 minutes
+- Non-intrusive - users can dismiss and continue browsing
+- **Humorous Ads for Guest Users** (index.html:624-662):
+  - When not logged in, the playlist sidebar shows 4 funny music-themed advertisements
+  - Ads are intentionally humorous and self-aware (e.g., "Learn Guitar in 3 Minutes!" → "Just kidding. It takes years.")
+  - Includes disclaimer encouraging account creation to remove ads
+  - Automatically hidden when user logs in
+  - Provides engaging content while subtly encouraging signup
+
 ### Stream Event Tracking
 
 The system tracks detailed playback analytics in FileMaker's Stream_Events layout for usage statistics.
