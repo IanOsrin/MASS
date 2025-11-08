@@ -116,9 +116,12 @@ app.use(compression()); // Enable gzip compression
 app.use(express.json());
 
 // Rate limiting configuration
+// More relaxed rate limits for development
+const isDevelopment = NODE_ENV === 'development' || HOST === 'localhost' || HOST === '127.0.0.1';
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per window per IP
+  max: isDevelopment ? 1000 : 100, // Much higher limit in development
   message: { error: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -130,7 +133,7 @@ const apiLimiter = rateLimit({
 
 const expensiveLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 20, // 20 requests per window
+  max: isDevelopment ? 500 : 20, // Much higher limit in development for testing
   message: { error: 'Rate limit exceeded for this endpoint' }
 });
 
@@ -4319,4 +4322,8 @@ if (!randomSongPersistedCache.items.length) {
 
 app.listen(PORT, HOST, () => {
   console.log(`[MASS] listening on http://${HOST}:${PORT}`);
+  console.log(`[MASS] Rate limits: ${isDevelopment ? 'DEVELOPMENT (relaxed)' : 'PRODUCTION (strict)'}`);
+  if (isDevelopment) {
+    console.log(`[MASS] - API: 1000 req/15min, Explore: 500 req/5min`);
+  }
 });
