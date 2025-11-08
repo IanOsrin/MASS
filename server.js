@@ -3104,6 +3104,9 @@ app.get('/api/container', async (req, res) => {
 /* ========= Explore by decade ========= */
 app.get('/api/explore', expensiveLimiter, async (req, res) => {
   try {
+    // Override global API cache-control - explore returns random data
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+
     const start = parseInt((req.query.start || '0'), 10);
     const end = parseInt((req.query.end || '0'), 10);
     const reqLimit = Math.max(1, Math.min(300, parseInt((req.query.limit || '50'), 10)));
