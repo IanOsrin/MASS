@@ -3123,6 +3123,8 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
       }
     } else {
       console.log(`[CACHE BYPASS] explore: ${start}-${end} (refresh requested)`);
+      // Clear cache for this decade to ensure maximum variety
+      exploreCache.delete(cacheKey);
     }
 
     const FIELDS = [
@@ -3248,7 +3250,10 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
     console.log(`[EXPLORE] ${start}-${end} using ${chosenField}: total ${foundTotal}, offset ${randStart}, returned ${items.length} (filtered from ${final.data?.length || 0})`);
 
     const response = { ok: true, items, total: foundTotal, offset: randStart - 1, limit: windowSize, field: chosenField };
-    exploreCache.set(cacheKey, response);
+    // Only cache initial loads, not refreshes (to preserve variety)
+    if (!bypassCache) {
+      exploreCache.set(cacheKey, response);
+    }
     return res.json(response);
   } catch (err) {
     const detail = err?.message || String(err);
