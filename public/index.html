@@ -748,33 +748,21 @@
     function isUserLoggedIn() {
       const userBadge = document.getElementById('userBadge');
       const isLoggedIn = userBadge && !userBadge.hidden;
-      console.log('[Subscription Prompt] User logged in:', isLoggedIn);
       return isLoggedIn;
     }
 
     function showSubscriptionPrompt() {
-      console.log('[Subscription Prompt] Attempting to show prompt...');
-      console.log('[Subscription Prompt] Already shown?', promptShown);
-      console.log('[Subscription Prompt] User logged in?', isUserLoggedIn());
-
-      if (promptShown) {
-        console.log('[Subscription Prompt] Already shown, skipping');
-        return;
-      }
-
-      if (isUserLoggedIn()) {
-        console.log('[Subscription Prompt] User is logged in, skipping');
-        return;
-      }
+      if (promptShown) return;
+      if (isUserLoggedIn()) return;
 
       promptShown = true;
 
-      // Create and show toast notification
+      // Create persistent toast notification
       const toast = document.createElement('div');
       toast.className = 'subscription-toast';
       toast.innerHTML = `
         <button class="subscription-toast-close" aria-label="Close">✕</button>
-        <div style="padding-right:20px;">
+        <div style="padding-right:20px;cursor:pointer;" class="subscription-toast-body">
           🎵 Enjoying the music?<br/>
           <span style="font-weight:400;font-size:13px;opacity:0.9;">Subscribe to unlock playlists and more features!</span>
         </div>
@@ -784,66 +772,32 @@
       // Show toast with animation
       setTimeout(() => toast.classList.add('show'), 100);
 
-      // Close button handler
+      // Close button handler - only dismiss
       const closeBtn = toast.querySelector('.subscription-toast-close');
       if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
+        closeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
           toast.classList.remove('show');
           setTimeout(() => toast.remove(), 400);
         });
       }
 
-      // Auto-hide toast and show modal after 4 seconds
-      setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 400);
-
-        const signupTrigger = document.getElementById('signupTrigger');
-
-        if (!signupTrigger) {
-          console.error('[Subscription Prompt] signupTrigger not found!');
-          return;
-        }
-
-        console.log('[Subscription Prompt] Opening subscribe modal...');
-        signupTrigger.click();
-
-        // Wait a moment for modal to open, then customize it
-        setTimeout(() => {
-          const authModal = document.getElementById('authModal');
-          const authTitle = document.getElementById('authTitle');
-          const authForm = document.getElementById('authForm');
-
-          if (!authModal || authModal.hidden) {
-            console.error('[Subscription Prompt] Auth modal not visible!');
-            return;
+      // Click toast body to open subscribe modal
+      const toastBody = toast.querySelector('.subscription-toast-body');
+      if (toastBody) {
+        toastBody.addEventListener('click', () => {
+          const signupTrigger = document.getElementById('signupTrigger');
+          if (signupTrigger) {
+            signupTrigger.click();
           }
+        });
+      }
 
-          // Update title with promotional message
-          if (authTitle) {
-            authTitle.textContent = '🎵 Unlock All Features';
-          }
-
-          // Add promotional message
-          if (authForm) {
-            let promoMsg = authForm.querySelector('.subscription-promo');
-            if (!promoMsg) {
-              promoMsg = document.createElement('div');
-              promoMsg.className = 'subscription-promo';
-              promoMsg.style.cssText = 'background:#f0f7ff;border:1px solid #62f5a9;border-radius:8px;padding:16px;margin-bottom:16px;text-align:center;';
-              promoMsg.innerHTML = '<strong>Subscribe to unlock:</strong><br/>• Create & save playlists<br/>• Share music with friends<br/>• Access exclusive features';
-              authForm.insertBefore(promoMsg, authForm.firstChild);
-            }
-          }
-
-          console.log('📢 Subscription prompt displayed!');
-        }, 300);
-      }, 4000); // Show toast for 4 seconds before modal
+      console.log('📢 Subscription prompt displayed (persistent until dismissed)');
     }
 
     // Set timer
-    const delaySeconds = Math.floor(PROMPT_DELAY_MS / 1000);
-    console.log(`⏱️ Subscription prompt timer started (${delaySeconds} seconds)`);
+    console.log(`⏱️ Subscription prompt timer started (${Math.floor(PROMPT_DELAY_MS / 1000)} seconds)`);
 
     setTimeout(() => {
       showSubscriptionPrompt();
