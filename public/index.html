@@ -83,13 +83,35 @@
     }
     .albums{display:grid;grid-template-columns:repeat(4,150px);grid-template-rows:auto auto;gap:14px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
     .albums.single-album{display:flex;flex-direction:column;align-items:center;gap:24px;}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px;display:flex;flex-direction:column;gap:4px;overflow:hidden;scroll-margin-top:128px;min-height:132px;}
+    .card{background:var(--card);border:2px solid #62f5a9;border-radius:9px;padding:8px;display:flex;flex-direction:column;gap:4px;overflow:hidden;scroll-margin-top:128px;min-height:132px;}
     .card-buttons{margin-top:6px;display:flex;flex-direction:column;gap:3px;}
     .card .play-button{border-radius:8px;padding:3px 6px;cursor:pointer;font-weight:600;background:var(--accent);border:none;color:var(--btn-text);width:100%;font-size:10px;}
     .card .play-button:hover{filter:brightness(1.1);}
     .card .btn.secondary.small{font-size:9px;padding:2px 4px;}
     .card.pending-audio{opacity:0.8;}
     .card.no-audio{display:none !important;}
+
+    /* Hide featured playlists when not logged in */
+    body:not(.user-logged-in) #publicPlaylistsPanel{display:none !important;}
+
+    /* Joke Ads - Shown to non-authenticated users */
+    .joke-ads{display:flex;flex-direction:column;gap:12px;}
+    body.user-logged-in .joke-ads{display:none !important;}
+    .joke-ad{background:var(--card);border:2px dashed var(--border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:all 0.2s ease;}
+    .joke-ad:hover{border-color:#62f5a9;transform:scale(1.02);}
+    .joke-ad-title{font-weight:700;font-size:14px;margin-bottom:8px;color:var(--text);}
+    .joke-ad-body{font-size:12px;color:var(--muted);line-height:1.4;}
+    .joke-ad-cta{display:inline-block;margin-top:8px;padding:4px 12px;background:#62f5a9;color:#000;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;}
+
+    /* Subscription Toast Notification */
+    .subscription-toast{position:fixed;top:80px;right:20px;background:linear-gradient(135deg, #62f5a9 0%, #4ecf94 100%);color:#000;padding:20px 24px;border-radius:12px;box-shadow:0 8px 24px rgba(98,245,169,0.4);z-index:10000;font-weight:600;font-size:15px;opacity:0;transform:translateX(400px);transition:all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);max-width:320px;}
+    .subscription-toast.show{opacity:1;transform:translateX(0);}
+    .subscription-toast-close{position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.1);border:none;color:#000;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;}
+    .subscription-toast-close:hover{background:rgba(0,0,0,0.2);}
+
+    /* Missing Audio Mode - Secret feature for operators */
+    body.missing-audio-mode .missing-mode-banner{display:block !important;}
+    .missing-mode-banner{display:none;position:fixed;top:0;left:0;right:0;background:#ff4444;color:#fff;text-align:center;padding:12px;font-weight:700;z-index:9999;box-shadow:0 2px 8px rgba(255,68,68,0.5);}
 
     /* Cover: small, centered square; never bleeds */
     .cover-wrap{position:relative;width:var(--cover-size);height:var(--cover-size);border-radius:6px;overflow:hidden;border:1px solid var(--border);background:#101215;margin:0 auto;cursor:pointer;transition:transform 0.15s ease,box-shadow 0.15s ease;}
@@ -374,12 +396,14 @@
         <div id="authControls" class="auth-controls">
           <span id="userBadge" class="badge" hidden></span>
           <button id="loginTrigger" type="button" class="btn small">Log in</button>
-          <button id="signupTrigger" type="button" class="btn small">Sign up</button>
+          <button id="signupTrigger" type="button" class="btn small">Subscribe</button>
           <button id="logoutButton" type="button" class="btn small" hidden>Log out</button>
         </div>
       </div>
     </div>
   </header>
+
+  <div class="missing-mode-banner">🔍 MISSING AUDIO MODE - Showing albums with no valid audio (Press Ctrl+Shift+M to refresh • Escape to exit)</div>
 
   <main>
     <div class="layout-grid">
@@ -440,6 +464,23 @@
           <div id="playlistTracksEmpty" class="playlist-empty" hidden>No tracks in this playlist yet.</div>
           <div class="playlist-footer-actions">
             <button id="exportPlaylistButton" type="button" class="btn small">Export</button>
+          </div>
+        </section>
+        <section id="jokeAdsPanel" class="joke-ads" hidden>
+          <div class="joke-ad" id="jokeAd1">
+            <div class="joke-ad-title">🎸 Guitar Lessons from AI</div>
+            <div class="joke-ad-body">Learn to play Wonderwall in just 3 easy prompts! ChatGPT-certified instructor.</div>
+            <span class="joke-ad-cta">Prompt Now</span>
+          </div>
+          <div class="joke-ad" id="jokeAd2">
+            <div class="joke-ad-title">🎧 Headphones for Dogs</div>
+            <div class="joke-ad-body">Premium noise-cancelling ear muffs so your pup can enjoy classical music during fireworks.</div>
+            <span class="joke-ad-cta">Woof Now</span>
+          </div>
+          <div class="joke-ad" id="jokeAd3">
+            <div class="joke-ad-title">🚀 Vinyl in Space</div>
+            <div class="joke-ad-body">Send your favorite album to orbit. Limited zero-gravity pressing available!</div>
+            <span class="joke-ad-cta">Launch It</span>
           </div>
         </section>
       </aside>
@@ -539,7 +580,7 @@
       </form>
       <div class="auth-switch">
         <span id="authToggleText">Need an account?</span>
-        <button type="button" id="authSwitchMode">Sign up</button>
+        <button type="button" id="authSwitchMode">Subscribe</button>
       </div>
       <div id="authError" class="error" hidden></div>
     </div>
@@ -588,5 +629,303 @@
 
   <audio id="player" preload="none"></audio>
 
-  <script src="/app.min.js?v=14" defer></script></body>
+  <script>
+    // Close featured playlist button handler
+    document.addEventListener('DOMContentLoaded', () => {
+      const closeBtn = document.getElementById('closePublicPlaylistBtn');
+      const clearBtn = document.getElementById('clear');
+      const publicPlaylistView = document.getElementById('publicPlaylistView');
+      const searchEl = document.getElementById('search');
+      if (closeBtn && clearBtn && publicPlaylistView && searchEl) {
+        closeBtn.addEventListener('click', () => {
+          // Hide the featured playlist view immediately
+          publicPlaylistView.hidden = true;
+          // Clear search and trigger clear button to load random songs
+          searchEl.value = '';
+          clearBtn.click();
+        });
+      }
+
+      // Preload featured playlists in the background
+      setTimeout(() => {
+        fetch('/api/public-playlists', { headers: { 'Accept': 'application/json' } })
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data?.playlists)) {
+              // Preload each featured playlist's tracks in the background
+              data.playlists.forEach((playlist, index) => {
+                if (playlist?.name) {
+                  // Stagger the requests to avoid overwhelming the server
+                  setTimeout(() => {
+                    fetch(`/api/public-playlists?name=${encodeURIComponent(playlist.name)}`, {
+                      headers: { 'Accept': 'application/json' }
+                    }).catch(err => console.log('Preload failed for', playlist.name));
+                  }, index * 500); // 500ms between each preload
+                }
+              });
+            }
+          })
+          .catch(err => console.log('Failed to preload featured playlists'));
+      }, 2000); // Wait 2 seconds after page load before preloading
+    });
+  </script>
+  <script src="/app.min.js?v=23" defer></script>
+  <script>
+  // Secret keystroke: Ctrl+Shift+M to toggle/refresh Missing Audio Mode, Escape to exit
+  document.addEventListener('keydown', async (e) => {
+    const albumsEl = document.getElementById('albums');
+    if (!albumsEl) return;
+
+    const isActive = document.body.classList.contains('missing-audio-mode');
+
+    // Escape key exits missing audio mode
+    if (e.key === 'Escape' && isActive) {
+      e.preventDefault();
+      window.location.reload();
+      return;
+    }
+
+    // Ctrl+Shift+M toggles on or refreshes
+    if (e.ctrlKey && e.shiftKey && e.key === 'M') {
+      e.preventDefault();
+
+      if (isActive) {
+        console.log('🔄 Refreshing missing audio songs...');
+      } else {
+        document.body.classList.add('missing-audio-mode');
+        console.log('🔍 Missing Audio Mode ACTIVATED');
+      }
+
+      // Load songs WITHOUT valid audio
+      try {
+        const res = await fetch('/api/missing-audio-songs?count=12&_t=' + Date.now());
+        const data = await res.json();
+        const songs = data.items || [];
+        console.log(`🔍 Loaded ${songs.length} songs with missing audio`);
+
+        albumsEl.innerHTML = '';
+
+        if (songs.length === 0) {
+          albumsEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">No songs with missing audio found in database</div>';
+        } else {
+          // Render missing audio cards
+          for (const item of songs) {
+            const fields = item.fields || {};
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.style.border = '2px solid #ff4444';
+
+            const title = fields['Track Name'] || fields['Song Name'] || fields['Title'] || 'Unknown Track';
+            const artist = fields['Album Artist'] || fields['Artist'] || 'Unknown Artist';
+            const album = fields['Album Title'] || fields['Album'] || 'Unknown Album';
+            const catalogue = fields['Album Catalogue Number'] || fields['Catalogue'] || '';
+
+            card.innerHTML = `
+              <div class="heading">
+                <h3 style="color:#ff4444;">${title}</h3>
+                <div class="card-artist">${artist}</div>
+                <div class="muted">${album}${catalogue ? ' • ' + catalogue : ''}</div>
+                <div class="muted" style="color:#ff4444;margin-top:8px;font-weight:600;">⚠️ MISSING AUDIO</div>
+              </div>
+            `;
+            albumsEl.appendChild(card);
+          }
+        }
+      } catch (err) {
+        console.error('❌ Failed to load missing audio songs:', err);
+        albumsEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#ff4444;">Error loading missing audio songs</div>';
+      }
+    }
+  });
+  </script>
+
+  <script>
+  // Show subscription prompt after 5 minutes for non-authenticated users
+  (function() {
+    const PROMPT_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+    let promptShown = false;
+
+    function isUserLoggedIn() {
+      const userBadge = document.getElementById('userBadge');
+      const isLoggedIn = userBadge && !userBadge.hidden;
+      console.log('[Subscription Prompt] User logged in:', isLoggedIn);
+      return isLoggedIn;
+    }
+
+    function showSubscriptionPrompt() {
+      console.log('[Subscription Prompt] Attempting to show prompt...');
+      console.log('[Subscription Prompt] Already shown?', promptShown);
+      console.log('[Subscription Prompt] User logged in?', isUserLoggedIn());
+
+      if (promptShown) {
+        console.log('[Subscription Prompt] Already shown, skipping');
+        return;
+      }
+
+      if (isUserLoggedIn()) {
+        console.log('[Subscription Prompt] User is logged in, skipping');
+        return;
+      }
+
+      promptShown = true;
+
+      // Create and show toast notification
+      const toast = document.createElement('div');
+      toast.className = 'subscription-toast';
+      toast.innerHTML = `
+        <button class="subscription-toast-close" aria-label="Close">✕</button>
+        <div style="padding-right:20px;">
+          🎵 Enjoying the music?<br/>
+          <span style="font-weight:400;font-size:13px;opacity:0.9;">Subscribe to unlock playlists and more features!</span>
+        </div>
+      `;
+      document.body.appendChild(toast);
+
+      // Show toast with animation
+      setTimeout(() => toast.classList.add('show'), 100);
+
+      // Close button handler
+      const closeBtn = toast.querySelector('.subscription-toast-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          toast.classList.remove('show');
+          setTimeout(() => toast.remove(), 400);
+        });
+      }
+
+      // Auto-hide toast and show modal after 4 seconds
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 400);
+
+        const signupTrigger = document.getElementById('signupTrigger');
+
+        if (!signupTrigger) {
+          console.error('[Subscription Prompt] signupTrigger not found!');
+          return;
+        }
+
+        console.log('[Subscription Prompt] Opening subscribe modal...');
+        signupTrigger.click();
+
+        // Wait a moment for modal to open, then customize it
+        setTimeout(() => {
+          const authModal = document.getElementById('authModal');
+          const authTitle = document.getElementById('authTitle');
+          const authForm = document.getElementById('authForm');
+
+          if (!authModal || authModal.hidden) {
+            console.error('[Subscription Prompt] Auth modal not visible!');
+            return;
+          }
+
+          // Update title with promotional message
+          if (authTitle) {
+            authTitle.textContent = '🎵 Unlock All Features';
+          }
+
+          // Add promotional message
+          if (authForm) {
+            let promoMsg = authForm.querySelector('.subscription-promo');
+            if (!promoMsg) {
+              promoMsg = document.createElement('div');
+              promoMsg.className = 'subscription-promo';
+              promoMsg.style.cssText = 'background:#f0f7ff;border:1px solid #62f5a9;border-radius:8px;padding:16px;margin-bottom:16px;text-align:center;';
+              promoMsg.innerHTML = '<strong>Subscribe to unlock:</strong><br/>• Create & save playlists<br/>• Share music with friends<br/>• Access exclusive features';
+              authForm.insertBefore(promoMsg, authForm.firstChild);
+            }
+          }
+
+          console.log('📢 Subscription prompt displayed!');
+        }, 300);
+      }, 4000); // Show toast for 4 seconds before modal
+    }
+
+    // Set timer
+    const delaySeconds = Math.floor(PROMPT_DELAY_MS / 1000);
+    console.log(`⏱️ Subscription prompt timer started (${delaySeconds} seconds)`);
+
+    setTimeout(() => {
+      showSubscriptionPrompt();
+    }, PROMPT_DELAY_MS);
+  })();
+  </script>
+
+  <script>
+  // Show joke ads when user is not logged in
+  (function() {
+    const jokeAdsPanel = document.getElementById('jokeAdsPanel');
+    const playlistColumn = document.getElementById('playlistColumn');
+    const playlistsPanel = document.getElementById('playlistsPanel');
+    const publicPlaylistsPanel = document.getElementById('publicPlaylistsPanel');
+    const signupTrigger = document.getElementById('signupTrigger');
+
+    function updateJokeAdsVisibility() {
+      const userBadge = document.getElementById('userBadge');
+      const isLoggedIn = userBadge && !userBadge.hidden;
+
+      if (!jokeAdsPanel || !playlistColumn) return;
+
+      console.log('[Joke Ads] isLoggedIn:', isLoggedIn);
+
+      // Update body class to control CSS visibility
+      if (isLoggedIn) {
+        document.body.classList.add('user-logged-in');
+      } else {
+        document.body.classList.remove('user-logged-in');
+      }
+
+      if (isLoggedIn) {
+        // User is logged in - ensure column visible (playlists will show via CSS)
+        playlistColumn.hidden = false;
+      } else {
+        // User is not logged in - show column with joke ads (featured playlists hidden via CSS)
+        playlistColumn.hidden = false;
+      }
+    }
+
+    // Make joke ads clickable - open subscribe modal
+    if (jokeAdsPanel) {
+      const jokeAds = jokeAdsPanel.querySelectorAll('.joke-ad');
+      jokeAds.forEach(ad => {
+        ad.addEventListener('click', () => {
+          if (signupTrigger) {
+            signupTrigger.click();
+          }
+        });
+      });
+    }
+
+    // Update visibility on page load
+    updateJokeAdsVisibility();
+
+    // Watch for auth state changes
+    const userBadgeObserver = new MutationObserver(() => {
+      updateJokeAdsVisibility();
+    });
+
+    const userBadge = document.getElementById('userBadge');
+    if (userBadge) {
+      userBadgeObserver.observe(userBadge, { attributes: true, attributeFilter: ['hidden'] });
+    }
+
+    // Also watch for playlistColumn visibility changes and override if not logged in
+    if (playlistColumn) {
+      const columnObserver = new MutationObserver(() => {
+        const isLoggedIn = userBadge && !userBadge.hidden;
+        if (!isLoggedIn && playlistColumn.hidden) {
+          // Override - keep column visible for joke ads
+          playlistColumn.hidden = false;
+        }
+      });
+      columnObserver.observe(playlistColumn, { attributes: true, attributeFilter: ['hidden'] });
+    }
+
+    // Periodic check to ensure visibility (in case of race conditions)
+    setInterval(updateJokeAdsVisibility, 500);
+
+    console.log('🎭 Joke ads initialized');
+  })();
+  </script>
+</body>
 </html>

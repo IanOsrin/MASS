@@ -200,6 +200,7 @@ const RANDOM_SONG_CACHE_PATH = path.join(DATA_DIR, 'random-songs-cache.json');
 const RANDOM_SONG_SEED_LOCK_PATH = path.join(DATA_DIR, '.random-songs-cache.lock');
 
 let randomSongPersistedCache = { items: [], updatedAt: 0 };
+let playlistSeedCache = { items: [], updatedAt: 0 };
 try {
   const persistedRaw = await fs.readFile(RANDOM_SONG_CACHE_PATH, 'utf8');
   const persistedJson = JSON.parse(persistedRaw);
@@ -303,6 +304,8 @@ const REGEX_CURLY_DOUBLE_QUOTES = /[\u201C\u201D]/g;
 const REGEX_LEADING_TRAILING_NONWORD = /^\W+|\W+$/g;
 const REGEX_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REGEX_HTTP_HTTPS = /^https?:\/\//i;
+const REGEX_ABSOLUTE_API_CONTAINER = /^https?:\/\/[^/]+\/api\/container\?/i;
+const REGEX_DATA_URI = /^data:/i;
 const REGEX_EXTRACT_NUMBERS = /[^0-9.-]/g;
 const REGEX_TRACK_SONG = /(track|song)/;
 const REGEX_NUMBER_INDICATORS = /(no|num|#|seq|order|pos)/;
@@ -608,6 +611,7 @@ if (!FM_HOST || !FM_DB || !FM_USER || !FM_PASS) {
 const fmBase = `${FM_HOST}/fmi/data/vLatest/databases/${encodeURIComponent(FM_DB)}`;
 let fmToken = null;
 let fmTokenExpiresAt = 0;
+let fmLoginPromise = null;
 
 const RETRYABLE_CODES = new Set(['UND_ERR_SOCKET', 'ECONNRESET', 'ETIMEDOUT']);
 const RETRYABLE_NAMES = new Set(['AbortError']);
@@ -709,29 +713,44 @@ async function lookupASN(ip) {
 }
 
 async function fmLogin() {
-  const res = await fmSafeFetch(`${fmBase}/sessions`, {
-    method: 'POST',
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'Authorization': 'Basic ' + Buffer.from(`${FM_USER}:${FM_PASS}`).toString('base64')
-    },
-    body: JSON.stringify({})
-  }, { retries: 1 });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = json?.messages?.[0]?.message || `HTTP ${res.status}`;
-    throw new Error(`FM login failed: ${msg}`);
+  // Mutex pattern: if login is already in progress, wait for it
+  if (fmLoginPromise) {
+    return fmLoginPromise;
   }
-  const token = json?.response?.token;
-  if (!token) throw new Error('FM login returned no token');
-  fmToken = token;
-  fmTokenExpiresAt = Date.now() + 12 * 60 * 1000;
-  return fmToken;
+
+  fmLoginPromise = (async () => {
+    try {
+      const res = await fmSafeFetch(`${fmBase}/sessions`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic ' + Buffer.from(`${FM_USER}:${FM_PASS}`).toString('base64')
+        },
+        body: JSON.stringify({})
+      }, { retries: 1 });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = json?.messages?.[0]?.message || `HTTP ${res.status}`;
+        throw new Error(`FM login failed: ${msg}`);
+      }
+      const token = json?.response?.token;
+      if (!token) throw new Error('FM login returned no token');
+      fmToken = token;
+      // Token expires in 12 minutes, but refresh 30 seconds early for safety
+      fmTokenExpiresAt = Date.now() + (11.5 * 60 * 1000);
+      return fmToken;
+    } finally {
+      fmLoginPromise = null;
+    }
+  })();
+
+  return fmLoginPromise;
 }
 
 async function ensureToken() {
-  if (!fmToken || Date.now() > fmTokenExpiresAt) {
+  // Refresh token if missing or expired (using >= to catch exact expiration time)
+  if (!fmToken || Date.now() >= fmTokenExpiresAt) {
     await fmLogin();
   }
   return fmToken;
@@ -960,6 +979,8 @@ function resolvePlayableSrc(raw) {
   const src = raw.trim();
   if (!src) return '';
   if (src.startsWith('/api/container?')) return src;
+  if (REGEX_ABSOLUTE_API_CONTAINER.test(src)) return src;
+  if (REGEX_DATA_URI.test(src)) return src;
   if (REGEX_HTTP_HTTPS.test(src)) return `/api/container?u=${encodeURIComponent(src)}`;
   if (src.startsWith('/')) return src;
   return `/api/container?u=${encodeURIComponent(src)}`;
@@ -3460,8 +3481,19 @@ function getPersistedRandomSongs(count) {
   if (Date.now() - randomSongPersistedCache.updatedAt > RANDOM_SONG_PERSIST_MAX_AGE_MS) {
     return null;
   }
-  if (randomSongPersistedCache.items.length < count) return null;
-  const items = cloneRandomSongItems(randomSongPersistedCache.items, count);
+
+  // Validate that cached items still have valid audio (container URLs might have expired)
+  const validItems = randomSongPersistedCache.items.filter(item => {
+    const fields = item?.fields || {};
+    return hasValidAudio(fields);
+  });
+
+  if (validItems.length < count) {
+    console.log(`[random-songs] Persisted cache has only ${validItems.length}/${randomSongPersistedCache.items.length} valid items (need ${count}), refreshing...`);
+    return null;
+  }
+
+  const items = cloneRandomSongItems(validItems, count);
   return { ok: true, items, total: items.length };
 }
 
@@ -3664,7 +3696,15 @@ async function buildPlaylistSeedItems(count) {
     playlistSeedCache.items.length >= count &&
     now - playlistSeedCache.updatedAt < PLAYLIST_SEED_CACHE_TTL_MS
   ) {
-    return cloneRandomSongItems(playlistSeedCache.items, count);
+    // Validate cached playlist seed items still have valid audio
+    const validItems = playlistSeedCache.items.filter(item => {
+      const fields = item?.fields || {};
+      return hasValidAudio(fields);
+    });
+    if (validItems.length >= count) {
+      return cloneRandomSongItems(validItems, count);
+    }
+    // If not enough valid items, rebuild the cache
   }
 
   const playlists = await loadPlaylists();
@@ -4117,7 +4157,59 @@ app.get('/api/random-songs', async (req, res) => {
   }
 });
 
-/* ========= Album: fetch full tracklist ========= */
+/* ========= Missing Audio Songs: Get random songs WITHOUT valid audio ========= */
+app.get('/api/missing-audio-songs', async (req, res) => {
+  try {
+    const count = Math.max(1, Math.min(50, parseInt(req.query.count || '12', 10)));
+
+    await ensureToken();
+
+    // Fetch with random offset to show different missing audio songs each time
+    const fetchLimit = count * 20; // Fetch more since we're filtering for missing audio
+    const maxOffset = 10000;
+    const randomOffset = Math.floor(Math.random() * maxOffset) + 1;
+
+    console.log(`[missing-audio-songs] Fetching ${fetchLimit} records from offset ${randomOffset}`);
+
+    const json = await fmFindRecords(FM_LAYOUT, [{ 'Album Title': '*' }], {
+      limit: fetchLimit,
+      offset: randomOffset
+    });
+
+    const rawData = json?.data || [];
+    console.log(`[missing-audio-songs] Fetched ${rawData.length} total records`);
+
+    // Filter for records WITHOUT valid audio
+    const missingAudioRecords = rawData.filter(record => {
+      const fields = record.fieldData || {};
+      const hasAudio = hasValidAudio(fields);
+      return !hasAudio;
+    });
+
+    console.log(`[missing-audio-songs] Found ${missingAudioRecords.length} songs without audio out of ${rawData.length} total`);
+
+    // Shuffle and take requested count
+    const shuffled = missingAudioRecords.sort(() => Math.random() - 0.5);
+    const selected = shuffled.slice(0, count);
+
+    // Map to items format
+    const items = selected.map(record => ({
+      recordId: record.recordId,
+      modId: record.modId,
+      fields: record.fieldData || {}
+    }));
+
+    console.log(`[missing-audio-songs] Returning ${items.length} songs`);
+
+    return res.json({ ok: true, items, total: items.length });
+  } catch (err) {
+    console.error('[missing-audio-songs] Error:', err);
+    const detail = err?.message || String(err);
+    return res.status(500).json({ error: 'Missing audio songs failed', status: 500, detail });
+  }
+});
+
+/* ========= Album: fetch full tracklist =========*/
 app.get('/api/album', async (req, res) => {
   try {
     const cat = (req.query.cat || '').toString().trim();
