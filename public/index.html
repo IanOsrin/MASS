@@ -20,8 +20,8 @@
     .header-main{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:18px;justify-content:space-between;flex-wrap:wrap;}
     .header-logo{flex-shrink:0;max-height:96px;filter:drop-shadow(0 6px 12px rgba(0,0,0,0.25));}
     .searchbar{flex:1;display:grid;grid-template-columns:minmax(0,1fr) repeat(7,auto);gap:8px;align-items:center;}
-    .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:16px;outline:none;}
-    .searchbar button{border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer;}
+    .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:14px;outline:none;}
+    .searchbar button{border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px;}
 
     main{max-width:1100px;margin:20px auto;padding:0 16px 40px;position:relative;z-index:1;}
     .layout-grid{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;}
@@ -152,10 +152,11 @@
     .explore-section h3{margin:0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
     .explore-buttons{display:flex;flex-wrap:wrap;gap:8px;}
     .explore-buttons button{border-radius:999px;padding:6px 10px;cursor:pointer;font-size:13px;}
-    #explore{padding:10px 20px;border-radius:14px;font-weight:700;font-size:15px;white-space:nowrap;}
+    #explore{padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;white-space:nowrap;}
 
-    .auth-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
-    .auth-controls .badge{font-size:12px;}
+    .auth-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+    .auth-controls .badge{font-size:12px;padding:6px 10px;}
+    .auth-controls .btn{padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;}
     .auth-controls [hidden]{display:none !important;}
     .auth-form{display:flex;flex-direction:column;gap:12px;margin-top:12px;}
     .auth-form label{display:flex;flex-direction:column;gap:6px;font-size:14px;}
@@ -373,8 +374,8 @@
         <button id="clear">Clear</button>
         <button id="shuffleBtn" class="btn-accent" hidden>🔄 Load More</button>
         <button id="shufflePlayBtn" class="btn-accent" hidden aria-pressed="false">▶ Shuffle Play</button>
-        <button id="randomStopBtn" class="btn small" hidden type="button">⏹ Stop</button>
-        <button id="randomSkipBtn" class="btn small" hidden type="button">⏭ Skip</button>
+        <button id="randomStopBtn" hidden type="button">⏹ Stop</button>
+        <button id="randomSkipBtn" hidden type="button">⏭ Skip</button>
         <span id="status" class="status" hidden aria-live="polite" role="status"><span class="pulse"></span><span id="statusText">Searching…</span></span>
       </div>
       <div class="explore-wrap">
@@ -395,9 +396,9 @@
         </div>
         <div id="authControls" class="auth-controls">
           <span id="userBadge" class="badge" hidden></span>
-          <button id="loginTrigger" type="button" class="btn small">Log in</button>
-          <button id="signupTrigger" type="button" class="btn small">Subscribe</button>
-          <button id="logoutButton" type="button" class="btn small" hidden>Log out</button>
+          <button id="loginTrigger" type="button" class="btn">Log in</button>
+          <button id="signupTrigger" type="button" class="btn">Subscribe</button>
+          <button id="logoutButton" type="button" class="btn" hidden>Log out</button>
         </div>
       </div>
     </div>
