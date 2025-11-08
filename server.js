@@ -117,7 +117,7 @@ app.use(express.json());
 
 // Rate limiting configuration
 // More relaxed rate limits for development
-const isDevelopment = NODE_ENV === 'development' || HOST === 'localhost' || HOST === '127.0.0.1';
+const isDevelopment = (process.env.NODE_ENV === 'development' || process.env.HOST === 'localhost' || process.env.HOST === '127.0.0.1');
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -160,13 +160,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /* ========= ENV ========= */
+const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '127.0.0.1';
 const FM_HOST = process.env.FM_HOST;
 const FM_DB = process.env.FM_DB;
 const FM_USER = process.env.FM_USER;
 const FM_PASS = process.env.FM_PASS;
 const FM_LAYOUT = process.env.FM_LAYOUT || 'API_Album_Songs';
-const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '127.0.0.1';
 const FM_USERS_LAYOUT = process.env.FM_USERS_LAYOUT || 'API_Users';
 const FM_STREAM_EVENTS_LAYOUT = process.env.FM_STREAM_EVENTS_LAYOUT || 'Stream_Events';
 const STREAM_EVENT_DEBUG =
