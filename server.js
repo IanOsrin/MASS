@@ -3107,16 +3107,22 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
     const start = parseInt((req.query.start || '0'), 10);
     const end = parseInt((req.query.end || '0'), 10);
     const reqLimit = Math.max(1, Math.min(300, parseInt((req.query.limit || '50'), 10)));
+    const bypassCache = req.query.refresh === '1' || req.query.refresh === 'true';
     if (!start || !end || end < start) return res.status(400).json({ error: 'bad decade', start, end });
 
     // Note: Random offset means we cache by decade/limit but accept different random results
     // This gives variety while still caching common decade queries
+    // Skip cache if refresh parameter is present (for "Select Again" button)
     const cacheKey = `explore:${start}:${end}:${reqLimit}`;
-    const cached = exploreCache.get(cacheKey);
-    if (cached) {
-      console.log(`[CACHE HIT] explore: ${start}-${end}`);
-      res.setHeader('X-Cache-Hit', 'true');
-      return res.json(cached);
+    if (!bypassCache) {
+      const cached = exploreCache.get(cacheKey);
+      if (cached) {
+        console.log(`[CACHE HIT] explore: ${start}-${end}`);
+        res.setHeader('X-Cache-Hit', 'true');
+        return res.json(cached);
+      }
+    } else {
+      console.log(`[CACHE BYPASS] explore: ${start}-${end} (refresh requested)`);
     }
 
     const FIELDS = [
