@@ -68,8 +68,8 @@
     .public-playlist-hero img{display:block;width:60%;height:auto;max-height:240px;object-fit:contain;}
     .public-playlist-main{flex:1;display:flex;flex-direction:column;gap:12px;}
     .playlist-actions{display:flex;align-items:center;gap:6px;}
-    .playlist-footer-actions{margin-top:12px;display:flex;justify-content:flex-end;}
-    .playlist-footer-actions .btn{min-width:160px;}
+    .playlist-footer-actions{margin-top:12px;display:flex;justify-content:flex-end;gap:8px;}
+    .playlist-footer-actions .btn{min-width:70px;}
     .shared-playlist-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap;}
     .shared-playlist-actions .btn{min-width:140px;}
     .share-link-display{display:none !important;}
@@ -464,7 +464,8 @@
           <ul id="playlistTracksList" class="tracks"></ul>
           <div id="playlistTracksEmpty" class="playlist-empty" hidden>No tracks in this playlist yet.</div>
           <div class="playlist-footer-actions">
-            <button id="exportPlaylistButton" type="button" class="btn small">Export</button>
+            <button id="sharePlaylistButton" type="button" class="btn small">Share</button>
+            <button id="exportPlaylistButton" type="button" class="btn small">Save</button>
           </div>
         </section>
         <section id="jokeAdsPanel" class="joke-ads" hidden>
@@ -513,7 +514,7 @@
           <ul id="sharedPlaylistTracks" class="tracks public-playlist-tracks"></ul>
           <div id="sharedPlaylistEmpty" class="playlist-empty" hidden>No tracks are available in this shared playlist.</div>
           <div class="shared-playlist-actions">
-            <button id="sharedPlaylistBack" type="button" class="btn small">Back to discovery</button>
+            <button id="sharedPlaylistBack" type="button" class="btn small">Close</button>
             <button id="sharedPlaylistCopy" type="button" class="btn small">Copy share link</button>
           </div>
         </section>
