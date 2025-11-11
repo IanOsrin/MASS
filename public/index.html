@@ -716,13 +716,14 @@
         });
       }
 
-      // Image lightbox for album artwork
+      // Image lightbox for album artwork (only in modal track view)
       const imageLightbox = document.getElementById('imageLightbox');
       const imageLightboxImg = document.getElementById('imageLightboxImg');
       const imageLightboxClose = document.getElementById('imageLightboxClose');
+      const modalOverlay = document.getElementById('overlay');
 
       if (imageLightbox && imageLightboxImg && imageLightboxClose) {
-        // Handle clicks on album artwork to enlarge
+        // Handle clicks on album artwork
         document.addEventListener('click', (e) => {
           const coverWrap = e.target.closest('.cover-wrap');
           if (coverWrap) {
@@ -730,9 +731,45 @@
             if (img && img.src) {
               e.preventDefault();
               e.stopPropagation();
-              imageLightboxImg.src = img.src;
-              imageLightbox.classList.add('open');
-              imageLightbox.setAttribute('aria-hidden', 'false');
+
+              // Check if cover is in the modal (track view)
+              const isInModal = modalOverlay && modalOverlay.classList.contains('open') &&
+                                coverWrap.closest('.modal');
+
+              if (isInModal) {
+                // In modal: enlarge the image
+                imageLightboxImg.src = img.src;
+                imageLightbox.classList.add('open');
+                imageLightbox.setAttribute('aria-hidden', 'false');
+              } else {
+                // In grid/random view: search for albums by this artist
+                const card = coverWrap.closest('.card');
+                if (card) {
+                  const artistEl = card.querySelector('.card-artist');
+                  if (artistEl) {
+                    const artistName = artistEl.textContent.trim();
+                    if (artistName) {
+                      // Set artist in search field and trigger search
+                      const searchArtistEl = document.getElementById('searchArtist');
+                      const searchAlbumEl = document.getElementById('searchAlbum');
+                      const searchTrackEl = document.getElementById('searchTrack');
+                      const searchFieldsEl = document.getElementById('searchFields');
+                      const goBtn = document.getElementById('go');
+
+                      if (searchArtistEl && searchFieldsEl && goBtn) {
+                        // Clear other fields and set artist
+                        searchArtistEl.value = artistName;
+                        if (searchAlbumEl) searchAlbumEl.value = '';
+                        if (searchTrackEl) searchTrackEl.value = '';
+
+                        // Show fields and trigger search
+                        searchFieldsEl.hidden = false;
+                        goBtn.click();
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         });
