@@ -451,8 +451,8 @@ function recordIsVisible(fields = {}) {
   return value === FM_VISIBILITY_VALUE_LC;
 }
 
-const DEFAULT_AUDIO_FIELDS = ['mp3', 'MP3'];
-const AUDIO_FIELD_CANDIDATES = ['mp3', 'MP3'];
+const DEFAULT_AUDIO_FIELDS = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
+const AUDIO_FIELD_CANDIDATES = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
 const ARTWORK_FIELD_CANDIDATES = ['Artwork::Picture', 'Artwork Picture', 'Picture'];
 
 const PUBLIC_PLAYLIST_LAYOUT = 'API_Album_Songs';
@@ -2775,21 +2775,9 @@ app.get('/api/search', async (req, res) => {
       albumMap.get(albumKey).push(record);
     }
 
-    // If we have fewer unique albums than MIN_ALBUMS and this is the first page,
-    // return all tracks to maximize grouping on frontend
-    // Otherwise, return one representative track per album for diverse results
-    let finalData;
-    if (uiOff0 === 0 && albumMap.size < MIN_ALBUMS) {
-      // Return all tracks - not enough unique albums
-      finalData = data;
-    } else {
-      // Return up to 3 tracks per album to ensure frontend has enough data
-      // while keeping results diverse
-      finalData = [];
-      for (const tracks of albumMap.values()) {
-        finalData.push(...tracks.slice(0, 3));
-      }
-    }
+    // Return all tracks for each album to show complete album contents
+    // Frontend will handle grouping by album
+    let finalData = data;
 
     const response = {
       items: finalData.map((d) => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} })),

@@ -16,12 +16,13 @@
       --btn-shadow-hover:rgba(58,123,213,0.35);
         }
     html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;}
-    header{padding:12px 18px;border-bottom:1px solid var(--border);position:sticky;top:0;background:linear-gradient(180deg,rgba(15,15,18,0.98),rgba(15,15,18,0.9));backdrop-filter:saturate(180%) blur(8px);z-index:10;}
-    .header-main{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:18px;justify-content:space-between;flex-wrap:wrap;}
-    .header-logo{flex-shrink:0;max-height:96px;filter:drop-shadow(0 6px 12px rgba(0,0,0,0.25));}
-    .searchbar{flex:1;display:grid;grid-template-columns:minmax(0,1fr) repeat(7,auto);gap:8px;align-items:center;}
-    .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:14px;outline:none;}
-    .searchbar button{border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px;}
+    header{padding:10px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:linear-gradient(180deg,rgba(15,15,18,0.98),rgba(15,15,18,0.9));backdrop-filter:saturate(180%) blur(8px);z-index:10;}
+    .header-main{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap;}
+    .header-logo{flex-shrink:0;max-height:72px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.25));}
+    .searchbar{flex:1;display:grid;grid-template-columns:minmax(0,1fr) repeat(7,auto);gap:6px;align-items:center;min-width:300px;}
+    .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;outline:none;transition:border-color 0.2s ease;}
+    .searchbar input:focus{border-color:var(--accent);}
+    .searchbar button{border-radius:8px;padding:7px 12px;font-weight:600;cursor:pointer;font-size:12px;}
 
     main{max-width:1100px;margin:20px auto;padding:0 16px 40px;position:relative;z-index:1;}
     .layout-grid{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;}
@@ -145,18 +146,18 @@
     .count{display:none;}
     .error{background:#2b1517;border:1px solid #5a2327;color:#ffb1b8;padding:10px 12px;border-radius:10px;}
 
-    .explore-wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;min-width:220px;}
-    .explore-panel{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;justify-content:flex-end;max-width:520px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;}
+    .explore-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;min-width:200px;}
+    .explore-panel{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;justify-content:flex-end;max-width:520px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;}
     .explore-panel[hidden]{display:none;}
     .explore-section{display:flex;flex-direction:column;gap:8px;min-width:160px;}
     .explore-section h3{margin:0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
     .explore-buttons{display:flex;flex-wrap:wrap;gap:8px;}
-    .explore-buttons button{border-radius:999px;padding:6px 10px;cursor:pointer;font-size:13px;}
-    #explore{padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;white-space:nowrap;}
+    .explore-buttons button{border-radius:999px;padding:5px 9px;cursor:pointer;font-size:12px;}
+    #explore{padding:7px 12px;border-radius:8px;font-weight:600;font-size:12px;white-space:nowrap;}
 
-    .auth-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
-    .auth-controls .badge{font-size:12px;padding:6px 10px;}
-    .auth-controls .btn{padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;}
+    .auth-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+    .auth-controls .badge{font-size:11px;padding:5px 9px;}
+    .auth-controls .btn{padding:7px 12px;border-radius:8px;font-weight:600;font-size:12px;}
     .auth-controls [hidden]{display:none !important;}
     .auth-form{display:flex;flex-direction:column;gap:12px;margin-top:12px;}
     .auth-form label{display:flex;flex-direction:column;gap:6px;font-size:14px;}
@@ -372,7 +373,7 @@
         <input id="search" type="search" placeholder="Search albums, artists, tracks, year, genre…" autocomplete="off" />
         <button id="go">Search</button>
         <button id="clear">Clear</button>
-        <button id="shuffleBtn" class="btn-accent" hidden>🔄 Select Again</button>
+        <button id="shuffleBtn" class="btn-accent" hidden>🔄 New Selection</button>
         <button id="shufflePlayBtn" class="btn-accent" hidden aria-pressed="false">▶ Shuffle Play</button>
         <button id="randomStopBtn" hidden type="button">⏹ Stop</button>
         <button id="randomSkipBtn" hidden type="button">⏭ Skip</button>
@@ -638,6 +639,8 @@
       const clearBtn = document.getElementById('clear');
       const publicPlaylistView = document.getElementById('publicPlaylistView');
       const searchEl = document.getElementById('search');
+      const goBtn = document.getElementById('go');
+
       if (closeBtn && clearBtn && publicPlaylistView && searchEl) {
         closeBtn.addEventListener('click', () => {
           // Hide the featured playlist view immediately
@@ -645,6 +648,16 @@
           // Clear search and trigger clear button to load random songs
           searchEl.value = '';
           clearBtn.click();
+        });
+      }
+
+      // Allow Enter key to trigger search
+      if (searchEl && goBtn) {
+        searchEl.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            goBtn.click();
+          }
         });
       }
 
