@@ -20,6 +20,8 @@
     .header-main{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap;}
     .header-logo{flex-shrink:0;max-height:72px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.25));}
     .searchbar{flex:1;display:grid;grid-template-columns:minmax(0,1fr) repeat(7,auto);gap:6px;align-items:center;min-width:300px;}
+    .search-fields{display:flex;gap:6px;flex:1;min-width:0;}
+    .search-fields input{flex:1;min-width:0;}
     .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;outline:none;transition:border-color 0.2s ease;}
     .searchbar input:focus{border-color:var(--accent);}
     .searchbar button{border-radius:8px;padding:7px 12px;font-weight:600;cursor:pointer;font-size:12px;}
@@ -370,7 +372,12 @@
     <div class="header-main">
       <img src="/img/MAD_Logo.png" alt="MAD Logo" class="header-logo">
       <div class="searchbar">
-        <input id="search" type="search" placeholder="Search albums, artists, tracks, year, genre…" autocomplete="off" />
+        <div class="search-fields">
+          <input id="searchArtist" type="search" placeholder="Artist" autocomplete="off" />
+          <input id="searchAlbum" type="search" placeholder="Album" autocomplete="off" />
+          <input id="searchTrack" type="search" placeholder="Track" autocomplete="off" />
+        </div>
+        <input id="search" type="search" placeholder="Search albums, artists, tracks, year, genre…" autocomplete="off" hidden />
         <button id="go">Search</button>
         <button id="clear">Clear</button>
         <button id="shuffleBtn" class="btn-accent" hidden>🔄 New Selection</button>
@@ -639,19 +646,36 @@
       const clearBtn = document.getElementById('clear');
       const publicPlaylistView = document.getElementById('publicPlaylistView');
       const searchEl = document.getElementById('search');
+      const searchArtistEl = document.getElementById('searchArtist');
+      const searchAlbumEl = document.getElementById('searchAlbum');
+      const searchTrackEl = document.getElementById('searchTrack');
       const goBtn = document.getElementById('go');
 
-      if (closeBtn && clearBtn && publicPlaylistView && searchEl) {
+      if (closeBtn && clearBtn && publicPlaylistView) {
         closeBtn.addEventListener('click', () => {
           // Hide the featured playlist view immediately
           publicPlaylistView.hidden = true;
-          // Clear search and trigger clear button to load random songs
-          searchEl.value = '';
+          // Clear search fields and trigger clear button to load random songs
+          if (searchEl) searchEl.value = '';
+          if (searchArtistEl) searchArtistEl.value = '';
+          if (searchAlbumEl) searchAlbumEl.value = '';
+          if (searchTrackEl) searchTrackEl.value = '';
           clearBtn.click();
         });
       }
 
-      // Allow Enter key to trigger search
+      // Allow Enter key to trigger search from any search field
+      const searchFields = [searchArtistEl, searchAlbumEl, searchTrackEl].filter(Boolean);
+      searchFields.forEach(field => {
+        field.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            goBtn.click();
+          }
+        });
+      });
+
+      // Keep old search field handler for compatibility
       if (searchEl && goBtn) {
         searchEl.addEventListener('keydown', (e) => {
           if (e.key === 'Enter') {
@@ -685,6 +709,82 @@
     });
   </script>
   <script src="/app.min.js?v=23" defer></script>
+  <script>
+  // Override search to use separate fields
+  window.addEventListener('DOMContentLoaded', () => {
+    // Wait for app.min.js to load
+    setTimeout(() => {
+      const searchArtistEl = document.getElementById('searchArtist');
+      const searchAlbumEl = document.getElementById('searchAlbum');
+      const searchTrackEl = document.getElementById('searchTrack');
+      const goEl = document.getElementById('go');
+      const clearEl = document.getElementById('clear');
+
+      // Store original doSearch if it exists
+      const originalDoSearch = window.doSearch;
+
+      // Override doSearch to handle separate fields
+      window.doSearch = function(q) {
+        // If called with a query string, use original behavior
+        if (q && typeof q === 'string' && q.trim()) {
+          return originalDoSearch ? originalDoSearch(q) : fetch(`/api/search?q=${encodeURIComponent(q)}`).then(r => r.json());
+        }
+
+        // Otherwise use separate fields
+        const artist = searchArtistEl?.value?.trim() || '';
+        const album = searchAlbumEl?.value?.trim() || '';
+        const track = searchTrackEl?.value?.trim() || '';
+
+        // Need at least one field filled
+        if (!artist && !album && !track) {
+          return Promise.resolve({ items: [], total: 0 });
+        }
+
+        const params = new URLSearchParams();
+        if (artist) params.set('artist', artist);
+        if (album) params.set('album', album);
+        if (track) params.set('track', track);
+        params.set('offset', 0);
+        params.set('limit', 30);
+
+        return fetch(`/api/search?${params}`)
+          .then(async r => {
+            if (!r.ok) throw new Error(await r.text().catch(() => `HTTP ${r.status}`));
+            return r.json();
+          });
+      };
+
+      // Override go button handler
+      if (goEl) {
+        const oldHandler = goEl.onclick;
+        goEl.onclick = null;
+        goEl.removeEventListener('click', oldHandler);
+
+        goEl.addEventListener('click', () => {
+          const artist = searchArtistEl?.value?.trim() || '';
+          const album = searchAlbumEl?.value?.trim() || '';
+          const track = searchTrackEl?.value?.trim() || '';
+          const combined = [artist, album, track].filter(Boolean).join(' ');
+
+          // Call run function with combined query or empty
+          if (typeof window.run === 'function') {
+            window.run(combined || ' ');
+          }
+        });
+      }
+
+      // Update clear button to clear all fields
+      if (clearEl) {
+        const originalClearHandler = clearEl.onclick;
+        clearEl.addEventListener('click', () => {
+          if (searchArtistEl) searchArtistEl.value = '';
+          if (searchAlbumEl) searchAlbumEl.value = '';
+          if (searchTrackEl) searchTrackEl.value = '';
+        });
+      }
+    }, 100);
+  });
+  </script>
   <script>
   // Secret keystroke: Ctrl+Shift+M to toggle/refresh Missing Audio Mode, Escape to exit
   document.addEventListener('keydown', async (e) => {
