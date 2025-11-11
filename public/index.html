@@ -19,13 +19,13 @@
     header{padding:10px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:linear-gradient(180deg,rgba(15,15,18,0.98),rgba(15,15,18,0.9));backdrop-filter:saturate(180%) blur(8px);z-index:10;}
     .header-main{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap;}
     .header-logo{flex-shrink:0;max-height:72px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.25));}
-    .searchbar{flex:1;display:grid;grid-template-columns:minmax(0,1fr) repeat(7,auto);gap:8px;align-items:center;min-width:400px;}
+    .searchbar{flex:1;display:flex;gap:8px;align-items:center;min-width:200px;}
     .search-fields{display:flex;gap:10px;flex:1;min-width:0;}
     .search-fields[hidden]{display:none !important;}
     .search-fields input{flex:1;min-width:0;}
     .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:15px;outline:none;transition:border-color 0.2s ease;}
     .searchbar input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(98,245,169,0.1);}
-    .searchbar button{border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;}
+    .searchbar button{border-radius:8px;padding:7px 12px;font-weight:600;cursor:pointer;font-size:12px;white-space:nowrap;}
 
     main{max-width:1100px;margin:20px auto;padding:0 16px 40px;position:relative;z-index:1;}
     .layout-grid{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;}
@@ -85,9 +85,9 @@
       .public-featured-row{flex-direction:column;}
       .public-featured-row > .public-playlists{width:100%;max-width:none;}
       .header-main{flex-direction:column;align-items:stretch;}
-      .searchbar{min-width:100%;grid-template-columns:1fr;}
-      .search-fields{flex-direction:column;gap:8px;}
-      .searchbar button{width:100%;}
+      .searchbar{min-width:100%;flex-wrap:wrap;}
+      .search-fields{flex-direction:column;gap:8px;width:100%;}
+      .searchbar button{min-width:48%;}
     }
     .albums{display:grid;grid-template-columns:repeat(4,150px);grid-template-rows:auto auto;gap:14px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
     .albums.single-album{display:flex;flex-direction:column;align-items:center;gap:24px;}
@@ -407,12 +407,12 @@
             <div id="exploreMoods" class="explore-buttons"></div>
           </section>
         </div>
-        <div id="authControls" class="auth-controls">
-          <span id="userBadge" class="badge" hidden></span>
-          <button id="loginTrigger" type="button" class="btn">Log in</button>
-          <button id="signupTrigger" type="button" class="btn">Subscribe</button>
-          <button id="logoutButton" type="button" class="btn" hidden>Log out</button>
-        </div>
+      </div>
+      <div id="authControls" class="auth-controls">
+        <span id="userBadge" class="badge" hidden></span>
+        <button id="loginTrigger" type="button" class="btn">Log in</button>
+        <button id="signupTrigger" type="button" class="btn">Subscribe</button>
+        <button id="logoutButton" type="button" class="btn" hidden>Log out</button>
       </div>
     </div>
   </header>
