@@ -723,23 +723,19 @@
       // Store original doSearch if it exists
       const originalDoSearch = window.doSearch;
 
-      // Override doSearch to handle separate fields
+      // Override doSearch to use separate fields
       window.doSearch = function(q) {
-        // If called with a query string, use original behavior
-        if (q && typeof q === 'string' && q.trim()) {
-          return originalDoSearch ? originalDoSearch(q) : fetch(`/api/search?q=${encodeURIComponent(q)}`).then(r => r.json());
-        }
-
-        // Otherwise use separate fields
+        // Get values from separate fields
         const artist = searchArtistEl?.value?.trim() || '';
         const album = searchAlbumEl?.value?.trim() || '';
         const track = searchTrackEl?.value?.trim() || '';
 
-        // Need at least one field filled
+        // If no separate fields are filled, return empty
         if (!artist && !album && !track) {
           return Promise.resolve({ items: [], total: 0 });
         }
 
+        // Build query with separate parameters
         const params = new URLSearchParams();
         if (artist) params.set('artist', artist);
         if (album) params.set('album', album);
@@ -747,7 +743,16 @@
         params.set('offset', 0);
         params.set('limit', 30);
 
-        return fetch(`/api/search?${params}`)
+        console.log('[Separate Search] Artist:', artist, 'Album:', album, 'Track:', track);
+
+        // Abort any in-flight requests
+        if (window.inFlight) {
+          try { window.inFlight.abort(); } catch {}
+        }
+        const ctrl = new AbortController();
+        window.inFlight = ctrl;
+
+        return fetch(`/api/search?${params}`, { signal: ctrl.signal })
           .then(async r => {
             if (!r.ok) throw new Error(await r.text().catch(() => `HTTP ${r.status}`));
             return r.json();
@@ -764,11 +769,16 @@
           const artist = searchArtistEl?.value?.trim() || '';
           const album = searchAlbumEl?.value?.trim() || '';
           const track = searchTrackEl?.value?.trim() || '';
-          const combined = [artist, album, track].filter(Boolean).join(' ');
 
-          // Call run function with combined query or empty
+          // Need at least one field to search
+          if (!artist && !album && !track) {
+            return;
+          }
+
+          // Call run function with a dummy query to trigger the search flow
+          // The actual parameters will be read from the input fields by doSearch
           if (typeof window.run === 'function') {
-            window.run(combined || ' ');
+            window.run(' ');
           }
         });
       }
