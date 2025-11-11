@@ -21,9 +21,8 @@
     .header-logo{flex-shrink:0;max-height:72px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.25));}
     .searchbar{flex:1;display:grid;grid-template-columns:minmax(0,1fr) repeat(7,auto);gap:8px;align-items:center;min-width:400px;}
     .search-fields{display:flex;gap:10px;flex:1;min-width:0;}
-    .search-field-group{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;}
-    .search-field-group label{font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.05em;padding-left:4px;}
-    .search-fields input{width:100%;}
+    .search-fields[hidden]{display:none !important;}
+    .search-fields input{flex:1;min-width:0;}
     .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:15px;outline:none;transition:border-color 0.2s ease;}
     .searchbar input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(98,245,169,0.1);}
     .searchbar button{border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;}
@@ -378,19 +377,10 @@
     <div class="header-main">
       <img src="/img/MAD_Logo.png" alt="MAD Logo" class="header-logo">
       <div class="searchbar">
-        <div class="search-fields">
-          <div class="search-field-group">
-            <label for="searchArtist">Artist</label>
-            <input id="searchArtist" type="search" placeholder="Stimela" autocomplete="off" />
-          </div>
-          <div class="search-field-group">
-            <label for="searchAlbum">Album</label>
-            <input id="searchAlbum" type="search" placeholder="Don't ask why" autocomplete="off" />
-          </div>
-          <div class="search-field-group">
-            <label for="searchTrack">Track</label>
-            <input id="searchTrack" type="search" placeholder="Unozakuzaku" autocomplete="off" />
-          </div>
+        <div class="search-fields" id="searchFields" hidden>
+          <input id="searchArtist" type="search" placeholder="Artist" autocomplete="off" />
+          <input id="searchAlbum" type="search" placeholder="Album" autocomplete="off" />
+          <input id="searchTrack" type="search" placeholder="Track" autocomplete="off" />
         </div>
         <input id="search" type="search" placeholder="Search albums, artists, tracks, year, genre…" autocomplete="off" hidden />
         <button id="go">Search</button>
@@ -664,7 +654,20 @@
       const searchArtistEl = document.getElementById('searchArtist');
       const searchAlbumEl = document.getElementById('searchAlbum');
       const searchTrackEl = document.getElementById('searchTrack');
+      const searchFieldsEl = document.getElementById('searchFields');
       const goBtn = document.getElementById('go');
+
+      // Show search fields when Search button is clicked
+      if (goBtn && searchFieldsEl) {
+        goBtn.addEventListener('click', () => {
+          if (searchFieldsEl.hidden) {
+            searchFieldsEl.hidden = false;
+            // Focus on first field
+            if (searchArtistEl) searchArtistEl.focus();
+            return; // Don't search yet, just show fields
+          }
+        }, true); // Use capture phase to run before other handlers
+      }
 
       if (closeBtn && clearBtn && publicPlaylistView) {
         closeBtn.addEventListener('click', () => {
@@ -732,6 +735,7 @@
       const searchArtistEl = document.getElementById('searchArtist');
       const searchAlbumEl = document.getElementById('searchAlbum');
       const searchTrackEl = document.getElementById('searchTrack');
+      const searchFieldsEl = document.getElementById('searchFields');
       const goEl = document.getElementById('go');
       const clearEl = document.getElementById('clear');
 
@@ -775,12 +779,17 @@
       };
 
       // Override go button handler
-      if (goEl) {
+      if (goEl && searchFieldsEl) {
         const oldHandler = goEl.onclick;
         goEl.onclick = null;
         goEl.removeEventListener('click', oldHandler);
 
         goEl.addEventListener('click', () => {
+          // If fields are hidden, don't search (the capture phase handler will show them)
+          if (searchFieldsEl.hidden) {
+            return;
+          }
+
           const artist = searchArtistEl?.value?.trim() || '';
           const album = searchAlbumEl?.value?.trim() || '';
           const track = searchTrackEl?.value?.trim() || '';
@@ -798,13 +807,14 @@
         });
       }
 
-      // Update clear button to clear all fields
-      if (clearEl) {
+      // Update clear button to clear all fields and hide them
+      if (clearEl && searchFieldsEl) {
         const originalClearHandler = clearEl.onclick;
         clearEl.addEventListener('click', () => {
           if (searchArtistEl) searchArtistEl.value = '';
           if (searchAlbumEl) searchAlbumEl.value = '';
           if (searchTrackEl) searchTrackEl.value = '';
+          searchFieldsEl.hidden = true;
         });
       }
     }, 100);
