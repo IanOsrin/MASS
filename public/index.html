@@ -239,6 +239,13 @@
     /* Placeholder images - bold and dominant style */
     img.placeholder-image, img[src*="placeholder.png"]{opacity:0.85 !important;filter:brightness(1.1) contrast(1.15) !important;}
 
+    /* ======= Image Lightbox ======= */
+    .image-lightbox{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.92);z-index:200;cursor:zoom-out;padding:20px;}
+    .image-lightbox.open{display:flex;}
+    .image-lightbox img{max-width:90vw;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.6);}
+    .image-lightbox-close{position:absolute;top:20px;right:20px;background:rgba(0,0,0,0.7);border:none;color:#fff;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:24px;line-height:1;display:flex;align-items:center;justify-content:center;transition:background 0.2s ease;}
+    .image-lightbox-close:hover{background:rgba(0,0,0,0.9);}
+
     /* ======= Modal (centered track window) ======= */
     .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--overlay);z-index:100;}
     .overlay.open{display:flex;}
@@ -644,6 +651,12 @@
 
   <audio id="player" preload="none"></audio>
 
+  <!-- Image Lightbox for enlarged album artwork -->
+  <div id="imageLightbox" class="image-lightbox" aria-hidden="true">
+    <button id="imageLightboxClose" class="image-lightbox-close" aria-label="Close">&times;</button>
+    <img id="imageLightboxImg" alt="Album artwork" />
+  </div>
+
   <script>
     // Close featured playlist button handler
     document.addEventListener('DOMContentLoaded', () => {
@@ -699,6 +712,47 @@
           if (e.key === 'Enter') {
             e.preventDefault();
             goBtn.click();
+          }
+        });
+      }
+
+      // Image lightbox for album artwork
+      const imageLightbox = document.getElementById('imageLightbox');
+      const imageLightboxImg = document.getElementById('imageLightboxImg');
+      const imageLightboxClose = document.getElementById('imageLightboxClose');
+
+      if (imageLightbox && imageLightboxImg && imageLightboxClose) {
+        // Handle clicks on album artwork to enlarge
+        document.addEventListener('click', (e) => {
+          const coverWrap = e.target.closest('.cover-wrap');
+          if (coverWrap) {
+            const img = coverWrap.querySelector('img');
+            if (img && img.src) {
+              e.preventDefault();
+              e.stopPropagation();
+              imageLightboxImg.src = img.src;
+              imageLightbox.classList.add('open');
+              imageLightbox.setAttribute('aria-hidden', 'false');
+            }
+          }
+        });
+
+        // Close lightbox on click
+        const closeLightbox = () => {
+          imageLightbox.classList.remove('open');
+          imageLightbox.setAttribute('aria-hidden', 'true');
+          imageLightboxImg.src = '';
+        };
+
+        imageLightboxClose.addEventListener('click', closeLightbox);
+        imageLightbox.addEventListener('click', (e) => {
+          if (e.target === imageLightbox) closeLightbox();
+        });
+
+        // Close on Escape key
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && imageLightbox.classList.contains('open')) {
+            closeLightbox();
           }
         });
       }
