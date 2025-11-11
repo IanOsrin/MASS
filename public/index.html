@@ -512,8 +512,11 @@
         </div>
         <section id="publicPlaylistView" class="public-playlist-view" hidden>
           <div class="public-playlist-header">
-            <h2 id="publicPlaylistTitle" class="public-playlist-title">Featured Playlist</h2>
-            <span id="publicPlaylistMeta" class="public-playlist-status"></span>
+            <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;">
+              <h2 id="publicPlaylistTitle" class="public-playlist-title">Featured Playlist</h2>
+              <span id="publicPlaylistMeta" class="public-playlist-status"></span>
+            </div>
+            <button id="closePublicPlaylistBtn" class="btn small" type="button" aria-label="Close playlist">&times;</button>
           </div>
           <div id="publicPlaylistStatus" class="public-playlist-status" hidden></div>
           <div id="publicPlaylistHero" class="public-playlist-hero" hidden>
