@@ -2604,7 +2604,7 @@ const SEARCH_FIELDS_OPTIONAL = [
 const SEARCH_FIELDS_DEFAULT = [...SEARCH_FIELDS_BASE, ...SEARCH_FIELDS_OPTIONAL];
 
 const ARTIST_FIELDS_BASE = ['Album Artist'];
-const ARTIST_FIELDS_OPTIONAL = ['Tape Files::Album Artist', 'Track Artist'];
+const ARTIST_FIELDS_OPTIONAL = ['Tape Files::Album Artist', 'Tape Files::Album_Artist', 'Artist', 'AlbumArtist', 'Track Artist', 'Tape Files::Track Artist'];
 const ALBUM_FIELDS_BASE = ['Album Title'];
 const ALBUM_FIELDS_OPTIONAL = ['Tape Files::Album_Title'];
 const TRACK_FIELDS_BASE = ['Track Name'];
@@ -2635,7 +2635,7 @@ function buildSearchQueries({ q, artist, album, track }, includeOptionalFields) 
     combos = extend(combos, (b) =>
       artistFields.map((field) => ({
         ...b,
-        [field]: begins(artist)
+        [field]: contains(artist)
       }))
     );
   }
@@ -2669,6 +2669,7 @@ function buildSearchQueries({ q, artist, album, track }, includeOptionalFields) 
 }
 
 const begins = (s) => (s ? `${s}*` : '');
+const contains = (s) => (s ? `*${s}*` : '');
 
 app.get('/api/search', async (req, res) => {
   try {
@@ -2691,7 +2692,7 @@ app.get('/api/search', async (req, res) => {
       if (!trackResult.valid) validationErrors.track = trackResult.error;
     }
     if (req.query.limit) {
-      const limitResult = validators.limit(req.query.limit, 300);
+      const limitResult = validators.limit(req.query.limit, 500);
       if (!limitResult.valid) validationErrors.limit = limitResult.error;
     }
     if (req.query.offset) {
@@ -2706,7 +2707,7 @@ app.get('/api/search', async (req, res) => {
     const artist = (req.query.artist || '').toString().trim();
     const album = (req.query.album || '').toString().trim();
     const track = (req.query.track || '').toString().trim();
-    const limit = Math.max(1, Math.min(300, parseInt(req.query.limit || '30', 10)));
+    const limit = Math.max(1, Math.min(500, parseInt(req.query.limit || '30', 10)));
     const uiOff0 = Math.max(0, parseInt(req.query.offset || '0', 10));
     const fmOff = uiOff0 + 1;
 
