@@ -7,7 +7,7 @@
   <style>
     :root {
       --bg:#0f0f12; --fg:#f5f6f7; --muted:#a7abb3; --card:#17181c; --accent:#62f5a9; --border:#24262c;
-      --cover-size: 80px; /* compact cover for random songs */
+      --cover-size: 104px; /* compact cover for random songs */
       --overlay: rgba(0,0,0,.6);
       --btn-gradient-start:#3a7bd5;
       --btn-gradient-end:#00d2ff;
@@ -89,9 +89,9 @@
       .search-fields{flex-direction:column;gap:8px;width:100%;}
       .searchbar button{min-width:48%;}
     }
-    .albums{display:grid;grid-template-columns:repeat(4,150px);grid-template-rows:auto auto;gap:14px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
+    .albums{display:grid;grid-template-columns:repeat(4,195px);grid-template-rows:auto auto;gap:14px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
     .albums.single-album{display:flex;flex-direction:column;align-items:center;gap:24px;}
-    .card{background:var(--card);border:2px solid #62f5a9;border-radius:9px;padding:8px;display:flex;flex-direction:column;gap:4px;overflow:hidden;scroll-margin-top:128px;min-height:132px;}
+    .card{background:var(--card);border:2px solid #62f5a9;border-radius:9px;padding:8px;display:flex;flex-direction:column;gap:4px;overflow:hidden;scroll-margin-top:128px;min-height:172px;}
     .card-buttons{margin-top:6px;display:flex;flex-direction:column;gap:3px;}
     .card .play-button{border-radius:8px;padding:3px 6px;cursor:pointer;font-weight:600;background:var(--accent);border:none;color:var(--btn-text);width:100%;font-size:10px;}
     .card .play-button:hover{filter:brightness(1.1);}
@@ -148,8 +148,10 @@
 
     .back-row{display:flex;justify-content:center;margin-bottom:12px;}
 .toolbar{display:none;}
-    .pager{display:none !important;}
-    .pager button{border-radius:10px;padding:10px 12px;cursor:pointer;}
+    .pager{display:flex;align-items:center;justify-content:center;gap:12px;margin:20px 0;padding:12px;}
+    .pager[hidden]{display:none !important;}
+    .pager button{border-radius:10px;padding:10px 16px;cursor:pointer;font-weight:600;}
+    .pager button:disabled{opacity:0.5;cursor:not-allowed;}
     .count{display:none;}
     .error{background:#2b1517;border:1px solid #5a2327;color:#ffb1b8;padding:10px 12px;border-radius:10px;}
 
