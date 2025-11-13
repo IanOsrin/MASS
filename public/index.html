@@ -178,8 +178,19 @@
 
     .playlists-panel{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:flex;flex-direction:column;gap:10px;}
     .playlists-panel[hidden]{display:none;}
-    .playlists-header{display:flex;align-items:center;gap:12px;justify-content:space-between;}
-    .playlists-header h2{margin:0;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);}
+    .playlists-header{display:flex;align-items:center;gap:12px;justify-content:space-between;cursor:pointer;user-select:none;}
+    .playlists-header:hover h2{color:var(--accent);}
+    .playlists-header h2{margin:0;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);transition:color 0.2s ease;}
+    .playlists-panel .playlists-header h2,
+    .public-playlists .playlists-header h2{position:relative;padding-left:20px;}
+    .playlists-panel .playlists-header h2::before,
+    .public-playlists .playlists-header h2::before{content:'▼';position:absolute;left:0;font-size:12px;color:var(--muted);transition:transform 0.2s ease;}
+    .playlists-panel.collapsed .playlists-header h2::before,
+    .public-playlists.collapsed .playlists-header h2::before{transform:rotate(-90deg);}
+    .playlists-panel.collapsed .playlists-content,
+    .public-playlists.collapsed .public-playlists-content{display:none;}
+    .playlists-content{display:flex;flex-direction:column;gap:10px;}
+    .public-playlists-content{display:flex;flex-direction:column;gap:10px;}
     .playlists-list{display:flex;flex-direction:column;gap:8px;}
     .playlist-pill{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#1b1c20;color:#f5f5f5;cursor:pointer;min-width:0;transition:transform .15s ease,box-shadow .15s ease;font-size:12px;}
     .playlist-pill:hover{transform:translateY(-1px);box-shadow:0 10px 20px rgba(0,0,0,.25);}
@@ -193,8 +204,12 @@
 
     .playlist-tracks{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:flex;flex-direction:column;gap:6px;}
     .playlist-tracks[hidden]{display:none;}
-    .playlist-tracks .playlists-header{margin-bottom:0;}
-    .playlist-tracks .playlists-header h2{font-size:18px;}
+    .playlist-tracks .playlists-header{margin-bottom:0;cursor:pointer;user-select:none;}
+    .playlist-tracks .playlists-header:hover h2{color:var(--accent);}
+    .playlist-tracks .playlists-header h2{font-size:18px;transition:color 0.2s ease;position:relative;padding-left:20px;}
+    .playlist-tracks .playlists-header h2::before{content:'▼';position:absolute;left:0;font-size:12px;color:var(--muted);transition:transform 0.2s ease;}
+    .playlist-tracks.collapsed .playlists-header h2::before{transform:rotate(-90deg);}
+    .playlist-tracks.collapsed .playlist-tracks-content{display:none;}
     .playlist-tracks .muted{font-size:13px;}
     .playlist-tracks .tracks{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none;max-height:360px;overflow-y:auto;}
     .playlist-track{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;background:transparent;border:1px solid transparent;min-height:36px;}
@@ -459,35 +474,40 @@
             <h2>My Playlists</h2>
             <span id="playlistsStatus" class="muted"></span>
           </div>
-          <div id="playlistsList" class="playlists-list"></div>
-          <form id="playlistCreateForm" class="playlist-create" autocomplete="off">
-            <input id="playlistNameInput" type="text" placeholder="Create new playlist" maxlength="80" />
-            <button type="submit" class="btn small">Create</button>
-          </form>
-          <button id="importPlaylistButton" type="button" class="btn small" style="width:100%;margin-top:8px;">Import Playlist</button>
-          <div id="playlistsEmpty" class="playlist-empty" hidden>No playlists yet. Create one to start saving tracks.</div>
+          <div class="playlists-content">
+            <div id="playlistsList" class="playlists-list"></div>
+            <form id="playlistCreateForm" class="playlist-create" autocomplete="off">
+              <input id="playlistNameInput" type="text" placeholder="Create new playlist" maxlength="80" />
+              <button type="submit" class="btn small">Create</button>
+            </form>
+            <button id="importPlaylistButton" type="button" class="btn small" style="width:100%;margin-top:8px;">Import Playlist</button>
+            <div id="playlistsEmpty" class="playlist-empty" hidden>No playlists yet. Create one to start saving tracks.</div>
+          </div>
         </section>
         <section id="publicPlaylistsPanel" class="public-playlists" hidden>
           <div class="playlists-header">
             <h2>Featured Playlists</h2>
           </div>
-          <ul id="publicPlaylistsList" class="public-playlists-list"></ul>
-          <div id="publicPlaylistsEmpty" class="playlist-empty" hidden>No curated playlists yet.</div>
+          <div class="public-playlists-content">
+            <ul id="publicPlaylistsList" class="public-playlists-list"></ul>
+            <div id="publicPlaylistsEmpty" class="playlist-empty" hidden>No curated playlists yet.</div>
+          </div>
         </section>
         <section id="playlistTracksSection" class="playlist-tracks" hidden>
           <div class="playlists-header">
             <h2 id="playlistTracksTitle">Playlist</h2>
             <div class="playlist-actions">
-              <button id="togglePlaylistTracks" type="button" class="btn small">Show tracks</button>
               <button id="deletePlaylistButton" type="button" class="btn small btn-error">Delete playlist</button>
             </div>
           </div>
-          <div id="playlistTracksMeta" class="muted"></div>
-          <ul id="playlistTracksList" class="tracks"></ul>
-          <div id="playlistTracksEmpty" class="playlist-empty" hidden>No tracks in this playlist yet.</div>
-          <div class="playlist-footer-actions">
-            <button id="sharePlaylistButton" type="button" class="btn small">Share</button>
-            <button id="exportPlaylistButton" type="button" class="btn small">Save</button>
+          <div class="playlist-tracks-content">
+            <div id="playlistTracksMeta" class="muted"></div>
+            <ul id="playlistTracksList" class="tracks"></ul>
+            <div id="playlistTracksEmpty" class="playlist-empty" hidden>No tracks in this playlist yet.</div>
+            <div class="playlist-footer-actions">
+              <button id="sharePlaylistButton" type="button" class="btn small">Share</button>
+              <button id="exportPlaylistButton" type="button" class="btn small">Save</button>
+            </div>
           </div>
         </section>
         <section id="jokeAdsPanel" class="joke-ads" hidden>
@@ -710,6 +730,55 @@
           }
         });
       });
+
+      // Accordion functionality for My Playlists
+      const playlistsPanel = document.getElementById('playlistsPanel');
+      if (playlistsPanel) {
+        const header = playlistsPanel.querySelector('.playlists-header');
+        if (header) {
+          header.addEventListener('click', (e) => {
+            // Don't toggle if clicking on the status span
+            if (e.target.id === 'playlistsStatus') return;
+            playlistsPanel.classList.toggle('collapsed');
+            localStorage.setItem('myPlaylistsCollapsed', playlistsPanel.classList.contains('collapsed'));
+          });
+        }
+        if (localStorage.getItem('myPlaylistsCollapsed') === 'true') {
+          playlistsPanel.classList.add('collapsed');
+        }
+      }
+
+      // Accordion functionality for Featured Playlists
+      const publicPlaylistsPanel = document.getElementById('publicPlaylistsPanel');
+      if (publicPlaylistsPanel) {
+        const header = publicPlaylistsPanel.querySelector('.playlists-header');
+        if (header) {
+          header.addEventListener('click', () => {
+            publicPlaylistsPanel.classList.toggle('collapsed');
+            localStorage.setItem('featuredPlaylistsCollapsed', publicPlaylistsPanel.classList.contains('collapsed'));
+          });
+        }
+        if (localStorage.getItem('featuredPlaylistsCollapsed') === 'true') {
+          publicPlaylistsPanel.classList.add('collapsed');
+        }
+      }
+
+      // Accordion functionality for playlist tracks section
+      const playlistTracksSection = document.getElementById('playlistTracksSection');
+      if (playlistTracksSection) {
+        const header = playlistTracksSection.querySelector('.playlists-header');
+        if (header) {
+          header.addEventListener('click', (e) => {
+            // Don't toggle if clicking on a button
+            if (e.target.tagName === 'BUTTON' || e.target.closest('.playlist-actions')) return;
+            playlistTracksSection.classList.toggle('collapsed');
+            localStorage.setItem('playlistTracksCollapsed', playlistTracksSection.classList.contains('collapsed'));
+          });
+        }
+        if (localStorage.getItem('playlistTracksCollapsed') === 'true') {
+          playlistTracksSection.classList.add('collapsed');
+        }
+      }
 
       // Keep old search field handler for compatibility
       if (searchEl && goBtn) {
