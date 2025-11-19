@@ -448,6 +448,17 @@ function hasValidAudio(fields) {
   return false;
 }
 
+function hasValidArtwork(fields) {
+  if (!fields || typeof fields !== 'object') return false;
+  for (const field of ARTWORK_FIELD_CANDIDATES) {
+    const raw = fields[field];
+    if (!raw) continue;
+    const resolved = resolveArtworkSrc(String(raw));
+    if (resolved) return true;
+  }
+  return false;
+}
+
 function applyVisibility(query = {}) {
   if (!FM_VISIBILITY_FIELD) return { ...query };
   return { ...query, [FM_VISIBILITY_FIELD]: FM_VISIBILITY_VALUE };
@@ -4086,10 +4097,10 @@ async function buildPlaylistSeedItems(count) {
     playlistSeedCache.items.length >= count &&
     now - playlistSeedCache.updatedAt < PLAYLIST_SEED_CACHE_TTL_MS
   ) {
-    // Validate cached playlist seed items still have valid audio
+    // Validate cached playlist seed items still have valid audio and artwork
     const validItems = playlistSeedCache.items.filter(item => {
       const fields = item?.fields || {};
-      return hasValidAudio(fields);
+      return hasValidAudio(fields) && hasValidArtwork(fields);
     });
     if (validItems.length >= count) {
       return cloneRandomSongItems(validItems, count);
@@ -4113,9 +4124,15 @@ async function buildPlaylistSeedItems(count) {
     return [];
   }
 
-  shuffleArray(collected);
-  playlistSeedCache = { items: collected, updatedAt: now };
-  return cloneRandomSongItems(collected, count);
+  // Filter playlist seed items to only include tracks with artwork (for initial load quality)
+  const withArtwork = collected.filter(item => hasValidArtwork(item.fields || {}));
+
+  // Use artwork-filtered items if available, otherwise fall back to all items
+  const finalItems = withArtwork.length > 0 ? withArtwork : collected;
+
+  shuffleArray(finalItems);
+  playlistSeedCache = { items: finalItems, updatedAt: now };
+  return cloneRandomSongItems(finalItems, count);
 }
 
 async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = null }) {
@@ -4164,9 +4181,16 @@ async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = nul
     }
 
     const rawData = json?.response?.data || [];
-    return rawData
+    let filtered = rawData
       .filter(record => recordIsVisible(record.fieldData || {}))
       .filter(record => hasValidAudio(record.fieldData || {}));
+
+    // On initial load, also filter by artwork for better first impression
+    if (mode === 'initial') {
+      filtered = filtered.filter(record => hasValidArtwork(record.fieldData || {}));
+    }
+
+    return filtered;
   };
 
   let dataWithVisibility = await runQuery(randomOffset);
