@@ -1297,18 +1297,6 @@
       userBadgeObserver.observe(userBadge, { attributes: true, attributeFilter: ['hidden'] });
     }
 
-    // Also watch for playlistColumn visibility changes and override if not logged in
-    if (playlistColumn) {
-      const columnObserver = new MutationObserver(() => {
-        const isLoggedIn = userBadge && !userBadge.hidden;
-        if (!isLoggedIn && playlistColumn.hidden) {
-          // Override - keep column visible for joke ads
-          playlistColumn.hidden = false;
-        }
-      });
-      columnObserver.observe(playlistColumn, { attributes: true, attributeFilter: ['hidden'] });
-    }
-
     console.log('🎭 Joke ads initialized');
   })();
   </script>
