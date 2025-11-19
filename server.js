@@ -98,6 +98,8 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
+app.use(compression()); // Enable gzip compression - good for static files too
+
 // Response time logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
@@ -112,7 +114,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(compression()); // Enable gzip compression
 app.use(express.json());
 
 // Rate limiting configuration
@@ -124,11 +125,8 @@ const apiLimiter = rateLimit({
   max: isDevelopment ? 1000 : 100, // Much higher limit in development
   message: { error: 'Too many requests, please try again later' },
   standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => {
-    // Skip rate limiting for static files
-    return req.path.startsWith('/public/') || req.path === '/';
-  }
+  legacyHeaders: false
+  // Note: No need to skip static files - they're handled early by express.static()
 });
 
 const expensiveLimiter = rateLimit({
@@ -198,6 +196,23 @@ const streamRecordCache = new Map();
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
 const PLAYLISTS_PATH = path.join(DATA_DIR, 'playlists.json');
+
+// Serve static files EARLY (after constants defined, before API middleware)
+// This bypasses rate limiting, JSON parsing, and other API-specific middleware
+const REGEX_STATIC_FILES = /\.(jpe?g|png|gif|svg|webp|ico|woff2?|ttf|eot|mp3|mp4|webm)$/i;
+app.use(express.static(PUBLIC_DIR, {
+  setHeaders: (res, filePath) => {
+    // Cache images and fonts for 1 hour
+    if (REGEX_STATIC_FILES.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+    } else {
+      // Don't cache HTML/JS/CSS files for development
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+  etag: true,
+  lastModified: true
+}));
 const fallbackAuthSecretPath = path.join(DATA_DIR, '.auth_secret');
 const RANDOM_SONG_CACHE_PATH = path.join(DATA_DIR, 'random-songs-cache.json');
 const RANDOM_SONG_SEED_LOCK_PATH = path.join(DATA_DIR, '.random-songs-cache.lock');
@@ -313,7 +328,7 @@ const REGEX_EXTRACT_NUMBERS = /[^0-9.-]/g;
 const REGEX_TRACK_SONG = /(track|song)/;
 const REGEX_NUMBER_INDICATORS = /(no|num|#|seq|order|pos)/;
 const REGEX_TABLE_MISSING = /table is missing/i;
-const REGEX_STATIC_FILES = /\.(jpg|jpeg|png|gif|svg|webp|woff|woff2|ttf|eot)$/i;
+// REGEX_STATIC_FILES moved to top of file (line ~205) where express.static() is configured
 const REGEX_SLUGIFY_NONALPHA = /[^a-z0-9]+/g;
 const REGEX_SLUGIFY_TRIM_DASHES = /^-+|-+$/g;
 const REGEX_UUID_DASHES = /-/g;
@@ -2595,20 +2610,8 @@ app.get('/api/cache/stats', (req, res) => {
 });
 
 /* ========= Static site ========= */
-// Serve static files with caching for images only, not JS/HTML for easier development
-app.use(express.static(PUBLIC_DIR, {
-  setHeaders: (res, filePath) => {
-    // Cache images and fonts for 1 hour
-    if (REGEX_STATIC_FILES.test(filePath)) {
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-    } else {
-      // Don't cache HTML/JS/CSS files for development
-      res.setHeader('Cache-Control', 'no-cache');
-    }
-  },
-  etag: true,
-  lastModified: true
-}));
+// Note: express.static() moved to top of file (line ~206) for better performance
+// Static files now bypass rate limiting and API middleware
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
 /* ========= Search ========= */
