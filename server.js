@@ -479,6 +479,40 @@ const playlistImageCache = new Map();
 let playlistsCache = { data: null, mtimeMs: 0 };
 const loggedPublicPlaylistFieldErrors = new Set();
 
+// Map FileMaker error codes to appropriate HTTP status codes
+function fmErrorToHttpStatus(fmCode, defaultStatus = 500) {
+  const code = parseInt(fmCode, 10);
+
+  // FileMaker error code reference:
+  // https://fmhelp.filemaker.com/docs/18/en/errorcodes/
+
+  if (isNaN(code)) return defaultStatus;
+
+  // No records found - return 404 Not Found
+  if (code === 401) return 404;
+
+  // Client errors (400-499) - invalid request, missing fields, etc.
+  if (code === 102) return 400; // Field is missing
+  if (code === 103) return 400; // Relationship is missing
+  if (code === 104) return 400; // Script is missing
+  if (code === 105) return 400; // Layout is missing
+  if (code === 106) return 400; // Table is missing
+  if (code >= 500 && code <= 599) return 400; // Date/time validation errors
+  if (code >= 800 && code <= 899) return 400; // Find errors (invalid criteria)
+
+  // Service unavailable (503) - FileMaker down or inaccessible
+  if (code === 802) return 503; // Unable to open file
+  if (code === 954) return 503; // Server is busy
+  if (code === 958) return 503; // Parameter missing in query
+  if (code >= 10000) return 503; // ODBC/External errors
+
+  // Authentication/permission errors - 401 Unauthorized or 403 Forbidden
+  if (code >= 200 && code <= 299) return 403; // Permission/access errors
+
+  // Default to 500 for unknown errors
+  return 500;
+}
+
 const normalizeRecordId = (value) => {
   if (value === undefined || value === null) return '';
   const str = String(value).trim();
@@ -2982,9 +3016,10 @@ app.get('/api/search', async (req, res) => {
     if (!attempt.response.ok) {
       const msg = attempt.json?.messages?.[0]?.message || 'FM error';
       const code = attempt.json?.messages?.[0]?.code;
+      const httpStatus = fmErrorToHttpStatus(code, attempt.response.status);
       return res
-        .status(500)
-        .json({ error: 'Album search failed', status: attempt.response.status, detail: `${msg} (${code})` });
+        .status(httpStatus)
+        .json({ error: 'Album search failed', status: httpStatus, detail: `${msg} (FM ${code})` });
     }
 
     if (
@@ -4621,7 +4656,8 @@ app.get('/api/album', async (req, res) => {
     if (!r.ok) {
       const msg = json?.messages?.[0]?.message || 'FM error';
       const code = json?.messages?.[0]?.code;
-      return res.status(500).json({ error: 'Album lookup failed', status: r.status, detail: `${msg} (${code})` });
+      const httpStatus = fmErrorToHttpStatus(code, r.status);
+      return res.status(httpStatus).json({ error: 'Album lookup failed', status: httpStatus, detail: `${msg} (FM ${code})` });
     }
 
     const rawData = json?.response?.data || [];
