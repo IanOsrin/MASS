@@ -4097,10 +4097,11 @@ async function buildPlaylistSeedItems(count) {
     playlistSeedCache.items.length >= count &&
     now - playlistSeedCache.updatedAt < PLAYLIST_SEED_CACHE_TTL_MS
   ) {
-    // Validate cached playlist seed items still have valid audio and artwork
+    // Validate cached playlist seed items still have valid audio
+    // TEMPORARILY DISABLED artwork filter - debugging
     const validItems = playlistSeedCache.items.filter(item => {
       const fields = item?.fields || {};
-      return hasValidAudio(fields) && hasValidArtwork(fields);
+      return hasValidAudio(fields); // && hasValidArtwork(fields);
     });
     if (validItems.length >= count) {
       return cloneRandomSongItems(validItems, count);
@@ -4125,14 +4126,13 @@ async function buildPlaylistSeedItems(count) {
   }
 
   // Filter playlist seed items to only include tracks with artwork (for initial load quality)
-  const withArtwork = collected.filter(item => hasValidArtwork(item.fields || {}));
+  // TEMPORARILY DISABLED - debugging artwork issues
+  // const withArtwork = collected.filter(item => hasValidArtwork(item.fields || {}));
+  // const finalItems = withArtwork.length > 0 ? withArtwork : collected;
 
-  // Use artwork-filtered items if available, otherwise fall back to all items
-  const finalItems = withArtwork.length > 0 ? withArtwork : collected;
-
-  shuffleArray(finalItems);
-  playlistSeedCache = { items: finalItems, updatedAt: now };
-  return cloneRandomSongItems(finalItems, count);
+  shuffleArray(collected);
+  playlistSeedCache = { items: collected, updatedAt: now };
+  return cloneRandomSongItems(collected, count);
 }
 
 async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = null }) {
@@ -4186,9 +4186,12 @@ async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = nul
       .filter(record => hasValidAudio(record.fieldData || {}));
 
     // On initial load, also filter by artwork for better first impression
-    if (mode === 'initial') {
-      filtered = filtered.filter(record => hasValidArtwork(record.fieldData || {}));
-    }
+    // TEMPORARILY DISABLED - debugging artwork issues
+    // if (mode === 'initial') {
+    //   const beforeCount = filtered.length;
+    //   filtered = filtered.filter(record => hasValidArtwork(record.fieldData || {}));
+    //   console.log(`[random-songs] Artwork filter: ${beforeCount} → ${filtered.length} tracks`);
+    // }
 
     return filtered;
   };
