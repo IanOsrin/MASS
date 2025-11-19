@@ -26,6 +26,26 @@
     .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:15px;outline:none;transition:border-color 0.2s ease;}
     .searchbar input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(98,245,169,0.1);}
     .searchbar button{border-radius:8px;padding:7px 12px;font-weight:600;cursor:pointer;font-size:12px;white-space:nowrap;}
+    .searchbar{position:relative;}
+    .ai-search-panel{position:relative;flex:0 0 auto;margin-top:0;}
+    .ai-search-toggle{display:flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid rgba(255,255,255,0.2);border-radius:999px;background:transparent;color:var(--fg);font-size:12px;font-weight:600;cursor:pointer;transition:border-color 0.2s ease,color 0.2s ease;}
+    .ai-search-toggle:hover{border-color:var(--accent);color:var(--accent);}
+    .ai-search-toggle strong{display:inline;font-size:12px;font-weight:600;}
+    .ai-search-toggle span{display:none;}
+    .ai-search-chevron{font-size:12px;color:var(--muted);transition:transform 0.2s ease;}
+    .ai-search-panel[data-collapsed="true"] .ai-search-body{display:none;}
+    .ai-search-panel[data-collapsed="false"] .ai-search-chevron{transform:rotate(90deg);}
+    .ai-search-panel[data-collapsed="false"] .ai-search-toggle span{display:inline;color:var(--muted);font-size:11px;}
+    .ai-search-body{position:absolute;top:calc(100% + 8px);right:0;z-index:15;width:min(420px,calc(100vw - 48px));background:rgba(10,14,20,0.95);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,0.4);}
+    .ai-search-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+    .ai-search-row input{flex:1;min-width:200px;background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:999px;padding:10px 16px;font-size:15px;}
+    .ai-search-row input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(98,245,169,0.15);}
+    .ai-search-row button{height:40px;padding:0 18px;border-radius:999px;}
+    .ai-search-status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);}
+    .ai-search-status[hidden]{display:none;}
+    .ai-search-status .pulse{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 rgba(98,245,169,.6);animation:pulse 1.6s infinite;}
+    .ai-search-interpretation{font-size:12px;color:var(--fg);background:rgba(98,245,169,0.05);border:1px solid rgba(98,245,169,0.2);padding:8px 12px;border-radius:10px;}
+    .ai-search-interpretation[hidden]{display:none;}
 
     main{max-width:1100px;margin:20px auto;padding:0 16px 40px;position:relative;z-index:1;}
     .layout-grid{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;}
@@ -88,6 +108,9 @@
       .searchbar{min-width:100%;flex-wrap:wrap;}
       .search-fields{flex-direction:column;gap:8px;width:100%;}
       .searchbar button{min-width:48%;}
+      .ai-search-body{width:100%;right:auto;left:0;padding:12px;}
+      .ai-search-row{flex-direction:column;align-items:stretch;}
+      .ai-search-row button{width:100%;}
     }
     .albums{display:grid;grid-template-columns:repeat(4,195px);grid-template-rows:auto auto;gap:14px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
     .albums.single-album{display:flex;flex-direction:column;align-items:center;gap:24px;}
@@ -319,6 +342,30 @@
     .status[hidden]{display:none;}
     .status .pulse{width:8px;height:8px;border-radius:50%;background:var(--accent);
       box-shadow:0 0 0 0 rgba(98,245,169,.7);animation:pulse 1.3s infinite;}
+    .theme-toggle{border-radius:999px;padding:7px 14px;font-weight:600;font-size:12px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:var(--fg);cursor:pointer;transition:all 0.2s ease;}
+    .theme-toggle:hover{border-color:var(--accent);color:var(--accent);}
+    body.alt-theme{
+      --bg:#f2f0ec;
+      --fg:#1f1c17;
+      --muted:#6b6258;
+      --card:#ffffff;
+      --accent:#ff6a3d;
+      --border:#d6cfc5;
+      --overlay:rgba(255,255,255,0.7);
+      --btn-gradient-start:#fdd68a;
+      --btn-gradient-end:#ff6a3d;
+      --btn-text:#351c12;
+    }
+    body.alt-theme header{background:linear-gradient(180deg,rgba(255,255,255,0.95),rgba(255,255,255,0.85));border-bottom:1px solid rgba(0,0,0,0.05);}
+    body.alt-theme .card{border:1px solid #f0d6c4;box-shadow:0 8px 24px rgba(53,28,18,0.08);}
+    body.alt-theme .searchbar input{background:#fff;border-color:#e3d7cd;color:#1f1c17;}
+    body.alt-theme .searchbar button{background:#fff;color:#1f1c17;border:1px solid rgba(0,0,0,0.08);}
+    body.alt-theme .playlist-column,
+    body.alt-theme .public-playlists,
+    body.alt-theme .public-playlist-view,
+    body.alt-theme .playlist-tracks,
+    body.alt-theme .ai-search-body{background:#fff;border-color:#e5dcd3;}
+    body.alt-theme .btn{color:#351c12;}
     @keyframes pulse{
       0%{transform:scale(.9);box-shadow:0 0 0 0 rgba(98,245,169,.7);}
       70%{transform:scale(1);box-shadow:0 0 0 10px rgba(98,245,169,0);}
@@ -414,7 +461,30 @@
         <button id="randomStopBtn" hidden style="display:none !important;" type="button">⏹ Stop</button>
         <button id="randomSkipBtn" hidden type="button">⏭ Skip</button>
         <span id="status" class="status" hidden aria-live="polite" role="status"><span class="pulse"></span><span id="statusText">Searching…</span></span>
+        <div class="ai-search-panel" id="aiSearchPanel" data-collapsed="true">
+          <button id="aiSearchToggle" type="button" class="ai-search-toggle" aria-expanded="false" aria-controls="aiSearchPanelBody" aria-label="Toggle AI natural language search panel">
+            <strong>AI Search</strong>
+            <span>Powered by FileMaker script “AI_NaturalLanguageSearch”</span>
+            <span class="ai-search-chevron">▸</span>
+          </button>
+          <div class="ai-search-body" id="aiSearchPanelBody">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-size:13px;font-weight:600;color:var(--fg);">AI Natural Language Search</span>
+              <button id="aiSearchClose" type="button" style="background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:4px;" aria-label="Close AI search">&times;</button>
+            </div>
+            <div class="ai-search-row">
+              <input id="aiSearchInput" type="search" placeholder="Describe the vibe, genre, instruments, year, or metadata…" autocomplete="off" />
+              <button id="aiSearchButton" type="button" class="btn">Ask AI</button>
+            </div>
+            <div id="aiSearchStatus" class="ai-search-status" hidden aria-live="polite" role="status">
+              <span class="pulse"></span>
+              <span id="aiSearchStatusText">Asking FileMaker for matches…</span>
+            </div>
+            <div id="aiSearchInterpretation" class="ai-search-interpretation" hidden></div>
+          </div>
+        </div>
       </div>
+      <button id="themeToggle" type="button" class="theme-toggle" aria-pressed="false">Modern View</button>
       <div class="explore-wrap" style="display:none !important;">
         <button id="explore" type="button" aria-expanded="false" style="display:none !important;">Explore</button>
         <div id="explorePanel" class="explore-panel" hidden>
@@ -790,6 +860,17 @@
         });
       }
 
+      // AI Search close button
+      const aiSearchClose = document.getElementById('aiSearchClose');
+      const aiSearchPanel = document.getElementById('aiSearchPanel');
+      const aiSearchToggle = document.getElementById('aiSearchToggle');
+      if (aiSearchClose && aiSearchPanel && aiSearchToggle) {
+        aiSearchClose.addEventListener('click', () => {
+          aiSearchPanel.setAttribute('data-collapsed', 'true');
+          aiSearchToggle.setAttribute('aria-expanded', 'false');
+        });
+      }
+
       // Image lightbox for album artwork (only in modal track view)
       const imageLightbox = document.getElementById('imageLightbox');
       const imageLightboxImg = document.getElementById('imageLightboxImg');
@@ -868,6 +949,42 @@
         });
       }
 
+      // Wake up the FileMaker connection to prevent idle timeout issues
+      // This ensures the token is fresh and connection is warm before user tries to play audio
+      function wakeUpConnection() {
+        fetch('/api/wake', {
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-cache'
+        })
+        .then(res => res.json())
+        .then(data => {
+          console.log('[MASS] Connection warmed up:', data.status);
+        })
+        .catch(err => {
+          console.warn('[MASS] Wake call failed:', err);
+        });
+      }
+
+      // Call on page load
+      wakeUpConnection();
+
+      // Also call when page becomes visible again (user returns to tab after being away)
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          console.log('[MASS] Page became visible, warming up connection...');
+          wakeUpConnection();
+        }
+      });
+
+      // Periodically wake the connection to prevent token expiration
+      // FileMaker tokens expire after ~11.5 minutes, so wake every 5 minutes
+      setInterval(() => {
+        if (!document.hidden) {
+          console.log('[MASS] Periodic wake (keeping connection alive)...');
+          wakeUpConnection();
+        }
+      }, 5 * 60 * 1000); // 5 minutes
+
       // Preload featured playlists in the background
       setTimeout(() => {
         fetch('/api/public-playlists', { headers: { 'Accept': 'application/json' } })
@@ -891,7 +1008,7 @@
       }, 2000); // Wait 2 seconds after page load before preloading
     });
   </script>
-  <script src="/app.min.js?v=23" defer></script>
+  <script src="/app.min.js?v=28" defer></script>
   <script>
   // Override search to use separate fields
   window.addEventListener('DOMContentLoaded', () => {

@@ -440,7 +440,8 @@ function applyVisibility(query = {}) {
 
 function shouldFallbackVisibility(json) {
   const code = json?.messages?.[0]?.code;
-  return code === '102' || code === '121';
+  const codeStr = code === undefined || code === null ? '' : String(code);
+  return codeStr === '102' || codeStr === '121';
 }
 
 function recordIsVisible(fields = {}) {
@@ -981,6 +982,16 @@ function resolvePlayableSrc(raw) {
   if (!raw || typeof raw !== 'string') return '';
   const src = raw.trim();
   if (!src) return '';
+
+  // Detect FileMaker's internal container metadata format (not a valid URL)
+  // Format: "size:0,0\rmovie:file.mp3\rmoviemac:/path/to/file.mp3"
+  if (src.includes('\r') || src.includes('\n') ||
+      (src.includes('movie:') && src.includes('size:')) ||
+      src.includes('moviemac:') || src.includes('moviewin:')) {
+    console.warn('[MASS] Detected FileMaker container metadata format, rejecting:', src.slice(0, 100));
+    return ''; // Return empty so client falls back to recordId+field approach
+  }
+
   if (src.startsWith('/api/container?')) return src;
   if (REGEX_ABSOLUTE_API_CONTAINER.test(src)) return src;
   if (REGEX_DATA_URI.test(src)) return src;
@@ -993,6 +1004,16 @@ function resolveArtworkSrc(raw) {
   if (!raw || typeof raw !== 'string') return '';
   const src = raw.trim();
   if (!src) return '';
+
+  // Detect FileMaker's internal container metadata format (not a valid URL)
+  if (src.includes('\r') || src.includes('\n') ||
+      (src.includes('movie:') && src.includes('size:')) ||
+      src.includes('moviemac:') || src.includes('moviewin:') ||
+      src.includes('image:')) {
+    console.warn('[MASS] Detected FileMaker container metadata in artwork, rejecting:', src.slice(0, 100));
+    return ''; // Return empty - artwork is optional
+  }
+
   if (src.startsWith('/api/container?') || REGEX_HTTP_HTTPS.test(src)) return src;
   return `/api/container?u=${encodeURIComponent(src)}`;
 }
@@ -2595,25 +2616,37 @@ const SEARCH_FIELDS_BASE = ['Album Artist', 'Album Title', 'Track Name'];
 const SEARCH_FIELDS_OPTIONAL = [
   'Year of Release',
   'Local Genre',
-  'Language',
   'Language Code',
-  'Tape Files::Album Artist',
-  'Tape Files::Album_Title',
-  'Track Artist'
+  'Track Artist',
+  'Genre'
 ];
 const SEARCH_FIELDS_DEFAULT = [...SEARCH_FIELDS_BASE, ...SEARCH_FIELDS_OPTIONAL];
 
 const ARTIST_FIELDS_BASE = ['Album Artist'];
-const ARTIST_FIELDS_OPTIONAL = ['Tape Files::Album Artist', 'Tape Files::Album_Artist', 'Artist', 'AlbumArtist', 'Track Artist', 'Tape Files::Track Artist'];
+const ARTIST_FIELDS_OPTIONAL = ['Track Artist'];
 const ALBUM_FIELDS_BASE = ['Album Title'];
-const ALBUM_FIELDS_OPTIONAL = ['Tape Files::Album_Title'];
+const ALBUM_FIELDS_OPTIONAL = [];
 const TRACK_FIELDS_BASE = ['Track Name'];
 const TRACK_FIELDS_OPTIONAL = [];
+
+const TARGET_ARTIST_FIELDS = ['Track Artist'];
+const TARGET_ALBUM_FIELDS = ['Album Title'];
+const TARGET_TRACK_FIELDS = ['Track Name'];
+
+const parseFieldList = (envKey, fallback) => {
+  const raw = (process.env[envKey] || '').trim();
+  if (!raw) return fallback;
+  const parts = raw.split(/[,\|]/).map((value) => value.trim()).filter(Boolean);
+  return parts.length ? parts : fallback;
+};
+
+const AI_GENRE_FIELDS = parseFieldList('FM_GENRE_FIELDS', ['Local Genre', 'Genre']);
+const AI_LANGUAGE_FIELDS = parseFieldList('FM_LANGUAGE_FIELDS', ['Language Code']);
 
 const listSearchFields = (base, optional, includeOptional) =>
   includeOptional ? [...base, ...optional] : base;
 
-function buildSearchQueries({ q, artist, album, track }, includeOptionalFields) {
+function buildSearchQueries({ q, artist, album, track }, includeOptionalFields, fieldOverrides = {}) {
   const queries = [];
 
   const extend = (arr, make) => {
@@ -2627,15 +2660,21 @@ function buildSearchQueries({ q, artist, album, track }, includeOptionalFields) 
   };
 
   let combos = [{}];
-  const artistFields = listSearchFields(ARTIST_FIELDS_BASE, ARTIST_FIELDS_OPTIONAL, includeOptionalFields);
-  const albumFields = listSearchFields(ALBUM_FIELDS_BASE, ALBUM_FIELDS_OPTIONAL, includeOptionalFields);
-  const trackFields = listSearchFields(TRACK_FIELDS_BASE, TRACK_FIELDS_OPTIONAL, includeOptionalFields);
+  const artistFields = Array.isArray(fieldOverrides.artist) && fieldOverrides.artist.length
+    ? fieldOverrides.artist
+    : listSearchFields(ARTIST_FIELDS_BASE, ARTIST_FIELDS_OPTIONAL, includeOptionalFields);
+  const albumFields = Array.isArray(fieldOverrides.album) && fieldOverrides.album.length
+    ? fieldOverrides.album
+    : listSearchFields(ALBUM_FIELDS_BASE, ALBUM_FIELDS_OPTIONAL, includeOptionalFields);
+  const trackFields = Array.isArray(fieldOverrides.track) && fieldOverrides.track.length
+    ? fieldOverrides.track
+    : listSearchFields(TRACK_FIELDS_BASE, TRACK_FIELDS_OPTIONAL, includeOptionalFields);
 
   if (artist) {
     combos = extend(combos, (b) =>
       artistFields.map((field) => ({
         ...b,
-        [field]: contains(artist)
+        [field]: begins(artist)
       }))
     );
   }
@@ -2670,6 +2709,188 @@ function buildSearchQueries({ q, artist, album, track }, includeOptionalFields) 
 
 const begins = (s) => (s ? `${s}*` : '');
 const contains = (s) => (s ? `*${s}*` : '');
+
+function normalizeAiValue(value) {
+  if (value === undefined || value === null) return '';
+  const str = String(value).trim();
+  if (!str || str.toLowerCase() === 'null') return '';
+  return str;
+}
+
+function prepareAiSearchPayload(rawCriteria = {}, userQuery = '') {
+  const normalized = {
+    artist: normalizeAiValue(rawCriteria.artist),
+    album: normalizeAiValue(rawCriteria.album),
+    track: normalizeAiValue(rawCriteria.track),
+    genre: normalizeAiValue(rawCriteria.genre),
+    year: normalizeAiValue(rawCriteria.year),
+    language: normalizeAiValue(rawCriteria.language),
+    keywords: normalizeAiValue(rawCriteria.keywords || rawCriteria.q || rawCriteria.text || rawCriteria.description)
+  };
+
+  const fallbackQuery = normalizeAiValue(userQuery);
+  const queryText = normalized.keywords || fallbackQuery;
+  normalized.queryText = queryText;
+  normalized.usedFallbackQuery = !normalized.keywords && Boolean(queryText);
+
+  const shouldUseGeneral = !normalized.artist && !normalized.album && !normalized.track;
+  // If we have extracted criteria (genre/year/language), don't use queryText in base search
+  // This prevents "1960 jazz" from searching for titles containing "1960 jazz"
+  // Instead, we'll just filter by the extracted criteria
+  const hasExtractedCriteria = normalized.genre || normalized.year || normalized.language;
+  const useQueryText = shouldUseGeneral && !hasExtractedCriteria;
+
+  const baseQueries = buildSearchQueries({
+    artist: normalized.artist,
+    album: normalized.album,
+    track: normalized.track,
+    q: useQueryText ? queryText : ''
+  }, true);
+
+  let finalQueries = baseQueries.length ? baseQueries : [{ 'Album Title': '*' }];
+
+  if (normalized.genre && AI_GENRE_FIELDS.length) {
+    const genreQueries = [];
+    finalQueries.forEach((q) => {
+      AI_GENRE_FIELDS.forEach((field) => {
+        genreQueries.push({ ...q, [field]: `*${normalized.genre}*` });
+      });
+    });
+    finalQueries = genreQueries;
+  }
+
+  if (normalized.year) {
+    finalQueries = finalQueries.map((q) => ({ ...q, 'Year of Release': normalized.year }));
+  }
+
+  if (normalized.language && AI_LANGUAGE_FIELDS.length) {
+    finalQueries = finalQueries.map((q) => {
+      const base = { ...q };
+      AI_LANGUAGE_FIELDS.forEach((field) => {
+        base[field] = `*${normalized.language}*`;
+      });
+      return base;
+    });
+  }
+
+  if (!finalQueries.length) {
+    finalQueries = [{ 'Album Title': '*' }];
+  }
+
+  return { normalizedCriteria: normalized, finalQueries };
+}
+
+async function buildAiResponseFromCriteria(rawCriteria, userQuery, logLabel = '') {
+  let payloadInfo = prepareAiSearchPayload(rawCriteria, userQuery);
+  console.log(`[AI SEARCH] Structured criteria${logLabel}:`, payloadInfo.normalizedCriteria);
+  console.log(`[AI SEARCH] FileMaker queries${logLabel}:`, JSON.stringify(payloadInfo.finalQueries, null, 2));
+
+  let findPayload = {
+    query: payloadInfo.finalQueries,
+    limit: 100
+  };
+
+  let findResponse = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, findPayload);
+  let findJson = await findResponse.json().catch(() => ({}));
+
+  const maybeRetryWithoutOptionalFields = async () => {
+    const code = findJson?.messages?.[0]?.code;
+    const codeStr = code === undefined || code === null ? '' : String(code);
+    if (codeStr === '102' && (payloadInfo.normalizedCriteria.genre || payloadInfo.normalizedCriteria.language)) {
+      const sanitizedCriteria = {
+        ...rawCriteria,
+        genre: '',
+        language: ''
+      };
+      payloadInfo = prepareAiSearchPayload(sanitizedCriteria, userQuery);
+      console.warn('[AI SEARCH] Retrying without genre/language filters due to missing field (102)');
+      findPayload = {
+        query: payloadInfo.finalQueries,
+        limit: 100
+      };
+      findResponse = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, findPayload);
+      findJson = await findResponse.json().catch(() => ({}));
+    }
+  };
+
+  const maybeFallbackToGeneralSearch = async () => {
+    const code = findJson?.messages?.[0]?.code;
+    const codeStr = code === undefined || code === null ? '' : String(code);
+    if (codeStr !== '102') return false;
+    const fallbackText = payloadInfo.normalizedCriteria.queryText || userQuery || '';
+    if (!fallbackText) return false;
+    console.warn('[AI SEARCH] Retrying with general text search due to missing field (102)');
+    const fallbackQuery = buildSearchQueries({ q: fallbackText, artist: '', album: '', track: '' }, false);
+    const fallbackPayload = {
+      query: fallbackQuery,
+      limit: 100,
+      offset: 1
+    };
+    findResponse = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, fallbackPayload);
+    findJson = await findResponse.json().catch(() => ({}));
+    payloadInfo.normalizedCriteria = {
+      ...payloadInfo.normalizedCriteria,
+      fallbackMode: 'text',
+      genre: '',
+      language: ''
+    };
+    return findResponse.ok;
+  };
+
+  await maybeRetryWithoutOptionalFields();
+  if (!findResponse.ok) {
+    const fallbackWorked = await maybeFallbackToGeneralSearch();
+    if (!fallbackWorked) {
+      const msg = findJson?.messages?.[0]?.message || 'Find failed';
+      const code = findJson?.messages?.[0]?.code;
+      return {
+        error: {
+          status: 500,
+          body: {
+            error: 'FileMaker find failed',
+            detail: `${msg} (${code})`,
+            criteria: payloadInfo.normalizedCriteria
+          }
+        }
+      };
+    }
+  }
+
+  const rawData = findJson?.response?.data || [];
+  const validRecords = rawData.filter((record) => hasValidAudio(record.fieldData || {}));
+
+  return {
+    payload: {
+      items: validRecords.map((d) => ({
+        recordId: d.recordId,
+        modId: d.modId,
+        fields: d.fieldData || {}
+      })),
+      total: findJson?.response?.dataInfo?.foundCount || validRecords.length,
+      aiInterpretation: payloadInfo.normalizedCriteria,
+      query: userQuery
+    }
+  };
+}
+
+/* ========= Wake/Health endpoint ========= */
+app.get('/api/wake', async (req, res) => {
+  try {
+    // Warm up the FileMaker connection by ensuring token is valid
+    await ensureToken();
+    res.json({
+      status: 'ok',
+      timestamp: Date.now(),
+      tokenValid: !!fmToken
+    });
+  } catch (err) {
+    console.error('[MASS] Wake endpoint error:', err);
+    res.status(500).json({
+      status: 'error',
+      error: err.message
+    });
+  }
+});
 
 app.get('/api/search', async (req, res) => {
   try {
@@ -2720,24 +2941,37 @@ app.get('/api/search', async (req, res) => {
       return res.json(cached);
     }
 
-    const makePayload = (includeOptionalFields) => ({
-      query: buildSearchQueries({ q, artist, album, track }, includeOptionalFields),
+    const makePayload = (includeOptionalFields, overrides) => ({
+      query: buildSearchQueries({ q, artist, album, track }, includeOptionalFields, overrides),
       limit,
       offset: fmOff
     });
 
-    const runSearch = async (includeOptionalFields) => {
-      const payload = makePayload(includeOptionalFields);
+    const runSearch = async (includeOptionalFields, overrides) => {
+      const payload = makePayload(includeOptionalFields, overrides);
       const response = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
       const json = await response.json().catch(() => ({}));
       return { response, json };
     };
 
-    let attempt = await runSearch(true);
+    const hasOnlyArtist = Boolean(artist) && !album && !track && !q;
+    const hasOnlyAlbum = Boolean(album) && !artist && !track && !q;
+    const hasOnlyTrack = Boolean(track) && !artist && !album && !q;
+
+    const targetedOverrides = {};
+    if (hasOnlyArtist) targetedOverrides.artist = TARGET_ARTIST_FIELDS;
+    if (hasOnlyAlbum) targetedOverrides.album = TARGET_ALBUM_FIELDS;
+    if (hasOnlyTrack) targetedOverrides.track = TARGET_TRACK_FIELDS;
+
+    const usingTargetedOverrides = Object.keys(targetedOverrides).length > 0;
+
+    let attemptUsedOptional = !usingTargetedOverrides;
+    let attempt = await runSearch(attemptUsedOptional, usingTargetedOverrides ? targetedOverrides : undefined);
 
     if (!attempt.response.ok) {
       const code = attempt.json?.messages?.[0]?.code;
-      if (code === '102') {
+      if (String(code) === '102' && attemptUsedOptional) {
+        attemptUsedOptional = false;
         attempt = await runSearch(false);
       }
     }
@@ -2748,6 +2982,15 @@ app.get('/api/search', async (req, res) => {
       return res
         .status(500)
         .json({ error: 'Album search failed', status: attempt.response.status, detail: `${msg} (${code})` });
+    }
+
+    if (
+      usingTargetedOverrides &&
+      attempt.response.ok &&
+      (attempt.json?.response?.dataInfo?.returnedCount ?? attempt.json?.response?.data?.length ?? 0) === 0
+    ) {
+      attemptUsedOptional = true;
+      attempt = await runSearch(true);
     }
 
     const rawData = attempt.json?.response?.data || [];
@@ -2793,6 +3036,109 @@ app.get('/api/search', async (req, res) => {
   } catch (err) {
     const detail = err?.response?.data?.messages?.[0]?.message || err?.message || String(err);
     res.status(500).json({ error: 'Album search failed', status: 500, detail });
+  }
+});
+
+app.get('/api/ai-search', async (req, res) => {
+  try {
+    const query = (req.query.q || '').toString().trim();
+
+    if (!query) {
+      return res.status(400).json({ error: 'Query parameter required' });
+    }
+
+    if (query.length > 500) {
+      return res.status(400).json({ error: 'Query too long (max 500 characters)' });
+    }
+
+    // Check cache
+    const cacheKey = `ai-search:${query}`;
+    const cached = searchCache.get(cacheKey);
+    if (cached) {
+      console.log(`[CACHE HIT] ai-search: ${query}`);
+      res.setHeader('X-Cache-Hit', 'true');
+      return res.json(cached);
+    }
+
+    console.log(`[AI SEARCH] Query: "${query}"`);
+
+    const scriptParam = JSON.stringify({ query });
+    const scriptUrl = `${FM_HOST}/fmi/data/v1/databases/${encodeURIComponent(FM_DB)}/layouts/${encodeURIComponent(FM_LAYOUT)}/script/AI_NaturalLanguageSearch?script.param=${encodeURIComponent(scriptParam)}`;
+
+    const callScript = () =>
+      safeFetch(scriptUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${fmToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+    const processScriptResponse = async (scriptResponse, label = '') => {
+      const json = await scriptResponse.json();
+      const scriptResult = json?.response?.scriptResult;
+
+      if (!scriptResult) {
+        res.status(500).json({ error: 'No script result returned from FileMaker script' });
+        return false;
+      }
+
+      const result = JSON.parse(scriptResult);
+
+      if (!result.success) {
+        res.status(500).json({
+          error: 'AI interpretation failed',
+          detail: result.error || 'Unknown error'
+        });
+        return false;
+      }
+
+      const criteria = result.criteria || {};
+      console.log(`[AI SEARCH] Extracted criteria${label}:`, criteria);
+
+      const built = await buildAiResponseFromCriteria(criteria, query, label);
+      if (built?.error) {
+        res.status(built.error.status).json(built.error.body);
+        return false;
+      }
+
+      const finalResult = built?.payload;
+      if (!finalResult) {
+        res.status(500).json({ error: 'AI search failed', detail: 'Missing AI payload' });
+        return false;
+      }
+
+      searchCache.set(cacheKey, finalResult);
+      res.json(finalResult);
+      return true;
+    };
+
+    const response = await callScript();
+    if (response.ok) {
+      await processScriptResponse(response);
+      return;
+    }
+
+    if (response.status === 401) {
+      await ensureToken();
+      const retryResponse = await callScript();
+      if (!retryResponse.ok) {
+        const errorText = await retryResponse.text();
+        console.error('[AI SEARCH] Script execution failed:', errorText);
+        res.status(500).json({ error: 'AI search failed', detail: errorText });
+        return;
+      }
+      await processScriptResponse(retryResponse, ' (retry)');
+      return;
+    }
+
+    const errorText = await response.text();
+    console.error('[AI SEARCH] Script execution failed:', errorText);
+    res.status(500).json({ error: 'AI search failed', detail: errorText });
+  } catch (err) {
+    console.error('[AI SEARCH] Error:', err);
+    const detail = err?.message || String(err);
+    res.status(500).json({ error: 'AI search failed', status: 500, detail });
   }
 });
 
@@ -3780,7 +4126,9 @@ async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = nul
     }
 
     const rawData = json?.response?.data || [];
-    return rawData.filter(record => recordIsVisible(record.fieldData || {}));
+    return rawData
+      .filter(record => recordIsVisible(record.fieldData || {}))
+      .filter(record => hasValidAudio(record.fieldData || {}));
   };
 
   let dataWithVisibility = await runQuery(randomOffset);
@@ -3858,7 +4206,9 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot }) {
   }
 
   let rawData = json?.response?.data || [];
-  let visible = rawData.filter(record => recordIsVisible(record.fieldData || {}));
+  let visible = rawData
+    .filter(record => recordIsVisible(record.fieldData || {}))
+    .filter(record => hasValidAudio(record.fieldData || {}));
 
   if (!visible.length) {
     console.warn(`[random-songs] Legacy fetch empty at offset ${randomOffset}, retrying from start`);
@@ -3871,7 +4221,9 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot }) {
     const retryJson = await retryResponse.json().catch(() => ({}));
     if (retryResponse.ok) {
       rawData = retryJson?.response?.data || [];
-      visible = rawData.filter(record => recordIsVisible(record.fieldData || {}));
+      visible = rawData
+        .filter(record => recordIsVisible(record.fieldData || {}))
+        .filter(record => hasValidAudio(record.fieldData || {}));
     } else {
       console.warn('[random-songs] Legacy retry fetch failed', retryJson?.messages?.[0]);
     }
@@ -3940,6 +4292,7 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot }) {
       if (secondQueryUsesVisibility) {
         additionalRawData = additionalRawData.filter(record => recordIsVisible(record.fieldData || {}));
       }
+      additionalRawData = additionalRawData.filter(record => hasValidAudio(record.fieldData || {}));
       const shuffledTracks = shuffleArray(additionalRawData.slice());
 
       for (const track of shuffledTracks) {
@@ -3984,7 +4337,9 @@ function selectUniqueRecords(records, desiredCount, state) {
 
   for (const record of records) {
     if (!record || !record.recordId || selectedIds.has(record.recordId)) continue;
-    const artist = resolveArtist(record.fieldData || {});
+    const fields = record.fieldData || {};
+    if (!hasValidAudio(fields)) continue;
+    const artist = resolveArtist(fields);
     if (!artistBuckets.has(artist)) {
       artistBuckets.set(artist, []);
     }
