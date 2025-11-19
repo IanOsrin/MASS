@@ -1309,9 +1309,6 @@
       columnObserver.observe(playlistColumn, { attributes: true, attributeFilter: ['hidden'] });
     }
 
-    // Periodic check to ensure visibility (in case of race conditions)
-    setInterval(updateJokeAdsVisibility, 500);
-
     console.log('🎭 Joke ads initialized');
   })();
   </script>
