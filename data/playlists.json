@@ -169,10 +169,28 @@
         "audioField": "mp3",
         "artworkField": "",
         "addedAt": "2025-11-02T09:53:29.046Z"
+      },
+      {
+        "id": "76aa3468-5b23-4324-b1df-41b6c1048ed4",
+        "trackRecordId": "11612",
+        "name": "Ouma Se Polka",
+        "albumTitle": "",
+        "albumArtist": "Oom Gertjie Claasen",
+        "catalogue": "LSJ 227",
+        "trackArtist": "Oom Gertjie Claasen",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/5AD676DA57B2ABB8D9179CA3C31325D630A6D6BAE0C6DC6D1B1BA03A3EDC189C.wav?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F5AD676DA57B2ABB8D9179CA3C31325D630A6D6BAE0C6DC6D1B1BA03A3EDC189C.wav%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/7E562BEB113BFF003AF0A5BA47EA2BFEA5A7788F936CE91DCA764002720C74C0.jpg?RCType=RCFileProcessor",
+        "audioField": "Audio File",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-11-20T17:51:01.156Z"
       }
     ],
     "createdAt": "2025-10-30T18:05:09.961Z",
-    "updatedAt": "2025-11-02T09:53:29.046Z"
+    "updatedAt": "2025-11-20T17:51:01.156Z",
+    "shareId": "8baf254cad054e3cb0bc27930997f643",
+    "sharedAt": "2025-11-20T17:51:22.192Z"
   },
   {
     "id": "bc3a96db-1dc0-477a-a00e-e5d35b093243",
@@ -278,10 +296,28 @@
         "audioField": "mp3",
         "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/0F37C6C85F6A8E8818DFDEA590D3FA329C9BD0BE9B2A1EA8CF7693603482F8BC.jpg?RCType=RCFileProcessor",
         "artworkField": "Artwork::Picture"
+      },
+      {
+        "id": "d15e1766-a848-4a17-b6af-e10a1c83c291",
+        "trackRecordId": "8113",
+        "name": "Movers Underground",
+        "albumTitle": "",
+        "albumArtist": "The Movers",
+        "catalogue": "NCYN 1000",
+        "trackArtist": "The Movers",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/A769304D2FF55CEE75C5C258FBAA3B2B2912A25E0F27069B24E874C17D7733C0.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2FA769304D2FF55CEE75C5C258FBAA3B2B2912A25E0F27069B24E874C17D7733C0.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/487E1BC5EE91EDF2BA4C7004C4A108D9052BDEE5FD4A321F91EF442EE62A587C.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-11-20T17:57:30.890Z"
       }
     ],
     "createdAt": "2025-10-30T18:08:13.410Z",
-    "updatedAt": "2025-10-30T18:08:13.410Z"
+    "updatedAt": "2025-11-20T17:57:30.890Z",
+    "shareId": "24feb12884b946bba337b96a99ebabeb",
+    "sharedAt": "2025-11-20T17:57:53.529Z"
   },
   {
     "id": "6dcaeea5-ab61-454b-9d45-bc40008d39e4",

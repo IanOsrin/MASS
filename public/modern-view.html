@@ -1,0 +1,1446 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MADMusic — Modern View</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #e8edf2;
+      --bg-secondary: #f8f9fb;
+      --bg-card: #ffffff;
+      --text-primary: #2c3e50;
+      --text-secondary: #5a6c7d;
+      --text-muted: #8b98a5;
+      --accent: #4a90e2;
+      --accent-hover: #357abd;
+      --border: #d4dce4;
+      --shadow: rgba(0, 0, 0, 0.08);
+      --overlay: rgba(0, 0, 0, 0.4);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+      background: linear-gradient(135deg, #e8edf2 0%, #f0f4f8 25%, #f8f9fb 50%, #e8eef4 75%, #dfe7f0 100%);
+      background-attachment: fixed;
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    /* Navigation Header */
+    .nav-header {
+      position: sticky;
+      top: 0;
+      background: rgba(248, 249, 251, 0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 2rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .logo img {
+      height: 60px;
+      width: auto;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+    }
+
+    .logo-text {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 0.05em;
+    }
+
+    .nav-actions {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .search-box {
+      position: relative;
+      width: 300px;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 0.75rem 2.5rem 0.75rem 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      color: var(--text-primary);
+      font-size: 0.875rem;
+      outline: none;
+      transition: all 0.3s ease;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+    }
+
+    .search-icon {
+      position: absolute;
+      right: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .search-clear {
+      position: absolute;
+      right: 2.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.25rem;
+      cursor: pointer;
+      padding: 0.25rem;
+      line-height: 1;
+      transition: color 0.2s ease;
+    }
+
+    .search-clear:hover {
+      color: var(--text-primary);
+    }
+
+    .search-icon.loading {
+      animation: spin 1s linear infinite;
+    }
+
+    .view-switcher {
+      padding: 0.5rem 1.25rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .view-switcher:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    /* Main Content */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .section {
+      margin-bottom: 4rem;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .section-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .section-subtitle {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    /* Featured Release */
+    .featured-release {
+      position: relative;
+      background: linear-gradient(135deg, #ffffff 0%, #f5f5f7 100%);
+      border-radius: 24px;
+      overflow: hidden;
+      padding: 3rem;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      min-height: 400px;
+      display: flex;
+      align-items: center;
+      gap: 3rem;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .featured-release:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    .featured-artwork {
+      flex-shrink: 0;
+      width: 300px;
+      height: 300px;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+      position: relative;
+    }
+
+    .featured-artwork img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .featured-artwork::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 100%);
+    }
+
+    .featured-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .featured-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      background: rgba(0, 113, 227, 0.1);
+      padding: 0.25rem 0.75rem;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .featured-title {
+      font-size: 3rem;
+      font-weight: 800;
+      line-height: 1.1;
+      color: var(--text-primary);
+    }
+
+    .featured-artist {
+      font-size: 1.5rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .featured-actions {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .btn-play {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem 2.5rem;
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      border-radius: 50px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 20px rgba(0, 113, 227, 0.25);
+    }
+
+    .btn-play:hover {
+      background: var(--accent-hover);
+      transform: scale(1.05);
+      box-shadow: 0 6px 30px rgba(0, 113, 227, 0.35);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem 2rem;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 2px solid var(--border);
+      border-radius: 50px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #ffffff;
+      transform: translateY(-2px);
+    }
+
+    /* Highlights Section */
+    .highlights-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+      gap: 2rem;
+    }
+
+    .highlight-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      display: flex;
+      gap: 1.5rem;
+      padding: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .highlight-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .highlight-artwork {
+      width: 140px;
+      height: 140px;
+      border-radius: 12px;
+      overflow: hidden;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .highlight-artwork img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .play-overlay {
+      position: absolute;
+      inset: 0;
+      background: var(--overlay);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .highlight-card:hover .play-overlay,
+    .random-card:hover .play-overlay {
+      opacity: 1;
+    }
+
+    .play-icon {
+      width: 48px;
+      height: 48px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-size: 1.5rem;
+      box-shadow: 0 4px 16px rgba(0, 113, 227, 0.3);
+    }
+
+    .highlight-info {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.5rem;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .highlight-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .highlight-artist {
+      font-size: 1rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .highlight-album {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Random Selection Grid */
+    .random-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .random-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .random-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-6px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .random-artwork {
+      width: 100%;
+      padding-bottom: 100%;
+      position: relative;
+      overflow: hidden;
+      background: #f0f0f5;
+    }
+
+    .random-artwork img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .random-info {
+      padding: 1rem;
+    }
+
+    .random-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 0.25rem;
+    }
+
+    .random-artist {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .random-album {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 0.25rem;
+    }
+
+    /* Loading States */
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 4rem;
+      color: var(--text-muted);
+    }
+
+    .spinner {
+      border: 3px solid #e5e5ea;
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Empty States */
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--text-muted);
+    }
+
+    .empty-state-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    /* Placeholder for missing images */
+    .artwork-placeholder {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #e5e5ea 0%, #f0f0f5 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 3rem;
+    }
+
+    /* Mini Audio Player */
+    .mini-player {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: none;
+      align-items: center;
+      gap: 1.5rem;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+      z-index: 200;
+    }
+
+    .mini-player.active {
+      display: flex;
+    }
+
+    .mini-player-artwork {
+      width: 56px;
+      height: 56px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #f0f0f5;
+      flex-shrink: 0;
+    }
+
+    .mini-player-artwork img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .mini-player-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .mini-player-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mini-player-artist {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mini-player-controls {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .mini-player-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: var(--accent);
+      color: #ffffff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      transition: all 0.2s ease;
+    }
+
+    .mini-player-btn:hover {
+      background: var(--accent-hover);
+      transform: scale(1.05);
+    }
+
+    .mini-player-btn.secondary {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .mini-player-btn.secondary:hover {
+      background: var(--bg-secondary);
+      border-color: var(--accent);
+    }
+
+    /* Responsive Design */
+    @media (max-width: 1024px) {
+      .featured-release {
+        flex-direction: column;
+        text-align: center;
+      }
+
+      .featured-artwork {
+        width: 250px;
+        height: 250px;
+      }
+
+      .featured-title {
+        font-size: 2rem;
+      }
+
+      .highlights-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .random-grid {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      }
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        padding: 1rem;
+      }
+
+      .nav-header {
+        padding: 1rem;
+        flex-wrap: wrap;
+      }
+
+      .search-box {
+        width: 100%;
+        order: 3;
+      }
+
+      .featured-release {
+        padding: 2rem;
+      }
+
+      .featured-artwork {
+        width: 200px;
+        height: 200px;
+      }
+
+      .featured-title {
+        font-size: 1.75rem;
+      }
+
+      .featured-actions {
+        flex-direction: column;
+      }
+
+      .btn-play,
+      .btn-secondary {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .highlight-card {
+        flex-direction: column;
+      }
+
+      .highlight-artwork {
+        width: 100%;
+        height: 200px;
+      }
+
+      .random-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 1rem;
+      }
+
+      .mini-player {
+        padding: 0.75rem 1rem;
+        gap: 1rem;
+      }
+
+      .mini-player-artwork {
+        width: 48px;
+        height: 48px;
+      }
+
+      .mini-player-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 0.875rem;
+      }
+
+      /* Add bottom padding to container when player is active */
+      body:has(.mini-player.active) .container {
+        padding-bottom: 100px;
+      }
+
+      /* Logo responsive */
+      .logo img {
+        height: 48px;
+      }
+
+      .logo-text {
+        font-size: 1.25rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation Header -->
+  <nav class="nav-header">
+    <div class="logo">
+      <img src="/img/MAD_Logo.png" alt="MAD Music Logo" />
+      <span class="logo-text">MADMusic</span>
+    </div>
+    <div class="nav-actions">
+      <div class="search-box">
+        <input
+          type="text"
+          class="search-input"
+          id="searchInput"
+          placeholder="Search songs, artists, albums... (press Enter)"
+          autocomplete="off"
+        />
+        <span class="search-icon" id="searchIcon">🔍</span>
+        <button class="search-clear" id="searchClear" style="display: none;">✕</button>
+      </div>
+      <a href="/" class="view-switcher">← MASS View</a>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Featured Release Section -->
+    <section class="section">
+      <div id="featuredContainer">
+        <div class="loading">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Highlights Section -->
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Highlights</h2>
+          <p class="section-subtitle">Handpicked for you</p>
+        </div>
+      </div>
+      <div id="highlightsContainer" class="highlights-grid">
+        <div class="loading">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Random Selection Section -->
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title" id="randomTitle">Discover More</h2>
+          <p class="section-subtitle" id="randomSubtitle">Fresh picks from your collection</p>
+        </div>
+      </div>
+      <div id="randomContainer" class="random-grid">
+        <div class="loading">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Mini Audio Player -->
+  <div class="mini-player" id="miniPlayer">
+    <div class="mini-player-artwork">
+      <img id="playerArtwork" src="" alt="" />
+    </div>
+    <div class="mini-player-info">
+      <div class="mini-player-title" id="playerTitle">Nothing playing</div>
+      <div class="mini-player-artist" id="playerArtist">Select a track to play</div>
+    </div>
+    <div class="mini-player-controls">
+      <button class="mini-player-btn secondary" id="playerPause" title="Pause">
+        ⏸
+      </button>
+      <button class="mini-player-btn secondary" id="playerStop" title="Stop">
+        ⏹
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // Access Token Management
+    const STORAGE_KEY = 'mass_access_token';
+    let currentAccessToken = localStorage.getItem(STORAGE_KEY);
+
+    // API endpoints
+    const API = {
+      featured: '/api/featured-albums?limit=1',
+      highlights: '/api/random-songs?count=2&_t=' + Date.now(),
+      random: '/api/random-songs?count=20&_t=' + Date.now(), // Increased to 20, added timestamp for fresh results
+      search: '/api/search',
+      container: '/api/container'
+    };
+
+    // Global storage for items (so we can reference them by ID in onclick handlers)
+    const itemsStore = new Map();
+    let currentAudio = null;
+    let currentTrackInfo = null;
+    let isPlaying = false;
+
+    // Fetch wrapper with access token
+    async function apiFetch(url, options = {}) {
+      const headers = new Headers(options.headers || {});
+
+      if (currentAccessToken) {
+        headers.set('X-Access-Token', currentAccessToken);
+      }
+
+      const response = await fetch(url, {
+        ...options,
+        headers
+      });
+
+      // Check if access token is required
+      if (response.status === 403) {
+        const data = await response.json();
+        if (data.requiresAccessToken && !currentAccessToken) {
+          // Prompt user for access token
+          const token = prompt('This application requires an access token. Please enter your access token:');
+          if (token) {
+            currentAccessToken = token.trim();
+            localStorage.setItem(STORAGE_KEY, currentAccessToken);
+            // Retry the request
+            return apiFetch(url, options);
+          }
+        }
+      }
+
+      return response;
+    }
+
+    // Helper functions
+    function getFieldValue(fields, fieldNames) {
+      if (!fields) return null;
+      for (const name of fieldNames) {
+        if (fields[name]) return fields[name];
+      }
+      return null;
+    }
+
+    function getArtworkUrl(fields) {
+      const artworkFields = ['Artwork::Picture', 'Artwork Picture', 'Picture'];
+      const artwork = getFieldValue(fields, artworkFields);
+      if (!artwork) return null;
+
+      // Handle FileMaker container URLs
+      if (typeof artwork === 'string') {
+        if (artwork.startsWith('http')) {
+          return `/api/container?u=${encodeURIComponent(artwork)}`;
+        }
+        return artwork;
+      }
+      return null;
+    }
+
+    function getAudioUrl(fields, recordId) {
+      const audioFields = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
+      const audio = getFieldValue(fields, audioFields);
+      if (!audio) return null;
+
+      if (typeof audio === 'string' && audio.startsWith('http')) {
+        return `/api/container?u=${encodeURIComponent(audio)}`;
+      }
+      return `/api/track/${recordId}/container`;
+    }
+
+    function getTitleField(fields) {
+      const titleFields = ['Track Title', 'Song Title', 'Title', 'Track Name'];
+      return getFieldValue(fields, titleFields) || 'Unknown Track';
+    }
+
+    function getArtistField(fields) {
+      const artistFields = ['Artist Name', 'Artist', 'Album Artist'];
+      return getFieldValue(fields, artistFields) || 'Unknown Artist';
+    }
+
+    function getAlbumField(fields) {
+      const albumFields = ['Album Title', 'Album', 'Album Name'];
+      return getFieldValue(fields, albumFields) || 'Unknown Album';
+    }
+
+    // Group tracks by album
+    function groupByAlbum(items) {
+      const albumMap = new Map();
+
+      items.forEach(item => {
+        const fields = item.fields || {};
+        const album = getAlbumField(fields);
+        const artist = getArtistField(fields);
+        const albumKey = `${album}|||${artist}`; // Use delimiter to avoid conflicts
+
+        if (!albumMap.has(albumKey)) {
+          albumMap.set(albumKey, {
+            album,
+            artist,
+            artwork: getArtworkUrl(fields),
+            tracks: []
+          });
+        }
+
+        albumMap.get(albumKey).tracks.push(item);
+      });
+
+      return Array.from(albumMap.values());
+    }
+
+    // Update mini player UI
+    function updateMiniPlayer(title, artist, artworkUrl) {
+      const miniPlayer = document.getElementById('miniPlayer');
+      const playerTitle = document.getElementById('playerTitle');
+      const playerArtist = document.getElementById('playerArtist');
+      const playerArtwork = document.getElementById('playerArtwork');
+      const pauseBtn = document.getElementById('playerPause');
+
+      miniPlayer.classList.add('active');
+      playerTitle.textContent = title;
+      playerArtist.textContent = artist;
+      playerArtwork.src = artworkUrl || '';
+
+      if (isPlaying) {
+        pauseBtn.textContent = '⏸';
+        pauseBtn.title = 'Pause';
+      } else {
+        pauseBtn.textContent = '▶';
+        pauseBtn.title = 'Play';
+      }
+    }
+
+    // Hide mini player
+    function hideMiniPlayer() {
+      const miniPlayer = document.getElementById('miniPlayer');
+      miniPlayer.classList.remove('active');
+    }
+
+    // Play function with actual audio playback
+    function playSong(recordId) {
+      console.log('[PlaySong] Called with recordId:', recordId);
+      console.log('[PlaySong] Items in store:', itemsStore.size);
+
+      const item = itemsStore.get(recordId);
+      if (!item) {
+        console.error('[PlaySong] Item not found in store. RecordId:', recordId);
+        console.error('[PlaySong] Available IDs:', Array.from(itemsStore.keys()));
+        alert('Item not found. Check console for details.');
+        return;
+      }
+
+      console.log('[PlaySong] Found item:', item);
+      const audioUrl = getAudioUrl(item.fields, item.recordId);
+      console.log('[PlaySong] Audio URL:', audioUrl);
+
+      if (!audioUrl) {
+        alert('Audio not available for this track');
+        return;
+      }
+
+      const title = getTitleField(item.fields);
+      const artist = getArtistField(item.fields);
+      const album = getAlbumField(item.fields);
+      const artworkUrl = getArtworkUrl(item.fields);
+
+      console.log(`[PlaySong] Playing: ${title} by ${artist}`);
+
+      // Store current track info
+      currentTrackInfo = { title, artist, album, artworkUrl };
+
+      // Stop current audio if playing
+      if (currentAudio) {
+        console.log('[PlaySong] Stopping previous audio');
+        currentAudio.pause();
+        currentAudio = null;
+      }
+
+      // Create and play new audio
+      console.log('[PlaySong] Creating new Audio element');
+      currentAudio = new Audio(audioUrl);
+
+      // Add event listeners
+      currentAudio.addEventListener('ended', () => {
+        isPlaying = false;
+        updateMiniPlayer(title, artist, artworkUrl);
+      });
+
+      currentAudio.addEventListener('error', (e) => {
+        console.error('[PlaySong] Audio error:', e);
+        alert('Failed to load audio. Check console for details.');
+        isPlaying = false;
+        updateMiniPlayer(title, artist, artworkUrl);
+      });
+
+      currentAudio.play().then(() => {
+        console.log(`[PlaySong] ✓ Now playing: ${title} by ${artist}`);
+        isPlaying = true;
+        updateMiniPlayer(title, artist, artworkUrl);
+      }).catch(err => {
+        console.error('[PlaySong] ✗ Playback failed:', err);
+        alert(`Failed to play: ${err.message}\n\nCheck browser console for details.`);
+        isPlaying = false;
+      });
+
+      // Emit event for potential integration with classic view
+      window.dispatchEvent(new CustomEvent('play-track', {
+        detail: {
+          url: audioUrl,
+          title,
+          artist,
+          album,
+          recordId: item.recordId
+        }
+      }));
+    }
+
+    // Pause/Resume function
+    function togglePause() {
+      if (!currentAudio) return;
+
+      if (isPlaying) {
+        currentAudio.pause();
+        isPlaying = false;
+      } else {
+        currentAudio.play().then(() => {
+          isPlaying = true;
+          updateMiniPlayer(currentTrackInfo.title, currentTrackInfo.artist, currentTrackInfo.artworkUrl);
+        });
+      }
+
+      if (currentTrackInfo) {
+        updateMiniPlayer(currentTrackInfo.title, currentTrackInfo.artist, currentTrackInfo.artworkUrl);
+      }
+    }
+
+    // Stop function
+    function stopPlayback() {
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio = null;
+      }
+      isPlaying = false;
+      hideMiniPlayer();
+      currentTrackInfo = null;
+    }
+
+    // Render functions
+    function renderFeatured(items) {
+      const container = document.getElementById('featuredContainer');
+
+      if (!items || items.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🎵</div>
+            <p>No featured releases available</p>
+          </div>
+        `;
+        return;
+      }
+
+      const item = items[0];
+      const fields = item.fields || {};
+      const artworkUrl = getArtworkUrl(fields);
+      const title = getTitleField(fields);
+      const artist = getArtistField(fields);
+      const album = getAlbumField(fields);
+
+      console.log('[Featured] Item:', {recordId: item.recordId, title, artist, album, artworkUrl});
+
+      // Store item for later reference
+      itemsStore.set(item.recordId, item);
+
+      container.innerHTML = `
+        <div class="featured-release">
+          <div class="featured-artwork">
+            ${artworkUrl
+              ? `<img src="${artworkUrl}" alt="${album}" onerror="this.parentElement.innerHTML='<div class=\\'artwork-placeholder\\'>♪</div>'" />`
+              : '<div class="artwork-placeholder">♪</div>'
+            }
+          </div>
+          <div class="featured-info">
+            <div class="featured-label">Featured Release</div>
+            <h1 class="featured-title">${album}</h1>
+            <p class="featured-artist">${artist}</p>
+            <div class="featured-actions">
+              <button class="btn-play" onclick="playSong('${item.recordId}')">
+                ▶ Play Now
+              </button>
+              <button class="btn-secondary">
+                ♡ Add to Library
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderHighlights(items) {
+      const container = document.getElementById('highlightsContainer');
+
+      if (!items || items.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🎵</div>
+            <p>No highlights available</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = items.slice(0, 2).map(item => {
+        const fields = item.fields || {};
+        const artworkUrl = getArtworkUrl(fields);
+        const title = getTitleField(fields);
+        const artist = getArtistField(fields);
+        const album = getAlbumField(fields);
+
+        // Store item for later reference
+        itemsStore.set(item.recordId, item);
+
+        return `
+          <div class="highlight-card" onclick="playSong('${item.recordId}')">
+            <div class="highlight-artwork">
+              ${artworkUrl
+                ? `<img src="${artworkUrl}" alt="${album}" onerror="this.parentElement.innerHTML='<div class=\\'artwork-placeholder\\'>♪</div>'" />`
+                : '<div class="artwork-placeholder">♪</div>'
+              }
+              <div class="play-overlay">
+                <div class="play-icon">▶</div>
+              </div>
+            </div>
+            <div class="highlight-info">
+              <div class="highlight-title">${title}</div>
+              <div class="highlight-artist">${artist}</div>
+              <div class="highlight-album">${album}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderRandom(items) {
+      const container = document.getElementById('randomContainer');
+
+      if (!items || items.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🎵</div>
+            <p>No songs available</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = items.map(item => {
+        const fields = item.fields || {};
+        const artworkUrl = getArtworkUrl(fields);
+        const title = getTitleField(fields);
+        const artist = getArtistField(fields);
+        const album = getAlbumField(fields);
+
+        // Store item for later reference
+        itemsStore.set(item.recordId, item);
+
+        return `
+          <div class="random-card" onclick="playSong('${item.recordId}')">
+            <div class="random-artwork">
+              ${artworkUrl
+                ? `<img src="${artworkUrl}" alt="${album}" onerror="this.parentElement.innerHTML='<div class=\\'artwork-placeholder\\'>♪</div>'" />`
+                : '<div class="artwork-placeholder">♪</div>'
+              }
+              <div class="play-overlay">
+                <div class="play-icon">▶</div>
+              </div>
+            </div>
+            <div class="random-info">
+              <div class="random-title">${title}</div>
+              <div class="random-artist">${artist}</div>
+              <div class="random-album">${album}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Render albums (grouped by album)
+    function renderAlbums(albums) {
+      const container = document.getElementById('randomContainer');
+
+      if (!albums || albums.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🎵</div>
+            <p>No albums available</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = albums.map(albumData => {
+        const { album, artist, artwork, tracks } = albumData;
+        const trackCount = tracks.length;
+
+        // Store all tracks for this album
+        tracks.forEach(track => {
+          itemsStore.set(track.recordId, track);
+        });
+
+        // Get first track's recordId for playing
+        const firstTrackId = tracks[0]?.recordId;
+
+        return `
+          <div class="random-card" onclick="playSong('${firstTrackId}')">
+            <div class="random-artwork">
+              ${artwork
+                ? `<img src="${artwork}" alt="${album}" onerror="this.parentElement.innerHTML='<div class=\\'artwork-placeholder\\'>♪</div>'" />`
+                : '<div class="artwork-placeholder">♪</div>'
+              }
+              <div class="play-overlay">
+                <div class="play-icon">▶</div>
+              </div>
+            </div>
+            <div class="random-info">
+              <div class="random-title">${album}</div>
+              <div class="random-artist">${artist}</div>
+              <div class="random-album">${trackCount} track${trackCount !== 1 ? 's' : ''}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Fetch and render data
+    async function loadFeatured() {
+      try {
+        console.log('[Featured] Fetching...');
+        const response = await apiFetch(API.featured);
+        const data = await response.json();
+        console.log('[Featured] Response:', data);
+        if (data.ok && data.items) {
+          console.log('[Featured] Rendering', data.items.length, 'items');
+          renderFeatured(data.items);
+        }
+      } catch (error) {
+        console.error('[Featured] Failed to load:', error);
+        document.getElementById('featuredContainer').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⚠️</div>
+            <p>Failed to load featured release</p>
+          </div>
+        `;
+      }
+    }
+
+    async function loadHighlights() {
+      try {
+        console.log('[Highlights] Fetching...');
+        const response = await apiFetch(API.highlights);
+        const data = await response.json();
+        console.log('[Highlights] Response:', data);
+        if (data.ok && data.items) {
+          console.log('[Highlights] Rendering', data.items.length, 'items');
+          // For highlights, show individual tracks since it's only 2 items
+          renderHighlights(data.items);
+        }
+      } catch (error) {
+        console.error('[Highlights] Failed to load:', error);
+        document.getElementById('highlightsContainer').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⚠️</div>
+            <p>Failed to load highlights</p>
+          </div>
+        `;
+      }
+    }
+
+    async function loadRandom() {
+      try {
+        console.log('[Random] Fetching...');
+        const response = await apiFetch(API.random);
+        const data = await response.json();
+        console.log('[Random] Response:', data);
+        if (data.ok && data.items) {
+          console.log('[Random] Rendering', data.items.length, 'items');
+
+          // Group tracks by album for cleaner display
+          const albums = groupByAlbum(data.items);
+          console.log('[Random] Grouped into', albums.length, 'albums');
+          renderAlbums(albums);
+        }
+      } catch (error) {
+        console.error('[Random] Failed to load:', error);
+        document.getElementById('randomContainer').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⚠️</div>
+            <p>Failed to load songs</p>
+          </div>
+        `;
+      }
+    }
+
+    // Search functionality
+    let isSearching = false;
+
+    async function performSearch(query) {
+      if (!query) {
+        // Clear search - reload random songs
+        isSearching = false;
+        document.getElementById('randomTitle').textContent = 'Discover More';
+        document.getElementById('randomSubtitle').textContent = 'Fresh picks from your collection';
+        document.getElementById('searchClear').style.display = 'none';
+        document.getElementById('searchIcon').classList.remove('loading');
+        loadRandom();
+        return;
+      }
+
+      try {
+        isSearching = true;
+        document.getElementById('searchIcon').classList.add('loading');
+        document.getElementById('searchIcon').textContent = '⏳';
+        document.getElementById('searchClear').style.display = 'block';
+
+        console.log('[Search] Searching for:', query);
+
+        // Use the general 'q' parameter for broad search across all fields
+        // This searches artist, album, and track name
+        // Higher limit to ensure we get all albums for an artist
+        const searchParams = new URLSearchParams();
+        searchParams.set('q', query);
+        searchParams.set('limit', '300');
+
+        const response = await apiFetch(`${API.search}?${searchParams.toString()}`);
+        const data = await response.json();
+
+        console.log('[Search] Results:', data);
+
+        document.getElementById('searchIcon').classList.remove('loading');
+        document.getElementById('searchIcon').textContent = '🔍';
+
+        // Search API returns { items: [...] } directly, no 'ok' field
+        if (data.items && data.items.length > 0) {
+          // Group tracks by album
+          const albums = groupByAlbum(data.items);
+          console.log('[Search] Grouped into', albums.length, 'albums from', data.items.length, 'tracks');
+
+          document.getElementById('randomTitle').textContent = `Search Results`;
+          document.getElementById('randomSubtitle').textContent = `${albums.length} album${albums.length !== 1 ? 's' : ''} (${data.items.length} track${data.items.length !== 1 ? 's' : ''}) for "${query}"`;
+          renderAlbums(albums);
+        } else {
+          document.getElementById('randomTitle').textContent = 'No Results';
+          document.getElementById('randomSubtitle').textContent = `No matches found for "${query}"`;
+          document.getElementById('randomContainer').innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">🔍</div>
+              <p>No results found for "${query}"</p>
+              <p style="font-size: 0.875rem; margin-top: 0.5rem;">Try searching for an artist, album, or song name</p>
+            </div>
+          `;
+        }
+      } catch (error) {
+        console.error('[Search] Failed:', error);
+        document.getElementById('searchIcon').classList.remove('loading');
+        document.getElementById('searchIcon').textContent = '🔍';
+        document.getElementById('randomContainer').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⚠️</div>
+            <p>Search failed</p>
+          </div>
+        `;
+      }
+    }
+
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      performSearch('');
+    }
+
+    // Search on Enter key only
+    document.getElementById('searchInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const query = e.target.value.trim();
+
+        if (!query) {
+          clearSearch();
+          return;
+        }
+
+        performSearch(query);
+      }
+    });
+
+    // Show/hide clear button as user types
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      const hasValue = e.target.value.trim().length > 0;
+      document.getElementById('searchClear').style.display = hasValue ? 'block' : 'none';
+    });
+
+    document.getElementById('searchClear').addEventListener('click', clearSearch);
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      loadFeatured();
+      loadHighlights();
+      loadRandom();
+
+      // Setup mini player controls
+      document.getElementById('playerPause').addEventListener('click', togglePause);
+      document.getElementById('playerStop').addEventListener('click', stopPlayback);
+    });
+  </script>
+</body>
+</html>

@@ -3111,6 +3111,7 @@ app.get('/api/cache/stats', (req, res) => {
 // Note: express.static() moved to top of file (line ~206) for better performance
 // Static files now bypass rate limiting and API middleware
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
+app.get('/modern', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'modern-view.html')));
 
 /* ========= Search ========= */
 const SEARCH_FIELDS_BASE = ['Album Artist', 'Album Title', 'Track Name'];
@@ -4736,6 +4737,23 @@ app.get('/api/featured-albums', async (req, res) => {
   } catch (err) {
     console.error('[featured] Failed to load albums', err);
     return res.status(500).json({ ok: false, error: 'Failed to load featured albums' });
+  }
+});
+
+// Alias endpoint for modern view
+app.get('/api/releases/latest', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit || '1', 10)));
+    const refresh = req.query.refresh === '1';
+    console.log(`[releases] GET /api/releases/latest limit=${limit} refresh=${refresh}`);
+    const result = await loadFeaturedAlbumRecords({ limit, refresh });
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    return res.json({ ok: true, items: result.items, total: result.total });
+  } catch (err) {
+    console.error('[releases] Failed to load latest releases', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load latest releases' });
   }
 });
 
