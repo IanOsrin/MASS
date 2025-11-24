@@ -145,12 +145,70 @@ const authLimiter = rateLimit({
 // Apply general rate limiting to all API routes
 app.use('/api/', apiLimiter);
 
-// Add Cache-Control headers for API responses
+// Add Cache-Control headers for API and HTML responses
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
-    // Set cache headers for API responses
-    res.setHeader('Cache-Control', 'public, max-age=180'); // 3 minutes browser cache
+    if (process.env.NODE_ENV === 'development') {
+      // Development: no caching to always see fresh data
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    } else {
+      // Production: 3 minutes browser cache
+      res.setHeader('Cache-Control', 'public, max-age=180');
+    }
+  } else if (req.path === '/' || req.path.endsWith('.html')) {
+    if (process.env.NODE_ENV === 'development') {
+      // Development: no caching for HTML
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
   }
+  next();
+});
+
+// Access token validation middleware - checks all API requests
+app.use('/api/', async (req, res, next) => {
+  // Skip access token check for certain endpoints
+  // Note: req.path already has /api/ stripped when using app.use('/api/', ...)
+  const skipPaths = [
+    '/access/validate',
+    '/container'  // Container/image requests - can't send headers from <img> tags
+  ];
+
+  if (skipPaths.some(path => req.path === path || req.path.startsWith(path))) {
+    return next();
+  }
+
+  // Check for access token in header or body
+  const accessToken = req.headers['x-access-token'] || req.body?.accessToken;
+
+  if (!accessToken) {
+    return res.status(403).json({
+      ok: false,
+      error: 'Access token required',
+      requiresAccessToken: true
+    });
+  }
+
+  const validation = await validateAccessToken(accessToken);
+
+  if (!validation.valid) {
+    return res.status(403).json({
+      ok: false,
+      error: 'Invalid or expired access token',
+      reason: validation.reason,
+      requiresAccessToken: true
+    });
+  }
+
+  // Token is valid, attach info to request and continue
+  req.accessToken = {
+    type: validation.type,
+    expirationDate: validation.expirationDate
+  };
+
   next();
 });
 
@@ -167,6 +225,9 @@ const FM_PASS = process.env.FM_PASS;
 const FM_LAYOUT = process.env.FM_LAYOUT || 'API_Album_Songs';
 const FM_USERS_LAYOUT = process.env.FM_USERS_LAYOUT || 'API_Users';
 const FM_STREAM_EVENTS_LAYOUT = process.env.FM_STREAM_EVENTS_LAYOUT || 'Stream_Events';
+const FM_FEATURED_FIELD = (process.env.FM_FEATURED_FIELD || 'Tape Files::featured').trim();
+const FM_FEATURED_VALUE = (process.env.FM_FEATURED_VALUE || 'yes').trim();
+const FM_FEATURED_VALUE_LC = FM_FEATURED_VALUE.toLowerCase();
 const STREAM_EVENT_DEBUG =
   process.env.DEBUG_STREAM_EVENTS === 'true' ||
   process.env.NODE_ENV === 'development' ||
@@ -196,6 +257,7 @@ const streamRecordCache = new Map();
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
 const PLAYLISTS_PATH = path.join(DATA_DIR, 'playlists.json');
+const ACCESS_TOKENS_PATH = path.join(DATA_DIR, 'access-tokens.json');
 
 // Serve static files EARLY (after constants defined, before API middleware)
 // This bypasses rate limiting, JSON parsing, and other API-specific middleware
@@ -216,9 +278,13 @@ app.use(express.static(PUBLIC_DIR, {
 const fallbackAuthSecretPath = path.join(DATA_DIR, '.auth_secret');
 const RANDOM_SONG_CACHE_PATH = path.join(DATA_DIR, 'random-songs-cache.json');
 const RANDOM_SONG_SEED_LOCK_PATH = path.join(DATA_DIR, '.random-songs-cache.lock');
+const PLAYLIST_SEED_CACHE_TTL_MS = parsePositiveInt(process.env.PLAYLIST_SEED_CACHE_TTL_MS, 15 * 60 * 1000);
+const FEATURED_ALBUM_CACHE_TTL_MS = parsePositiveInt(process.env.FEATURED_ALBUM_CACHE_TTL_MS, 30 * 1000); // 30 seconds
 
 let randomSongPersistedCache = { items: [], updatedAt: 0 };
 let playlistSeedCache = { items: [], updatedAt: 0 };
+let featuredAlbumCache = { items: [], total: 0, updatedAt: 0 };
+let cachedFeaturedFieldName = null; // Cache the successful featured field name
 try {
   const persistedRaw = await fs.readFile(RANDOM_SONG_CACHE_PATH, 'utf8');
   const persistedJson = JSON.parse(persistedRaw);
@@ -470,6 +536,12 @@ function shouldFallbackVisibility(json) {
   return codeStr === '102' || codeStr === '121';
 }
 
+function isMissingFieldError(json) {
+  const code = json?.messages?.[0]?.code;
+  const codeStr = code === undefined || code === null ? '' : String(code);
+  return codeStr === '102';
+}
+
 function recordIsVisible(fields = {}) {
   if (!FM_VISIBILITY_FIELD) return true;
   const raw = fields[FM_VISIBILITY_FIELD] ?? fields['Tape Files::Visibility'];
@@ -478,9 +550,71 @@ function recordIsVisible(fields = {}) {
   return value === FM_VISIBILITY_VALUE_LC;
 }
 
+function recordIsFeatured(fields = {}) {
+  if (!FEATURED_FIELD_CANDIDATES.length) return false;
+  for (const field of FEATURED_FIELD_CANDIDATES) {
+    const raw = fields[field];
+    if (raw === undefined || raw === null) continue;
+    const value = typeof raw === 'string' ? raw.trim().toLowerCase() : String(raw).trim().toLowerCase();
+    if (!value) continue;
+    if (value === FM_FEATURED_VALUE_LC) {
+      return true;
+    }
+  }
+  return false;
+}
+
 const DEFAULT_AUDIO_FIELDS = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
 const AUDIO_FIELD_CANDIDATES = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
-const ARTWORK_FIELD_CANDIDATES = ['Artwork::Picture', 'Artwork Picture', 'Picture'];
+const ARTWORK_FIELD_CANDIDATES = [
+  'Artwork::Picture',
+  'Artwork Picture',
+  'Picture',
+  'CoverArtURL',
+  'AlbumCover',
+  'Cover Art',
+  'CoverArt'
+];
+const CATALOGUE_FIELD_CANDIDATES = [
+  'Album Catalogue Number',
+  'Album Catalog Number',
+  'Album Catalogue No',
+  'Album Catalog No',
+  'Catalogue',
+  'Catalogue #',
+  'Catalogue Number',
+  'Catalog Number',
+  'Catalog #',
+  'Tape Files::Album Catalogue Number',
+  'Tape Files::Catalogue',
+  'Tape Files::Catalogue #',
+  'Reference Catalogue Number',
+  'Reference Catalog Number',
+  'Reference Catalogue No',
+  'Reference Catalog No',
+  'Reference Catalogue #',
+  'Reference Catalog #',
+  'Tape Files::Reference Catalogue Number',
+  'Tape Files::Reference Catalogue No',
+  'Tape Files::Reference Catalogue #',
+  'Tape Files::Reference Catalog Number',
+  'Tape Files::Reference Catalog No',
+  'Tape Files::Reference Catalog #'
+];
+const FEATURED_FIELD_BASE = FM_FEATURED_FIELD.replace(/^tape files::/i, '').trim();
+const FEATURED_FIELD_CANDIDATES = Array.from(
+  new Set(
+    [
+      FM_FEATURED_FIELD,
+      FEATURED_FIELD_BASE && `Tape Files::${FEATURED_FIELD_BASE}`,
+      FEATURED_FIELD_BASE,
+      'Tape Files::featured',
+      'Tape Files::Featured',
+      'featured',
+      'Featured'
+    ].filter(Boolean)
+  )
+);
 
 const PUBLIC_PLAYLIST_LAYOUT = 'API_Album_Songs';
 const PLAYLIST_IMAGE_EXTS = ['.webp', '.jpg', '.jpeg', '.png', '.gif', '.svg'];
@@ -488,6 +622,7 @@ const PLAYLIST_IMAGE_DIR = path.join(PUBLIC_DIR, 'img', 'Playlists');
 const playlistImageCache = new Map();
 
 let playlistsCache = { data: null, mtimeMs: 0 };
+let accessTokensCache = { data: null, mtimeMs: 0 };
 const loggedPublicPlaylistFieldErrors = new Set();
 
 // Map FileMaker error codes to appropriate HTTP status codes
@@ -1508,6 +1643,284 @@ async function savePlaylists(playlists) {
   }
 }
 
+// ========= ACCESS TOKEN MANAGEMENT =========
+
+async function loadAccessTokens() {
+  try {
+    const stat = await fs.stat(ACCESS_TOKENS_PATH);
+    if (accessTokensCache.data && accessTokensCache.mtimeMs === stat.mtimeMs) {
+      return accessTokensCache.data;
+    }
+
+    const raw = await fs.readFile(ACCESS_TOKENS_PATH, 'utf8');
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (parseErr) {
+      console.warn('[MASS] Access tokens file contained invalid JSON, resetting to default:', parseErr);
+      const defaultData = {
+        tokens: [
+          {
+            code: 'MASS-UNLIMITED-ACCESS',
+            type: 'unlimited',
+            issuedDate: new Date().toISOString(),
+            expirationDate: null,
+            notes: 'Master cheat token - never expires'
+          }
+        ]
+      };
+      await fs.writeFile(ACCESS_TOKENS_PATH, JSON.stringify(defaultData, null, 2), 'utf8');
+      accessTokensCache = { data: defaultData, mtimeMs: Date.now() };
+      return defaultData;
+    }
+
+    const data = parsed && typeof parsed === 'object' ? parsed : { tokens: [] };
+    if (!Array.isArray(data.tokens)) {
+      data.tokens = [];
+    }
+
+    accessTokensCache = { data, mtimeMs: stat.mtimeMs };
+    return data;
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      await ensureDataDir();
+      const defaultData = {
+        tokens: [
+          {
+            code: 'MASS-UNLIMITED-ACCESS',
+            type: 'unlimited',
+            issuedDate: new Date().toISOString(),
+            expirationDate: null,
+            notes: 'Master cheat token - never expires'
+          }
+        ]
+      };
+      await fs.writeFile(ACCESS_TOKENS_PATH, JSON.stringify(defaultData, null, 2), 'utf8');
+      accessTokensCache = { data: defaultData, mtimeMs: Date.now() };
+      return defaultData;
+    }
+    console.warn('[MASS] Failed to read access tokens file:', err);
+    return accessTokensCache.data || { tokens: [] };
+  }
+}
+
+async function saveAccessTokens(tokenData) {
+  try {
+    await ensureDataDir();
+    const normalized = tokenData && typeof tokenData === 'object' ? tokenData : { tokens: [] };
+    if (!Array.isArray(normalized.tokens)) {
+      normalized.tokens = [];
+    }
+
+    const payload = JSON.stringify(normalized, null, 2);
+    const tempPath = `${ACCESS_TOKENS_PATH}.tmp`;
+    await fs.writeFile(tempPath, payload, 'utf8');
+    await fs.rename(tempPath, ACCESS_TOKENS_PATH);
+
+    let mtimeMs = Date.now();
+    try {
+      const stat = await fs.stat(ACCESS_TOKENS_PATH);
+      if (stat?.mtimeMs) mtimeMs = stat.mtimeMs;
+    } catch {
+      // ignore stat errors; fall back to Date.now()
+    }
+    accessTokensCache = { data: normalized, mtimeMs };
+  } catch (err) {
+    console.error('[MASS] Failed to write access tokens file:', err);
+    throw err;
+  }
+}
+
+// Fallback function: validates token from JSON file (used if FileMaker is down)
+function validateAccessTokenFromJSON(tokenCode) {
+  if (!tokenCode || typeof tokenCode !== 'string') {
+    return { valid: false, reason: 'No token provided' };
+  }
+
+  const trimmedCode = tokenCode.trim().toUpperCase();
+
+  // Special case: cheat token (unlimited access)
+  if (trimmedCode === 'MASS-UNLIMITED-ACCESS') {
+    return {
+      valid: true,
+      type: 'unlimited',
+      expirationDate: null,
+      message: 'Unlimited access token'
+    };
+  }
+
+  // Load and check against stored tokens
+  const tokenData = accessTokensCache.data || { tokens: [] };
+  const token = tokenData.tokens.find(t =>
+    t.code && t.code.trim().toUpperCase() === trimmedCode
+  );
+
+  if (!token) {
+    return { valid: false, reason: 'Invalid token' };
+  }
+
+  // Check expiration
+  if (token.expirationDate) {
+    const expirationTime = new Date(token.expirationDate).getTime();
+    const now = Date.now();
+
+    if (now > expirationTime) {
+      return {
+        valid: false,
+        reason: 'Token expired',
+        expirationDate: token.expirationDate
+      };
+    }
+  }
+
+  return {
+    valid: true,
+    type: token.type || 'trial',
+    expirationDate: token.expirationDate,
+    issuedDate: token.issuedDate,
+    notes: token.notes
+  };
+}
+
+// Main function: validates token from FileMaker database
+async function validateAccessToken(tokenCode) {
+  if (!tokenCode || typeof tokenCode !== 'string') {
+    return { valid: false, reason: 'No token provided' };
+  }
+
+  const trimmedCode = tokenCode.trim().toUpperCase();
+
+  // Special case: unlimited cheat token (no DB lookup needed)
+  if (trimmedCode === 'MASS-UNLIMITED-ACCESS') {
+    return {
+      valid: true,
+      type: 'unlimited',
+      expirationDate: null,
+      message: 'Unlimited access token'
+    };
+  }
+
+  try {
+    // Look up token in FileMaker
+    const layout = process.env.FM_TOKENS_LAYOUT || 'API_Access_Tokens';
+
+    const result = await fmFindRecords(layout, [
+      { 'Token_Code': `==${trimmedCode}` }  // Exact match search
+    ], { limit: 1 });
+
+    // Token not found in FileMaker
+    if (!result || !result.data || result.data.length === 0) {
+      return { valid: false, reason: 'Invalid token' };
+    }
+
+    const token = result.data[0].fieldData;
+
+    // Check if token is disabled
+    if (token.Active === 0 || token.Active === '0') {
+      return { valid: false, reason: 'Token disabled' };
+    }
+
+    // Check expiration
+    if (token.Expiration_Date) {
+      // Parse FileMaker timestamp with timezone offset
+      // FileMaker stores timestamps in server's local timezone (CAT = UTC+2)
+      // We need to convert to UTC for comparison
+      const fmTimezoneOffset = parseFloat(process.env.FM_TIMEZONE_OFFSET || '0');
+
+      // Parse the FileMaker date string
+      let expirationTime = new Date(token.Expiration_Date).getTime();
+
+      // Adjust for FileMaker's timezone offset (convert FM local time to UTC)
+      // If FM is UTC+2, subtract 2 hours to get UTC
+      const offsetMs = fmTimezoneOffset * 60 * 60 * 1000;
+      expirationTime = expirationTime - offsetMs;
+
+      const now = Date.now();
+
+      console.log(`[MASS] Token expiration check for ${trimmedCode}:`);
+      console.log(`  Raw expiration from FM: "${token.Expiration_Date}"`);
+      console.log(`  FM Timezone offset: ${fmTimezoneOffset > 0 ? '+' : ''}${fmTimezoneOffset} hours`);
+      console.log(`  Parsed as local: ${new Date(token.Expiration_Date).toISOString()}`);
+      console.log(`  Adjusted to UTC: ${new Date(expirationTime).toISOString()}`);
+      console.log(`  Current UTC time: ${new Date(now).toISOString()}`);
+      console.log(`  Time until expiry: ${((expirationTime - now) / 1000 / 60 / 60).toFixed(2)} hours`);
+
+      if (isNaN(expirationTime)) {
+        console.warn(`[MASS] Could not parse expiration date: "${token.Expiration_Date}" - treating as no expiration`);
+      } else if (now > expirationTime) {
+        console.log(`[MASS] Token ${trimmedCode} is EXPIRED`);
+        return {
+          valid: false,
+          reason: 'Token expired',
+          expirationDate: token.Expiration_Date
+        };
+      } else {
+        console.log(`[MASS] Token ${trimmedCode} is still valid`);
+      }
+    }
+
+    // Update usage statistics (async - don't wait for it)
+    const recordId = result.data[0].recordId;
+    const now = new Date();
+    const fmTimestamp = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+    const updateFields = {
+      'Last_Used': fmTimestamp,
+      'Use_Count': (parseInt(token.Use_Count) || 0) + 1
+    };
+
+    // Track if we're calculating a new expiration for first-time use
+    let calculatedExpirationUTC = null;
+
+    // If this is the first use, set First_Used timestamp
+    if (!token.First_Used || token.First_Used === '') {
+      updateFields['First_Used'] = fmTimestamp;
+      console.log(`[MASS] Setting First_Used for token ${trimmedCode}`);
+
+      // Also calculate and set Expiration_Date if Token_Duration_Hours is set
+      if (token.Token_Duration_Hours && parseInt(token.Token_Duration_Hours) > 0) {
+        const durationSeconds = parseInt(token.Token_Duration_Hours);
+        const expirationTime = new Date(now.getTime() + (durationSeconds * 1000));
+        const fmExpiration = `${expirationTime.getMonth() + 1}/${expirationTime.getDate()}/${expirationTime.getFullYear()} ${expirationTime.getHours()}:${String(expirationTime.getMinutes()).padStart(2, '0')}:${String(expirationTime.getSeconds()).padStart(2, '0')}`;
+        updateFields['Expiration_Date'] = fmExpiration;
+
+        // Store the calculated expiration as UTC ISO string for return
+        calculatedExpirationUTC = expirationTime.toISOString();
+        console.log(`[MASS] Setting Expiration_Date for token ${trimmedCode}: ${fmExpiration} (${durationSeconds} seconds from now)`);
+      }
+    }
+
+    fmUpdateRecord(layout, recordId, updateFields).catch(err => {
+      console.warn('[MASS] Failed to update token usage stats:', err);
+    });
+
+    // Token is valid!
+    // Use calculated expiration if we just set it, otherwise convert from DB
+    let expirationDateUTC = calculatedExpirationUTC;
+    if (!expirationDateUTC && token.Expiration_Date) {
+      const fmTimezoneOffset = parseFloat(process.env.FM_TIMEZONE_OFFSET || '0');
+      let expirationTimeUTC = new Date(token.Expiration_Date).getTime();
+      const offsetMs = fmTimezoneOffset * 60 * 60 * 1000;
+      expirationTimeUTC = expirationTimeUTC - offsetMs;
+      expirationDateUTC = new Date(expirationTimeUTC).toISOString();
+    }
+
+    return {
+      valid: true,
+      type: token.Token_Type || 'trial',
+      expirationDate: expirationDateUTC,
+      issuedDate: token.Issued_Date,
+      notes: token.Notes
+    };
+  } catch (err) {
+    console.error('[MASS] FileMaker token validation error:', err);
+
+    // Fallback to JSON file if FileMaker lookup fails
+    console.warn('[MASS] Falling back to JSON file for token validation');
+    return validateAccessTokenFromJSON(tokenCode);
+  }
+}
+
 function normalizeTrackPayload(raw = {}) {
   const recordId = typeof raw.recordId === 'string' ? raw.recordId.trim() : '';
   const name = typeof raw.name === 'string' ? raw.name.trim() : '';
@@ -1988,6 +2401,46 @@ app.get('/api/auth/me', async (req, res) => {
   } catch (err) {
     console.error('[MASS] Session check failed:', err);
     res.status(500).json({ ok: false, error: 'Session check failed' });
+  }
+});
+
+// ========= ACCESS TOKEN ENDPOINTS =========
+
+console.log('[MASS] Registering access token validation endpoint');
+app.post('/api/access/validate', async (req, res) => {
+  console.log('[MASS] /api/access/validate route hit');
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        ok: false,
+        valid: false,
+        error: 'Token is required'
+      });
+    }
+
+    const result = await validateAccessToken(token);
+
+    if (result.valid) {
+      res.json({
+        ok: true,
+        valid: true,
+        type: result.type,
+        expirationDate: result.expirationDate,
+        message: result.message || 'Token is valid'
+      });
+    } else {
+      res.status(401).json({
+        ok: false,
+        valid: false,
+        reason: result.reason,
+        expirationDate: result.expirationDate
+      });
+    }
+  } catch (err) {
+    console.error('[MASS] Token validation failed:', err);
+    res.status(500).json({ ok: false, valid: false, error: 'Token validation failed' });
   }
 });
 
@@ -3056,7 +3509,7 @@ app.get('/api/search', async (req, res) => {
 
     for (const record of data) {
       const fields = record.fieldData || {};
-      const catalogue = firstNonEmptyFast(fields, ['Album Catalogue Number', 'Album Catalog Number', 'Catalogue', 'Tape Files::Album Catalogue Number']);
+      const catalogue = firstNonEmptyFast(fields, CATALOGUE_FIELD_CANDIDATES);
       const albumTitle = firstNonEmptyFast(fields, ['Album Title', 'Tape Files::Album_Title', 'Tape Files::Album Title']);
       const albumArtist = firstNonEmptyFast(fields, ['Album Artist', 'Tape Files::Album Artist', 'Artist']);
 
@@ -3237,7 +3690,7 @@ app.get('/api/public-playlists', expensiveLimiter, async (req, res) => {
       const albumTitle = firstNonEmptyFast(fields, ['Album Title', 'Tape Files::Album_Title', 'Tape Files::Album Title', 'Album']);
       const albumArtist = firstNonEmptyFast(fields, ['Album Artist', 'Tape Files::Album Artist', 'Tape Files::Album_Artist', 'AlbumArtist', 'Artist']);
       const trackArtist = firstNonEmptyFast(fields, ['Track Artist', 'Tape Files::Track Artist', 'TrackArtist', 'Artist']) || albumArtist;
-      const catalogue = firstNonEmptyFast(fields, ['Album Catalogue Number', 'Album Catalog Number', 'Album Catalogue No', 'Tape Files::Album Catalogue Number', 'Catalogue']);
+      const catalogue = firstNonEmptyFast(fields, CATALOGUE_FIELD_CANDIDATES);
       const genre = firstNonEmptyFast(fields, ['Local Genre', 'Tape Files::Local Genre', 'Genre']);
       const language = firstNonEmptyFast(fields, ['Language', 'Tape Files::Language', 'Language Code']);
       const producer = firstNonEmptyFast(fields, ['Producer', 'Tape Files::Producer']);
@@ -3737,8 +4190,10 @@ function bufferAddRecords(records = []) {
   for (const record of records) {
     if (!record || !record.recordId) continue;
     if (randomSongBuffer.recordsById.has(record.recordId)) continue;
+    const fields = record.fieldData || {};
+    if (!hasValidAudio(fields) || !hasValidArtwork(fields)) continue;
 
-    const artist = resolveArtist(record.fieldData || {});
+    const artist = resolveArtist(fields);
     randomSongBuffer.recordsById.set(record.recordId, record);
     if (!randomSongBuffer.recordIdsByArtist.has(artist)) {
       randomSongBuffer.recordIdsByArtist.set(artist, new Set());
@@ -3877,7 +4332,7 @@ function cloneRandomSongItems(items = [], count = items.length) {
   }));
 }
 
-function getPersistedRandomSongs(count) {
+function getPersistedRandomSongs(count, returnAll = false) {
   if (!randomSongPersistedCache.items.length) return null;
   if (Date.now() - randomSongPersistedCache.updatedAt > RANDOM_SONG_PERSIST_MAX_AGE_MS) {
     return null;
@@ -3886,8 +4341,14 @@ function getPersistedRandomSongs(count) {
   // Validate that cached items still have valid audio (container URLs might have expired)
   const validItems = randomSongPersistedCache.items.filter(item => {
     const fields = item?.fields || {};
-    return hasValidAudio(fields);
+    return hasValidAudio(fields) && hasValidArtwork(fields);
   });
+
+  // If returnAll is true (for featured albums), return all items regardless of count
+  if (returnAll) {
+    const items = cloneRandomSongItems(validItems);
+    return { ok: true, items, total: items.length };
+  }
 
   if (validItems.length < count) {
     console.log(`[random-songs] Persisted cache has only ${validItems.length}/${randomSongPersistedCache.items.length} valid items (need ${count}), refreshing...`);
@@ -3900,7 +4361,12 @@ function getPersistedRandomSongs(count) {
 
 function updatePersistedRandomSongs(items = []) {
   if (!Array.isArray(items) || !items.length) return;
-  const trimmed = cloneRandomSongItems(items, RANDOM_SONG_PERSIST_MAX_ITEMS);
+  const vetted = items.filter(item => {
+    const fields = item?.fields || {};
+    return hasValidAudio(fields) && hasValidArtwork(fields);
+  });
+  if (!vetted.length) return;
+  const trimmed = cloneRandomSongItems(vetted, RANDOM_SONG_PERSIST_MAX_ITEMS);
   randomSongPersistedCache = {
     items: trimmed,
     updatedAt: Date.now()
@@ -3957,6 +4423,26 @@ function refreshRandomSongsInBackground({ count, isLoadMore = false, cacheSlot =
   }
   randomSongRefreshPromise = (async () => {
     try {
+      // Try to load featured albums first for initial load - load ALL available
+      if (!isLoadMore) {
+        try {
+          const featuredResult = await loadFeaturedAlbumRecords({ limit: 1000, refresh: true });
+          if (featuredResult.items.length) {
+            const items = featuredResult.items; // Return all featured albums
+            console.log(`[random-songs] Background refresh loaded ${items.length} featured albums`);
+            updatePersistedRandomSongs(items);
+            const cacheKey = computeCacheKey(count, cacheSlot);
+            if (cacheKey) {
+              searchCache.set(cacheKey, { ok: true, items, total: items.length });
+            }
+            return;
+          }
+        } catch (err) {
+          console.warn('[random-songs] Background refresh: featured albums failed, falling back to random', err);
+        }
+      }
+
+      // Fallback to random songs
       let batch;
       try {
         batch = await fetchRandomSongsBatch({
@@ -4033,12 +4519,27 @@ async function ensureRandomSongSeed(count = RANDOM_SONG_BUFFER_WARM_COUNT * 2) {
 
     console.log('[random-songs] Seeding persisted random songs cache (cold start)');
     const seedCount = Math.max(count, RANDOM_SONG_BUFFER_WARM_COUNT);
+
+    // Try to seed with featured albums first - load ALL available
+    try {
+      const featuredResult = await loadFeaturedAlbumRecords({ limit: 1000, refresh: false });
+      if (featuredResult.items.length) {
+        const items = featuredResult.items; // Use all featured albums
+        updatePersistedRandomSongs(items);
+        await randomSongPersistWritePromise;
+        console.log(`[random-songs] Seeded persisted cache with ${items.length} featured albums`);
+        void refreshRandomSongsInBackground({ count: seedCount, isLoadMore: false, cacheSlot: null });
+        return;
+      }
+    } catch (err) {
+      console.warn('[random-songs] Failed to seed with featured albums, falling back to playlist seed', err);
+    }
+
+    // Fallback to playlist seed
     const playlistSeed = await buildPlaylistSeedItems(seedCount);
     if (playlistSeed.length) {
       updatePersistedRandomSongs(playlistSeed);
-      if (randomSongPersistWritePromise) {
-        await randomSongPersistWritePromise;
-      }
+      await randomSongPersistWritePromise;
       console.log(`[random-songs] Seeded persisted cache with ${playlistSeed.length} playlist tracks`);
     } else {
       console.warn('[random-songs] No playlist seed available for initial cache');
@@ -4091,6 +4592,153 @@ function mapPlaylistTrackToRandomItem(track = {}, playlist = {}) {
   };
 }
 
+async function fetchFeaturedAlbumRecords(limit = 400) {
+  if (!FEATURED_FIELD_CANDIDATES.length) return [];
+  const normalizedLimit = Math.max(1, Math.min(1000, limit));
+
+  // Helper function to try a specific field
+  const tryField = async (field) => {
+    if (!field) return null;
+    const query = applyVisibility({ [field]: FM_FEATURED_VALUE });
+    const payload = {
+      query: [query],
+      limit: normalizedLimit,
+      offset: 1
+    };
+    try {
+      const response = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (isMissingFieldError(json)) {
+          return null; // Field doesn't exist, try next
+        }
+        const fmCode = json?.messages?.[0]?.code;
+        if (String(fmCode) === '401') {
+          return null; // No records found, try next
+        }
+        const msg = json?.messages?.[0]?.message || 'FM error';
+        console.warn('[featured] Album fetch failed', { field, status: response.status, msg, code: fmCode });
+        return [];
+      }
+      const rawData = json?.response?.data || [];
+      const filtered = rawData
+        .filter(record => recordIsVisible(record.fieldData || {}))
+        .filter(record => hasValidAudio(record.fieldData || {}))
+        .filter(record => hasValidArtwork(record.fieldData || {}))
+        .filter(record => recordIsFeatured(record.fieldData || {}));
+      if (filtered.length) {
+        console.log(`[featured] Field "${field}" returned ${filtered.length}/${rawData.length} records`);
+        cachedFeaturedFieldName = field; // Cache successful field name
+        return filtered;
+      }
+      return null;
+    } catch (err) {
+      console.warn(`[featured] Fetch threw for field "${field}"`, err);
+      return null;
+    }
+  };
+
+  // Try cached field first if we have one
+  if (cachedFeaturedFieldName) {
+    console.log(`[featured] Trying cached field: "${cachedFeaturedFieldName}"`);
+    const result = await tryField(cachedFeaturedFieldName);
+    if (result && result.length > 0) {
+      return result;
+    }
+    // Cached field failed, clear it and try all candidates
+    console.warn(`[featured] Cached field "${cachedFeaturedFieldName}" failed, trying all candidates`);
+    cachedFeaturedFieldName = null;
+  }
+
+  // Try all field candidates
+  for (const field of FEATURED_FIELD_CANDIDATES) {
+    const result = await tryField(field);
+    if (result && result.length > 0) {
+      return result;
+    }
+    if (Array.isArray(result) && result.length === 0) {
+      // Empty array means error, stop trying
+      return [];
+    }
+  }
+  return [];
+}
+
+function cloneRecordsForLimit(records = [], count = records.length) {
+  return records.slice(0, Math.min(count, records.length)).map((record) => ({
+    recordId: record.recordId,
+    modId: record.modId,
+    fields: { ...(record.fieldData || record.fields || {}) }
+  }));
+}
+
+async function loadFeaturedAlbumRecords({ limit = 400, refresh = false } = {}) {
+  const now = Date.now();
+  const cacheAge = featuredAlbumCache.updatedAt ? (now - featuredAlbumCache.updatedAt) / 1000 : 0;
+
+  if (
+    !refresh &&
+    featuredAlbumCache.items.length &&
+    now - featuredAlbumCache.updatedAt < FEATURED_ALBUM_CACHE_TTL_MS
+  ) {
+    console.log(`[featured] Using cache (age: ${cacheAge.toFixed(1)}s, ${featuredAlbumCache.items.length} items)`);
+    return {
+      items: cloneRecordsForLimit(featuredAlbumCache.items, limit),
+      total: featuredAlbumCache.total
+    };
+  }
+
+  console.log(`[featured] Fetching fresh data (refresh=${refresh}, cache age=${cacheAge.toFixed(1)}s)`);
+  const fetchLimit = Math.max(limit, 400);
+  const records = await fetchFeaturedAlbumRecords(fetchLimit);
+  const items = records.map((record) => ({
+    recordId: record.recordId,
+    modId: record.modId,
+    fields: record.fieldData || {}
+  }));
+
+  console.log(`[featured] Cached ${items.length} featured albums`);
+
+  // Log first 5 albums for debugging
+  if (items.length > 0) {
+    console.log('[featured] Sample albums:');
+    items.slice(0, 5).forEach((item, i) => {
+      const title = item.fields['Album Title'] || item.fields['Tape Files::Album_Title'] || 'Unknown';
+      const artist = item.fields['Album Artist'] || item.fields['Tape Files::Album Artist'] || 'Unknown';
+      const featuredValue = item.fields['Tape Files::featured'] || item.fields['featured'] || item.fields['Tape Files::Featured'] || item.fields['Featured'] || 'N/A';
+      console.log(`[featured]   ${i + 1}. "${title}" by ${artist} (featured=${featuredValue})`);
+    });
+  }
+
+  featuredAlbumCache = {
+    items,
+    total: items.length,
+    updatedAt: now
+  };
+
+  return {
+    items: cloneRecordsForLimit(items, limit),
+    total: items.length
+  };
+}
+
+app.get('/api/featured-albums', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit || '400', 10)));
+    const refresh = req.query.refresh === '1';
+    console.log(`[featured] GET /api/featured-albums limit=${limit} refresh=${refresh}`);
+    const result = await loadFeaturedAlbumRecords({ limit, refresh });
+    // No browser caching - always fetch fresh from server (server has its own 30s cache)
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    return res.json({ ok: true, items: result.items, total: result.total });
+  } catch (err) {
+    console.error('[featured] Failed to load albums', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load featured albums' });
+  }
+});
+
 async function buildPlaylistSeedItems(count) {
   const now = Date.now();
   if (
@@ -4101,7 +4749,7 @@ async function buildPlaylistSeedItems(count) {
     // TEMPORARILY DISABLED artwork filter - debugging
     const validItems = playlistSeedCache.items.filter(item => {
       const fields = item?.fields || {};
-      return hasValidAudio(fields); // && hasValidArtwork(fields);
+      return hasValidAudio(fields) && hasValidArtwork(fields);
     });
     if (validItems.length >= count) {
       return cloneRandomSongItems(validItems, count);
@@ -4126,13 +4774,12 @@ async function buildPlaylistSeedItems(count) {
   }
 
   // Filter playlist seed items to only include tracks with artwork (for initial load quality)
-  // TEMPORARILY DISABLED - debugging artwork issues
-  // const withArtwork = collected.filter(item => hasValidArtwork(item.fields || {}));
-  // const finalItems = withArtwork.length > 0 ? withArtwork : collected;
+  const withArtwork = collected.filter(item => hasValidArtwork(item.fields || {}));
+  const finalItems = withArtwork.length > 0 ? withArtwork : collected;
 
-  shuffleArray(collected);
-  playlistSeedCache = { items: collected, updatedAt: now };
-  return cloneRandomSongItems(collected, count);
+  shuffleArray(finalItems);
+  playlistSeedCache = { items: finalItems, updatedAt: now };
+  return cloneRandomSongItems(finalItems, count);
 }
 
 async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = null }) {
@@ -4185,13 +4832,11 @@ async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = nul
       .filter(record => recordIsVisible(record.fieldData || {}))
       .filter(record => hasValidAudio(record.fieldData || {}));
 
-    // On initial load, also filter by artwork for better first impression
-    // TEMPORARILY DISABLED - debugging artwork issues
-    // if (mode === 'initial') {
-    //   const beforeCount = filtered.length;
-    //   filtered = filtered.filter(record => hasValidArtwork(record.fieldData || {}));
-    //   console.log(`[random-songs] Artwork filter: ${beforeCount} → ${filtered.length} tracks`);
-    // }
+    const beforeArtworkCount = filtered.length;
+    filtered = filtered.filter(record => hasValidArtwork(record.fieldData || {}));
+    if (beforeArtworkCount !== filtered.length) {
+      console.log(`[random-songs] Artwork filter (${mode}) ${beforeArtworkCount} → ${filtered.length} tracks`);
+    }
 
     return filtered;
   };
@@ -4273,7 +4918,8 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot }) {
   let rawData = json?.response?.data || [];
   let visible = rawData
     .filter(record => recordIsVisible(record.fieldData || {}))
-    .filter(record => hasValidAudio(record.fieldData || {}));
+    .filter(record => hasValidAudio(record.fieldData || {}))
+    .filter(record => hasValidArtwork(record.fieldData || {}));
 
   if (!visible.length) {
     console.warn(`[random-songs] Legacy fetch empty at offset ${randomOffset}, retrying from start`);
@@ -4288,7 +4934,8 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot }) {
       rawData = retryJson?.response?.data || [];
       visible = rawData
         .filter(record => recordIsVisible(record.fieldData || {}))
-        .filter(record => hasValidAudio(record.fieldData || {}));
+        .filter(record => hasValidAudio(record.fieldData || {}))
+        .filter(record => hasValidArtwork(record.fieldData || {}));
     } else {
       console.warn('[random-songs] Legacy retry fetch failed', retryJson?.messages?.[0]);
     }
@@ -4357,7 +5004,9 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot }) {
       if (secondQueryUsesVisibility) {
         additionalRawData = additionalRawData.filter(record => recordIsVisible(record.fieldData || {}));
       }
-      additionalRawData = additionalRawData.filter(record => hasValidAudio(record.fieldData || {}));
+      additionalRawData = additionalRawData
+        .filter(record => hasValidAudio(record.fieldData || {}))
+        .filter(record => hasValidArtwork(record.fieldData || {}));
       const shuffledTracks = shuffleArray(additionalRawData.slice());
 
       for (const track of shuffledTracks) {
@@ -4403,7 +5052,7 @@ function selectUniqueRecords(records, desiredCount, state) {
   for (const record of records) {
     if (!record || !record.recordId || selectedIds.has(record.recordId)) continue;
     const fields = record.fieldData || {};
-    if (!hasValidAudio(fields)) continue;
+    if (!hasValidAudio(fields) || !hasValidArtwork(fields)) continue;
     const artist = resolveArtist(fields);
     if (!artistBuckets.has(artist)) {
       artistBuckets.set(artist, []);
@@ -4468,9 +5117,9 @@ app.get('/api/random-songs', async (req, res) => {
     }
 
     if (!isLoadMore) {
-      const persisted = getPersistedRandomSongs(count);
+      const persisted = getPersistedRandomSongs(count, true); // Return all for featured albums
       if (persisted) {
-        console.log('[random-songs] Served initial songs from persisted cache');
+        console.log(`[random-songs] Served initial songs from persisted cache (${persisted.total} items)`);
         res.setHeader('X-Cache-Hit', 'persisted');
         res.setHeader('Cache-Control', 'public, max-age=15');
         void refreshRandomSongsInBackground({ count, cacheSlot });
@@ -4478,6 +5127,26 @@ app.get('/api/random-songs', async (req, res) => {
           void warmRandomSongBuffer(count * 2);
         }
         return res.json(persisted);
+      }
+
+      // Try to load featured albums first - load ALL available, not limited by count
+      try {
+        const featuredResult = await loadFeaturedAlbumRecords({ limit: 1000, refresh: false });
+        if (featuredResult.items.length) {
+          console.log(`[random-songs] Served initial songs from featured albums (${featuredResult.items.length} items)`);
+          const items = featuredResult.items; // Return all featured albums
+          const response = { ok: true, items, total: items.length };
+          updatePersistedRandomSongs(items);
+          res.setHeader('X-Cache-Hit', 'featured-albums');
+          res.setHeader('Cache-Control', 'public, max-age=15');
+          void refreshRandomSongsInBackground({ count, cacheSlot });
+          if (bufferUniqueArtistCount() < RANDOM_SONG_BUFFER_WARM_COUNT) {
+            void warmRandomSongBuffer(count * 2);
+          }
+          return res.json(response);
+        }
+      } catch (err) {
+        console.warn('[random-songs] Failed to load featured albums, falling back to playlist seed', err);
       }
 
       const playlistSeed = await buildPlaylistSeedItems(count);
@@ -4495,6 +5164,7 @@ app.get('/api/random-songs', async (req, res) => {
     }
 
     if (isLoadMore) {
+      // First try the buffer for truly random songs
       const buffered = bufferTake(count);
       if (buffered && buffered.length === count) {
         console.log(`[random-songs] Served ${count} songs from buffer (unique artists: ${bufferUniqueArtistCount()})`);
@@ -4504,6 +5174,23 @@ app.get('/api/random-songs', async (req, res) => {
         void warmRandomSongBuffer(count * 2);
         return res.json({ ok: true, items: mapRecordsToItems(buffered), total: buffered.length });
       }
+
+      // If buffer doesn't have enough, fall back to featured albums for instant response
+      try {
+        const featuredResult = await loadFeaturedAlbumRecords({ limit: 1000, refresh: false });
+        if (featuredResult.items.length) {
+          console.log(`[random-songs] Load More served from featured albums cache (${featuredResult.items.length} items)`);
+          const items = featuredResult.items;
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+          void warmRandomSongBuffer(count * 2);
+          return res.json({ ok: true, items, total: items.length });
+        }
+      } catch (err) {
+        console.warn('[random-songs] Load More: featured albums failed, falling back to FileMaker fetch', err);
+      }
+
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
@@ -4557,9 +5244,7 @@ app.get('/api/random-songs', async (req, res) => {
       res.setHeader('X-Cache-Hit', 'false');
       res.setHeader('Cache-Control', 'public, max-age=30');
       console.log(`[CACHE MISS] random-songs - cached result (offset ${batch.meta?.randomOffset ?? 'n/a'})`);
-    }
-
-    if (isLoadMore) {
+    } else if (isLoadMore) {
       console.log(`[LOAD MORE] Fetched ${items.length} songs (offset ${batch.meta?.randomOffset ?? 'n/a'}, limit ${batch.meta?.fetchLimit ?? 'n/a'})`);
     }
 
@@ -4656,11 +5341,13 @@ app.get('/api/album', async (req, res) => {
     const exact = (v) => `==${v}`;
 
     if (cat) {
-      queries = [
-        { 'Album Catalogue Number': exact(cat) },
-        { 'Album Catalog Number': exact(cat) },
-        { 'Album Catalogue No': exact(cat) }
-      ];
+      const seenFields = new Set();
+      queries = [];
+      for (const field of CATALOGUE_FIELD_CANDIDATES) {
+        if (!field || seenFields.has(field)) continue;
+        seenFields.add(field);
+        queries.push({ [field]: exact(cat) });
+      }
     } else if (title) {
       if (artist) {
         queries = [
@@ -4692,13 +5379,14 @@ app.get('/api/album', async (req, res) => {
     // Filter to only include records with valid audio
     const data = rawData.filter(d => hasValidAudio(d.fieldData || {}));
 
-    const total = data.length;
+    // Get the actual total count from FileMaker (before filtering)
+    const actualTotal = json?.response?.dataInfo?.foundCount ?? rawData.length;
 
     const response = {
       ok: true,
       items: data.map((d) => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} })),
-      total,
-      offset: 0,
+      total: actualTotal,
+      offset: 0, // This endpoint doesn't use pagination (returns all tracks for an album)
       limit
     };
 
@@ -4728,6 +5416,14 @@ if (!randomSongPersistedCache.items.length) {
   } catch (err) {
     console.warn('[random-songs] Initial seed failed', err);
   }
+}
+
+// Load access tokens on server startup
+try {
+  await loadAccessTokens();
+  console.log('[MASS] Access tokens loaded successfully');
+} catch (err) {
+  console.warn('[MASS] Failed to load access tokens:', err);
 }
 
 app.listen(PORT, HOST, () => {

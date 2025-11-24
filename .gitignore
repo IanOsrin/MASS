@@ -14,3 +14,4 @@ tmp/
 data/.auth_secret
 data/random-songs-cache.json
 data/.random-songs-cache.lock
+data/access-tokens.json
