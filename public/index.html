@@ -114,6 +114,9 @@
       .ai-search-body{width:100%;right:auto;left:0;padding:12px;}
       .ai-search-row{flex-direction:column;align-items:stretch;}
       .ai-search-row button{width:100%;}
+      .view-buttons{bottom:10px;right:10px;gap:8px;}
+      .view-buttons a,
+      .view-buttons button{padding:6px 12px;font-size:12px;}
     }
     .albums{display:grid;grid-template-columns:repeat(4,195px);grid-template-rows:auto auto;gap:14px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
     /* Featured albums mode: larger 2-column grid */
@@ -205,6 +208,12 @@
     .auth-switch button{background:none;border:none;color:var(--accent);cursor:pointer;font-weight:600;padding:0;}
     .auth-switch button:disabled{opacity:.6;cursor:not-allowed;}
     #authError{margin-top:12px;}
+
+    .view-buttons{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:100;}
+    .view-buttons a,
+    .view-buttons button{border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;text-decoration:none;background:transparent;border:1px solid var(--border);color:var(--fg);transition:all 0.2s ease;display:inline-block;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);}
+    .view-buttons a:hover,
+    .view-buttons button:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.4);}
 
     .playlists-panel{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:flex;flex-direction:column;gap:10px;}
     .playlists-panel[hidden]{display:none;}
@@ -704,11 +713,10 @@
         <button id="shufflePlayBtn" class="btn btn-accent" hidden aria-pressed="false">Shuffle Play</button>
         <button id="randomStopBtn" hidden style="display:none !important;" type="button">⏹</button>
         <button id="randomSkipBtn" hidden type="button">⏭</button>
-        <a href="/modern" style="border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;text-decoration:none;background:transparent;border:1px solid var(--border);color:var(--fg);transition:all 0.2s ease;display:inline-block;flex-shrink:0;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)';" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--fg)';">✨ Modern</a>
         <div class="ai-search-panel" id="aiSearchPanel" data-collapsed="true">
           <button id="aiSearchToggle" type="button" class="ai-search-toggle" aria-expanded="false" aria-controls="aiSearchPanelBody" aria-label="Toggle AI natural language search panel">
             <strong>AI Search</strong>
-            <span>Powered by FileMaker script “AI_NaturalLanguageSearch”</span>
+            <span>Powered by FileMaker script "AI_NaturalLanguageSearch"</span>
             <span class="ai-search-chevron">▸</span>
           </button>
           <div class="ai-search-body" id="aiSearchPanelBody">
@@ -727,7 +735,6 @@
             <div id="aiSearchInterpretation" class="ai-search-interpretation" hidden></div>
           </div>
         </div>
-        <button id="themeToggle" type="button" class="theme-toggle" aria-pressed="false" style="flex-shrink:0;">🎨 Theme</button>
       </div>
       <div class="explore-wrap" style="display:none !important;">
         <button id="explore" type="button" aria-expanded="false" style="display:none !important;">Explore</button>
@@ -1844,6 +1851,12 @@
     console.log('🎭 Joke ads initialized');
   })();
   </script>
+
+  <!-- View Switcher Buttons (Fixed Bottom Right) -->
+  <div class="view-buttons">
+    <a href="/modern">✨ Modern</a>
+    <button id="themeToggle" type="button" class="theme-toggle" aria-pressed="false">🎨 Theme</button>
+  </div>
 
 </body>
 </html>
