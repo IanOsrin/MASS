@@ -1858,5 +1858,42 @@
     <button id="themeToggle" type="button" class="theme-toggle" aria-pressed="false">🎨 Theme</button>
   </div>
 
+  <script>
+  // Theme toggle functionality
+  (function() {
+    const themeToggle = document.getElementById('themeToggle');
+    const THEME_STORAGE_KEY = 'mass.theme';
+
+    function applyTheme(isAltTheme) {
+      if (isAltTheme) {
+        document.body.classList.add('alt-theme');
+        if (themeToggle) themeToggle.setAttribute('aria-pressed', 'true');
+      } else {
+        document.body.classList.remove('alt-theme');
+        if (themeToggle) themeToggle.setAttribute('aria-pressed', 'false');
+      }
+      localStorage.setItem(THEME_STORAGE_KEY, isAltTheme ? 'alt' : 'default');
+      console.log(`🎨 Theme changed to: ${isAltTheme ? 'alternate' : 'default'}`);
+    }
+
+    // Load saved theme preference on page load
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    if (savedTheme === 'alt') {
+      applyTheme(true);
+    }
+
+    // Toggle theme on button click
+    if (themeToggle) {
+      themeToggle.addEventListener('click', () => {
+        const isCurrentlyAlt = document.body.classList.contains('alt-theme');
+        applyTheme(!isCurrentlyAlt);
+      });
+      console.log('🎨 Theme toggle initialized');
+    } else {
+      console.error('❌ Theme toggle button not found');
+    }
+  })();
+  </script>
+
 </body>
 </html>
