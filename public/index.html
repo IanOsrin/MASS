@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>MASS — Albums & Tracks</title>
+  <!-- Resource hints for better performance -->
+  <link rel="preconnect" href="/" crossorigin>
+  <link rel="dns-prefetch" href="/">
+  <link rel="preload" href="/app.min.js?v=44" as="script">
+  <title>MAD Jukebox</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
@@ -262,25 +266,27 @@
     .playlist-tracks.only-current .playlist-empty{display:none;}
     .playlist-tracks.only-current .now-playing-placeholder{display:none;}
 
-    .now-playing{align-self:flex-start;width:50%;min-width:130px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:#18191d;display:flex;flex-direction:column;gap:6px;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
+    .now-playing{align-self:flex-start;width:100%;min-width:300px;padding:12px 16px;border:1px solid var(--border);border-radius:8px;background:#18191d;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
     .now-playing[hidden]{display:none !important;}
-    .now-playing-header{display:flex;align-items:center;justify-content:space-between;gap:4px;}
-    .now-playing-header .label{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
-    .now-playing-body{display:flex;align-items:center;gap:6px;}
-    .now-playing-thumb{width:28px;height:28px;border-radius:5px;overflow:hidden;flex-shrink:0;background:#0e1014;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--muted);}
+    .now-playing-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+    .now-playing-header .label{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+    .now-playing-body{display:flex;align-items:center;gap:12px;}
+    .now-playing-thumb{width:64px;height:64px;border-radius:8px;overflow:hidden;flex-shrink:0;background:#0e1014;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);}
     .now-playing-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
-    .now-playing-meta{display:flex;flex-direction:column;gap:1px;min-width:0;}
-    .now-playing-title{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .now-playing-sub{font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .now-playing-source{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .now-playing-controls{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
-    .now-playing-meta-buttons{display:flex;flex-wrap:wrap;gap:3px;}
-    .now-playing-meta-buttons .btn.small{padding:3px 5px;font-size:9px;}
-    .now-playing-meta-list{display:none;}
-    .now-playing-status{font-size:9px;color:var(--muted);}
-    .now-playing-progress{width:100%;height:2px;background:#262830;border-radius:2px;overflow:hidden;position:relative;margin-top:3px;}
+    .now-playing-meta{display:flex;flex-direction:column;gap:3px;min-width:0;}
+    .now-playing-title{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .now-playing-sub{font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .now-playing-source{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .now-playing-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+    .now-playing-meta-buttons{display:flex;flex-wrap:wrap;gap:6px;}
+    .now-playing-meta-buttons .btn.small{padding:6px 10px;font-size:12px;}
+    .now-playing-meta-list{font-size:11px;line-height:1.6;color:var(--muted);padding:8px 12px;background:rgba(0,0,0,0.2);border-radius:6px;border:1px solid rgba(255,255,255,0.05);}
+    .now-playing-meta-list div{margin:4px 0;}
+    .now-playing-meta-list strong{color:var(--fg);font-weight:600;}
+    .now-playing-status{font-size:13px;color:var(--muted);}
+    .now-playing-progress{width:100%;height:4px;background:#262830;border-radius:2px;overflow:hidden;position:relative;margin-top:6px;}
     .now-playing-progress .fill{position:absolute;inset:0;background:linear-gradient(90deg,var(--accent),#6bd3ff);width:0%;border-radius:2px;transition:width .1s linear;}
-    .now-playing-controls .btn.small{padding:3px 6px;font-size:10px;}
+    .now-playing-controls .btn.small{padding:6px 12px;font-size:13px;}
     .now-playing.collapsed .now-playing-body,
     .now-playing.collapsed .now-playing-controls{display:none;}
 
@@ -697,6 +703,7 @@
   <header>
     <div class="header-main">
       <img src="/img/MAD_Logo.png" alt="MAD Logo" class="header-logo">
+      <h1 style="font-size: 24px; font-weight: 700; color: var(--accent); margin: 0 16px;">MAD Jukebox</h1>
       <div class="searchbar">
         <div class="search-fields" id="searchFields" hidden>
           <input id="searchArtist" type="search" placeholder="Artist" autocomplete="off" />
@@ -770,7 +777,10 @@
         <section id="nowPlayingCard" class="now-playing" hidden>
           <div class="now-playing-header">
             <span class="label">Now Playing</span>
-            <button id="nowPlayingCollapse" type="button" class="btn small">Hide</button>
+            <div style="display: flex; gap: 6px;">
+              <button id="nowPlayingInfo" type="button" class="btn small" title="Show metadata">⋯</button>
+              <button id="nowPlayingCollapse" type="button" class="btn small">Hide</button>
+            </div>
           </div>
           <div class="now-playing-body">
             <div id="nowPlayingThumb" class="now-playing-thumb">--</div>
@@ -786,6 +796,7 @@
             <button id="nowPlayingAdd" type="button" class="btn small" hidden>+ Playlist</button>
             <button id="nowPlayingToggle" type="button" class="btn small">Play</button>
           </div>
+          <div id="nowPlayingMetadata" class="now-playing-meta-list" style="display:none;"></div>
           <div class="now-playing-progress">
             <div id="nowPlayingProgressFill" class="fill"></div>
           </div>
@@ -1058,15 +1069,36 @@
         });
       }
 
+      // Debounce utility for search
+      function debounce(fn, delay) {
+        let timer;
+        return function(...args) {
+          clearTimeout(timer);
+          timer = setTimeout(() => fn.apply(this, args), delay);
+        };
+      }
+
       // Allow Enter key to trigger search from any search field
       const searchFields = [searchArtistEl, searchAlbumEl, searchTrackEl].filter(Boolean);
+
+      // Debounced search on input (400ms delay to reduce API calls)
+      const debouncedSearch = debounce(() => {
+        if (!searchFieldsEl.hidden && goBtn) {
+          goBtn.click();
+        }
+      }, 400);
+
       searchFields.forEach(field => {
+        // Immediate search on Enter key
         field.addEventListener('keydown', (e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
             goBtn.click();
           }
         });
+
+        // Debounced search as user types
+        field.addEventListener('input', debouncedSearch);
       });
 
       // Accordion functionality for My Playlists
@@ -1222,7 +1254,8 @@
       function wakeUpConnection() {
         fetch('/api/wake', {
           headers: { 'Accept': 'application/json' },
-          cache: 'no-cache'
+          cache: 'no-cache',
+          keepalive: true // Prevent connection from being terminated
         })
         .then(res => res.json())
         .then(data => {
@@ -1245,13 +1278,13 @@
       });
 
       // Periodically wake the connection to prevent token expiration
-      // FileMaker tokens expire after ~11.5 minutes, so wake every 5 minutes
+      // FileMaker tokens expire after ~11.5 minutes, so wake every 8 minutes (safer than 5 with less overhead)
       setInterval(() => {
         if (!document.hidden) {
           console.log('[MASS] Periodic wake (keeping connection alive)...');
           wakeUpConnection();
         }
-      }, 5 * 60 * 1000); // 5 minutes
+      }, 8 * 60 * 1000); // 8 minutes (changed from 5 for better balance)
 
       // Preload featured playlists in the background - but only after access token is ready
       window.addEventListener('mass:access-ready', function() {
@@ -1564,7 +1597,7 @@
   })();
   </script>
 
-  <script src="/app.min.js?v=29"></script>
+  <script defer src="/app.min.js?v=44"></script>
   <script>
   // Override search to use separate fields
   window.addEventListener('DOMContentLoaded', () => {
@@ -1849,6 +1882,41 @@
     }
 
     console.log('🎭 Joke ads initialized');
+  })();
+  </script>
+
+  <script>
+  // Lazy loading for images - improves performance
+  (function() {
+    // Add lazy loading and async decoding to all existing images
+    document.querySelectorAll('img').forEach(img => {
+      if (!img.loading) img.loading = 'lazy';
+      if (!img.decoding) img.decoding = 'async';
+    });
+
+    // Observe new images being added to the DOM
+    const imageObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.tagName === 'IMG') {
+            if (!node.loading) node.loading = 'lazy';
+            if (!node.decoding) node.decoding = 'async';
+          } else if (node.querySelectorAll) {
+            node.querySelectorAll('img').forEach(img => {
+              if (!img.loading) img.loading = 'lazy';
+              if (!img.decoding) img.decoding = 'async';
+            });
+          }
+        });
+      });
+    });
+
+    imageObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    console.log('🖼️ Image lazy loading initialized');
   })();
   </script>
 

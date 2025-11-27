@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
@@ -11,6 +11,46 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import { searchCache, exploreCache, albumCache, publicPlaylistsCache } from './cache.js';
 const { AbortController } = globalThis;
+
+// Request deduplication - prevent duplicate simultaneous requests to FileMaker
+const pendingRequests = new Map();
+
+async function deduplicatedFetch(cacheKey, cache, fetchFn) {
+  // Check cache first
+  const cached = cache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  // Check if request is already pending
+  if (pendingRequests.has(cacheKey)) {
+    return pendingRequests.get(cacheKey);
+  }
+
+  // Execute and store the promise
+  const promise = fetchFn().finally(() => {
+    pendingRequests.delete(cacheKey);
+  });
+
+  pendingRequests.set(cacheKey, promise);
+  return promise;
+}
+
+// ETag support for API responses - reduces bandwidth on repeat visits
+function generateETag(data) {
+  const hash = createHash('md5').update(JSON.stringify(data)).digest('hex');
+  return `"${hash.slice(0, 16)}"`;
+}
+
+function sendWithETag(res, data) {
+  const etag = generateETag(data);
+  res.setHeader('ETag', etag);
+
+  const clientETag = res.req.headers['if-none-match'];
+  if (clientETag === etag) {
+    return res.status(304).end();
+  }
+
+  return res.json(data);
+}
 
 let loadEnv = () => ({ parsed: {}, skipped: true });
 try {
@@ -98,7 +138,17 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-app.use(compression()); // Enable gzip compression - good for static files too
+// Enable gzip compression with optimized settings
+app.use(compression({
+  level: 6, // Balance between compression ratio and speed
+  threshold: 1024, // Only compress responses > 1KB
+  filter: (req, res) => {
+    // Skip compression if client requests no compression
+    if (req.headers['x-no-compression']) return false;
+    // Use default filter for everything else
+    return compression.filter(req, res);
+  }
+}));
 
 // Response time logging middleware
 app.use((req, res, next) => {
@@ -265,11 +315,17 @@ const ACCESS_TOKENS_PATH = path.join(DATA_DIR, 'access-tokens.json');
 const REGEX_STATIC_FILES = /\.(jpe?g|png|gif|svg|webp|ico|woff2?|ttf|eot|mp3|mp4|webm)$/i;
 app.use(express.static(PUBLIC_DIR, {
   setHeaders: (res, filePath) => {
-    // Cache images and fonts for 1 hour
-    if (REGEX_STATIC_FILES.test(filePath)) {
-      res.setHeader('Cache-Control', 'public, max-age=3600');
+    // Versioned files (contain ?v= or .min.) get immutable caching for 1 year
+    if (filePath.includes('.min.') || /\.[a-f0-9]{8,}\./i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (REGEX_STATIC_FILES.test(filePath)) {
+      // Images, fonts, media: 1 day cache
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+    } else if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
+      // JS/CSS without version: 1 hour with revalidation
+      res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
     } else {
-      // Don't cache HTML/JS/CSS files for development
+      // HTML and other files: no cache for development
       res.setHeader('Cache-Control', 'no-cache');
     }
   },
@@ -4437,26 +4493,7 @@ function refreshRandomSongsInBackground({ count, isLoadMore = false, cacheSlot =
   }
   randomSongRefreshPromise = (async () => {
     try {
-      // Try to load featured albums first for initial load - load ALL available
-      if (!isLoadMore) {
-        try {
-          const featuredResult = await loadFeaturedAlbumRecords({ limit: 1000, refresh: true });
-          if (featuredResult.items.length) {
-            const items = featuredResult.items; // Return all featured albums
-            console.log(`[random-songs] Background refresh loaded ${items.length} featured albums`);
-            updatePersistedRandomSongs(items);
-            const cacheKey = computeCacheKey(count, cacheSlot);
-            if (cacheKey) {
-              searchCache.set(cacheKey, { ok: true, items, total: items.length });
-            }
-            return;
-          }
-        } catch (err) {
-          console.warn('[random-songs] Background refresh: featured albums failed, falling back to random', err);
-        }
-      }
-
-      // Fallback to random songs
+      // Fetch random songs from the entire catalog
       let batch;
       try {
         batch = await fetchRandomSongsBatch({
@@ -4534,31 +4571,7 @@ async function ensureRandomSongSeed(count = RANDOM_SONG_BUFFER_WARM_COUNT * 2) {
     console.log('[random-songs] Seeding persisted random songs cache (cold start)');
     const seedCount = Math.max(count, RANDOM_SONG_BUFFER_WARM_COUNT);
 
-    // Try to seed with featured albums first - load ALL available
-    try {
-      const featuredResult = await loadFeaturedAlbumRecords({ limit: 1000, refresh: false });
-      if (featuredResult.items.length) {
-        const items = featuredResult.items; // Use all featured albums
-        updatePersistedRandomSongs(items);
-        await randomSongPersistWritePromise;
-        console.log(`[random-songs] Seeded persisted cache with ${items.length} featured albums`);
-        void refreshRandomSongsInBackground({ count: seedCount, isLoadMore: false, cacheSlot: null });
-        return;
-      }
-    } catch (err) {
-      console.warn('[random-songs] Failed to seed with featured albums, falling back to playlist seed', err);
-    }
-
-    // Fallback to playlist seed
-    const playlistSeed = await buildPlaylistSeedItems(seedCount);
-    if (playlistSeed.length) {
-      updatePersistedRandomSongs(playlistSeed);
-      await randomSongPersistWritePromise;
-      console.log(`[random-songs] Seeded persisted cache with ${playlistSeed.length} playlist tracks`);
-    } else {
-      console.warn('[random-songs] No playlist seed available for initial cache');
-    }
-
+    // Seed with random songs from the catalog instead of featured albums
     void refreshRandomSongsInBackground({ count: seedCount, isLoadMore: false, cacheSlot: null });
   } finally {
     if (lockHandle) {
@@ -5148,49 +5161,9 @@ app.get('/api/random-songs', async (req, res) => {
     }
 
     if (!isLoadMore) {
-      const persisted = getPersistedRandomSongs(count, true); // Return all for featured albums
-      if (persisted) {
-        console.log(`[random-songs] Served initial songs from persisted cache (${persisted.total} items)`);
-        res.setHeader('X-Cache-Hit', 'persisted');
-        res.setHeader('Cache-Control', 'public, max-age=15');
-        void refreshRandomSongsInBackground({ count, cacheSlot });
-        if (bufferUniqueArtistCount() < RANDOM_SONG_BUFFER_WARM_COUNT) {
-          void warmRandomSongBuffer(count * 2);
-        }
-        return res.json(persisted);
-      }
-
-      // Try to load featured albums first - load ALL available, not limited by count
-      try {
-        const featuredResult = await loadFeaturedAlbumRecords({ limit: 1000, refresh: false });
-        if (featuredResult.items.length) {
-          console.log(`[random-songs] Served initial songs from featured albums (${featuredResult.items.length} items)`);
-          const items = featuredResult.items; // Return all featured albums
-          const response = { ok: true, items, total: items.length };
-          updatePersistedRandomSongs(items);
-          res.setHeader('X-Cache-Hit', 'featured-albums');
-          res.setHeader('Cache-Control', 'public, max-age=15');
-          void refreshRandomSongsInBackground({ count, cacheSlot });
-          if (bufferUniqueArtistCount() < RANDOM_SONG_BUFFER_WARM_COUNT) {
-            void warmRandomSongBuffer(count * 2);
-          }
-          return res.json(response);
-        }
-      } catch (err) {
-        console.warn('[random-songs] Failed to load featured albums, falling back to playlist seed', err);
-      }
-
-      const playlistSeed = await buildPlaylistSeedItems(count);
-      if (playlistSeed.length) {
-        console.log('[random-songs] Served initial songs from playlist seed');
-        updatePersistedRandomSongs(playlistSeed);
-        res.setHeader('X-Cache-Hit', 'playlist-seed');
-        res.setHeader('Cache-Control', 'public, max-age=15');
-        void refreshRandomSongsInBackground({ count, cacheSlot });
-        if (bufferUniqueArtistCount() < RANDOM_SONG_BUFFER_WARM_COUNT) {
-          void warmRandomSongBuffer(count * 2);
-        }
-        return res.json({ ok: true, items: cloneRandomSongItems(playlistSeed, count), total: Math.min(count, playlistSeed.length) });
+      // Warm the buffer in the background with featured albums if needed
+      if (bufferUniqueArtistCount() < RANDOM_SONG_BUFFER_WARM_COUNT) {
+        void warmRandomSongBuffer(count * 2);
       }
     }
 
@@ -5206,22 +5179,7 @@ app.get('/api/random-songs', async (req, res) => {
         return res.json({ ok: true, items: mapRecordsToItems(buffered), total: buffered.length });
       }
 
-      // If buffer doesn't have enough, fall back to featured albums for instant response
-      try {
-        const featuredResult = await loadFeaturedAlbumRecords({ limit: 1000, refresh: false });
-        if (featuredResult.items.length) {
-          console.log(`[random-songs] Load More served from featured albums cache (${featuredResult.items.length} items)`);
-          const items = featuredResult.items;
-          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-          res.setHeader('Pragma', 'no-cache');
-          res.setHeader('Expires', '0');
-          void warmRandomSongBuffer(count * 2);
-          return res.json({ ok: true, items, total: items.length });
-        }
-      } catch (err) {
-        console.warn('[random-songs] Load More: featured albums failed, falling back to FileMaker fetch', err);
-      }
-
+      // Buffer doesn't have enough, fall through to fetch random songs from FileMaker
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
@@ -5456,6 +5414,22 @@ try {
 } catch (err) {
   console.warn('[MASS] Failed to load access tokens:', err);
 }
+
+// Pre-warm FileMaker connection pool
+async function warmConnections() {
+  console.log('[MASS] Warming FileMaker connections...');
+  try {
+    await ensureToken();
+    // Make a lightweight query to fully establish the connection
+    await fmFindRecords(FM_LAYOUT, [{ 'Album Title': '*' }], { limit: 1 });
+    console.log('[MASS] FileMaker connection warmed successfully');
+  } catch (err) {
+    console.warn('[MASS] Connection warm-up failed:', err.message);
+  }
+}
+
+// Call warmConnections before starting the server
+await warmConnections();
 
 app.listen(PORT, HOST, () => {
   console.log(`[MASS] listening on http://${HOST}:${PORT}`);

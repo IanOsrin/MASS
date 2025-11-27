@@ -25,6 +25,7 @@
     "express-rate-limit": "^8.2.1",
     "jsonwebtoken": "^9.0.2",
     "kafkajs": "^2.2.4",
+    "lru-cache": "^11.2.2",
     "morgan": "^1.10.1",
     "nodemailer": "^7.0.9",
     "tough-cookie": "^5.1.2",
