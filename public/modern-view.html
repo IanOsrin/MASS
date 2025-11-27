@@ -834,6 +834,34 @@
     let currentTrackInfo = null;
     let isPlaying = false;
 
+    // Stream Event Tracking
+    const STREAM_EVENTS_ENDPOINT = '/api/stream-events';
+    const STREAM_SESSION_STORAGE_KEY = 'mass.session';
+    const STREAM_PROGRESS_INTERVAL_MS = 30 * 1000; // 30 seconds
+    let streamSessionId = null;
+    try {
+      streamSessionId = localStorage.getItem(STREAM_SESSION_STORAGE_KEY);
+    } catch {
+      streamSessionId = null;
+    }
+    if (!streamSessionId) {
+      const fallbackId = (window.crypto && typeof window.crypto.randomUUID === 'function')
+        ? window.crypto.randomUUID()
+        : Math.random().toString(36).slice(2);
+      streamSessionId = fallbackId;
+      try {
+        localStorage.setItem(STREAM_SESSION_STORAGE_KEY, streamSessionId);
+      } catch {
+        // ignore storage failures
+      }
+    }
+    let lastStreamReportTs = 0;
+    let lastStreamReportPos = 0;
+    let lastProgressSentAt = 0;
+    let progressInterval = null;
+    let hasReportedPlay = false; // Flag to prevent duplicate PLAY events
+    let isSwitchingTracks = false; // Flag to prevent events when switching tracks
+
     // Fetch wrapper with access token
     async function apiFetch(url, options = {}) {
       const headers = new Headers(options.headers || {});
@@ -863,6 +891,113 @@
       }
 
       return response;
+    }
+
+    // Stream Event Tracking Functions
+    function toSeconds(value) {
+      const numeric = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(numeric)) return 0;
+      return Math.max(0, Math.round(numeric));
+    }
+
+    function getCurrentTrackMeta() {
+      if (!currentTrackInfo || !currentTrackInfo.recordId) return {};
+      return {
+        trackRecordId: currentTrackInfo.recordId,
+        trackISRC: '',
+        title: currentTrackInfo.title || '',
+        artist: currentTrackInfo.artist || '',
+        album: currentTrackInfo.album || ''
+      };
+    }
+
+    async function sendStreamEvent(type, positionOverride, durationOverride, deltaOverride) {
+      if (typeof fetch !== 'function') return false;
+      const requestTs = Date.now();
+      const meta = getCurrentTrackMeta();
+
+      if (!meta.trackRecordId) {
+        console.warn('[Stream Event] No track record ID available');
+        return false;
+      }
+
+      const rawPos = typeof positionOverride === 'number' ? positionOverride : currentAudio?.currentTime || 0;
+      const rawDur = typeof durationOverride === 'number' ? durationOverride : currentAudio?.duration || 0;
+      const normalizedPos = toSeconds(rawPos);
+      const normalizedDur = toSeconds(rawDur);
+      const hasOverride = Number.isFinite(deltaOverride);
+      const overrideDelta = hasOverride ? Math.max(0, Math.round(deltaOverride)) : 0;
+      const deltaFromPos = Math.max(0, normalizedPos - (Number.isFinite(lastStreamReportPos) ? lastStreamReportPos : 0));
+      const deltaFromTime = lastStreamReportTs ? Math.max(0, Math.round((requestTs - lastStreamReportTs) / 1000)) : 0;
+      const normalizedDelta = hasOverride ? overrideDelta : (deltaFromPos || deltaFromTime);
+
+      const body = {
+        eventType: type,
+        trackRecordId: meta.trackRecordId,
+        trackISRC: meta.trackISRC || '',
+        positionSec: normalizedPos,
+        durationSec: normalizedDur,
+        deltaSec: normalizedDelta
+      };
+
+      try {
+        const headers = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Session-ID': streamSessionId
+        };
+
+        if (currentAccessToken) {
+          headers['X-Access-Token'] = currentAccessToken;
+        }
+
+        const response = await fetch(STREAM_EVENTS_ENDPOINT, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(body)
+        });
+
+        if (!response.ok) {
+          console.warn('[Stream Event] Request failed:', response.status);
+          return false;
+        }
+
+        const responseJson = await response.json().catch(() => null);
+        if (!responseJson?.ok) {
+          console.warn('[Stream Event] Server reported failure');
+          return false;
+        }
+
+        console.log('[Stream Event] Sent:', type, meta.title);
+        lastStreamReportTs = requestTs;
+        lastStreamReportPos = normalizedPos;
+        return true;
+      } catch (err) {
+        console.error('[Stream Event] Error:', err);
+        return false;
+      }
+    }
+
+    function startProgressTracking() {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
+      progressInterval = setInterval(() => {
+        if (currentAudio && !currentAudio.paused) {
+          const now = Date.now();
+          if (now - lastProgressSentAt >= STREAM_PROGRESS_INTERVAL_MS) {
+            sendStreamEvent('PROGRESS');
+            lastProgressSentAt = now;
+          }
+        }
+      }, 5000); // Check every 5 seconds
+    }
+
+    function stopProgressTracking() {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+      }
     }
 
     // Helper functions
@@ -997,39 +1132,92 @@
 
       console.log(`[PlaySong] Playing: ${title} by ${artist}`);
 
-      // Store current track info
-      currentTrackInfo = { title, artist, album, artworkUrl };
+      // Store current track info with recordId for stream tracking
+      currentTrackInfo = { title, artist, album, artworkUrl, recordId: item.recordId };
 
       // Stop current audio if playing
       if (currentAudio) {
         console.log('[PlaySong] Stopping previous audio');
+        isSwitchingTracks = true; // Prevent pause event from firing
+        stopProgressTracking();
+        sendStreamEvent('END');
         currentAudio.pause();
         currentAudio = null;
       }
+
+      // Reset stream tracking state
+      lastStreamReportTs = 0;
+      lastStreamReportPos = 0;
+      lastProgressSentAt = 0;
+      hasReportedPlay = false;
 
       // Create and play new audio
       console.log('[PlaySong] Creating new Audio element');
       currentAudio = new Audio(audioUrl);
 
-      // Add event listeners
+      // Add stream event listeners
       currentAudio.addEventListener('ended', () => {
         isPlaying = false;
+        const duration = currentAudio.duration || 0;
+        const finalPosition = currentAudio.currentTime || duration;
+        const delta = Math.abs((finalPosition || 0) - lastStreamReportPos);
+        sendStreamEvent('END', finalPosition, duration, delta);
+        stopProgressTracking();
         updateMiniPlayer(title, artist, artworkUrl);
       });
 
       currentAudio.addEventListener('error', (e) => {
         console.error('[PlaySong] Audio error:', e);
+        sendStreamEvent('ERROR');
+        stopProgressTracking();
         alert('Failed to load audio. Check console for details.');
         isPlaying = false;
         updateMiniPlayer(title, artist, artworkUrl);
       });
 
+      currentAudio.addEventListener('pause', () => {
+        // Don't send PAUSE if we're switching tracks or if the track has ended
+        if (!currentAudio.ended && isPlaying && !isSwitchingTracks) {
+          sendStreamEvent('PAUSE');
+          stopProgressTracking();
+        }
+      });
+
+      // Start playback and send PLAY event after metadata loads
+      let metadataLoaded = false;
+      currentAudio.addEventListener('loadedmetadata', () => {
+        console.log(`[PlaySong] Duration loaded: ${currentAudio.duration}s`);
+        metadataLoaded = true;
+      });
+
       currentAudio.play().then(() => {
         console.log(`[PlaySong] ✓ Now playing: ${title} by ${artist}`);
         isPlaying = true;
+        isSwitchingTracks = false; // Reset flag after successful play
+
+        // Wait a moment for metadata if not loaded yet, then send PLAY event
+        const sendPlayEvent = () => {
+          if (!hasReportedPlay) {
+            const duration = currentAudio.duration || 0;
+            console.log(`[Stream Event] Sending PLAY with duration: ${duration}s`);
+            sendStreamEvent('PLAY', 0, duration, 0);
+            hasReportedPlay = true;
+          }
+        };
+
+        if (metadataLoaded || currentAudio.duration) {
+          sendPlayEvent();
+        } else {
+          setTimeout(sendPlayEvent, 100);
+        }
+
+        startProgressTracking();
         updateMiniPlayer(title, artist, artworkUrl);
       }).catch(err => {
+        isSwitchingTracks = false; // Reset flag on error too
         console.error('[PlaySong] ✗ Playback failed:', err);
+        sendStreamEvent('ERROR');
+        stopProgressTracking();
         alert(`Failed to play: ${err.message}\n\nCheck browser console for details.`);
         isPlaying = false;
       });
@@ -1053,9 +1241,12 @@
       if (isPlaying) {
         currentAudio.pause();
         isPlaying = false;
+        // PAUSE event is sent by the pause listener
       } else {
+        // Resume playback
         currentAudio.play().then(() => {
           isPlaying = true;
+          startProgressTracking();
           updateMiniPlayer(currentTrackInfo.title, currentTrackInfo.artist, currentTrackInfo.artworkUrl);
         });
       }
@@ -1068,11 +1259,16 @@
     // Stop function
     function stopPlayback() {
       if (currentAudio) {
+        isSwitchingTracks = true; // Suppress pause event
+        sendStreamEvent('END');
+        stopProgressTracking();
         currentAudio.pause();
         currentAudio.currentTime = 0;
         currentAudio = null;
+        isSwitchingTracks = false;
       }
       isPlaying = false;
+      hasReportedPlay = false;
       hideMiniPlayer();
       currentTrackInfo = null;
     }
@@ -1430,6 +1626,14 @@
     });
 
     document.getElementById('searchClear').addEventListener('click', clearSearch);
+
+    // Send END event when page is unloaded
+    window.addEventListener('beforeunload', () => {
+      if (currentAudio && !currentAudio.paused) {
+        sendStreamEvent('END');
+        stopProgressTracking();
+      }
+    });
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {

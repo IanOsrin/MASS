@@ -205,6 +205,7 @@ app.use('/api/', async (req, res, next) => {
 
   // Token is valid, attach info to request and continue
   req.accessToken = {
+    code: accessToken,
     type: validation.type,
     expirationDate: validation.expirationDate
   };
@@ -2139,6 +2140,11 @@ function formatTimestampUTC(dateInput = new Date()) {
 
 app.post('/api/stream-events', async (req, res) => {
   try {
+    // Debug: Check if access token is available
+    if (STREAM_EVENT_DEBUG) {
+      console.log('[MASS] Stream event - Access Token:', req.accessToken?.code || 'NO TOKEN');
+    }
+
     const {
       eventType = '',
       trackRecordId = '',
@@ -2215,7 +2221,8 @@ app.post('/api/stream-events', async (req, res) => {
       SessionID: sessionId,
       ClientIP: clientIP,
       ASN: asn || 'Unknown',
-      UserAgent: userAgent
+      UserAgent: userAgent,
+      Token_Number: req.accessToken?.code || ''
     };
 
     const primaryKey = randomUUID();
@@ -2234,7 +2241,8 @@ app.post('/api/stream-events', async (req, res) => {
       UserAgent: userAgent,
       TotalPlayedSec: payloadDelta,
       PlayStartUTC: normalizedType === 'PLAY' ? timestamp : '',
-      LastEventUTC: timestamp
+      LastEventUTC: timestamp,
+      Token_Number: req.accessToken?.code || ''
     };
 
     if (STREAM_EVENT_DEBUG) {
@@ -2243,7 +2251,8 @@ app.post('/api/stream-events', async (req, res) => {
         sessionId,
         trackRecordId: normalizedTrackRecordId,
         timeStreamed: baseFields[STREAM_TIME_FIELD],
-        deltaSec: baseFields.DeltaSec
+        deltaSec: baseFields.DeltaSec,
+        tokenNumber: baseFields.Token_Number
       });
     }
 
@@ -2279,6 +2288,10 @@ app.post('/api/stream-events', async (req, res) => {
     // Ensure DurationSec reflects track length when provided at END.
     if (normalizedType === 'END' && normalizedDuration && normalizedDuration > baseFields.DurationSec) {
       baseFields.DurationSec = normalizedDuration;
+    }
+
+    if (STREAM_EVENT_DEBUG) {
+      console.info('[MASS] Updating FileMaker record with Token_Number:', baseFields.Token_Number);
     }
 
     let fmResponse = await fmUpdateRecord(FM_STREAM_EVENTS_LAYOUT, ensureResult.recordId, baseFields);
