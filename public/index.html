@@ -5,30 +5,134 @@
   <!-- Resource hints for better performance -->
   <link rel="preconnect" href="/" crossorigin>
   <link rel="dns-prefetch" href="/">
-  <link rel="preload" href="/app.min.js?v=44" as="script">
-  <title>MAD Jukebox</title>
+  <link rel="preload" href="/app.min.js?v=57" as="script">
+  <title>MAD JUKEBOX - Bakelite Edition</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
+    /* 🎵 RETRO JUKEBOX THEME - 1950s Bakelite Style 🎵 */
     :root {
-      --bg:#0f0f12; --fg:#f5f6f7; --muted:#a7abb3; --card:#17181c; --accent:#62f5a9; --border:#24262c;
-      --cover-size: 104px; /* compact cover for random songs */
-      --overlay: rgba(0,0,0,.6);
-      --btn-gradient-start:#3a7bd5;
-      --btn-gradient-end:#00d2ff;
-      --btn-text:#06121f;
-      --btn-shadow:rgba(58,123,213,0.25);
-      --btn-shadow-hover:rgba(58,123,213,0.35);
-        }
-    html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;}
-    header{padding:12px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:linear-gradient(180deg,rgba(15,15,18,0.98),rgba(15,15,18,0.9));backdrop-filter:saturate(180%) blur(8px);z-index:10;}
+      /* Bakelite Jukebox Color Palette */
+      --bg: #f5f1e8;
+      --bg-solid: #f5f1e8;
+      --bakelite-cream: #f5f1e8;
+      --bakelite-aged: #e8e0d0;
+      --bakelite-shadow: #d4c8b0;
+      --fg: #2a1810;
+      --muted: #6b5d4f;
+      --card: linear-gradient(135deg, #faf7f0 0%, #f0ebe0 100%);
+      --card-solid: #faf7f0;
+      --accent: #ff3366;
+      --accent-glow: #ffcc00;
+      --chrome: linear-gradient(180deg, #e8e8e8 0%, #b8b8b8 45%, #9a9a9a 50%, #c8c8c8 55%, #f0f0f0 100%);
+      --border: #c8b89a;
+      --neon-red: #ff0844;
+      --neon-yellow: #ffea00;
+      --neon-blue: #00d4ff;
+      --neon-green: #39ff14;
+      --overlay: rgba(245, 241, 232, 0.95);
+      --cover-size: 180px;
+      --btn-gradient-start: #ff3366;
+      --btn-gradient-end: #ffcc00;
+      --btn-text: #1a0507;
+      --btn-shadow: rgba(255, 51, 102, 0.6);
+      --btn-shadow-hover: rgba(255, 51, 102, 0.9);
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bakelite-cream);
+      background-image:
+        /* Subtle grain texture */
+        repeating-linear-gradient(90deg, transparent 0px, rgba(0,0,0,0.02) 1px, transparent 2px),
+        repeating-linear-gradient(0deg, transparent 0px, rgba(0,0,0,0.02) 1px, transparent 2px),
+        /* Aged yellowing gradient */
+        radial-gradient(ellipse at top left, rgba(255, 248, 220, 0.3), transparent 60%),
+        radial-gradient(ellipse at bottom right, rgba(240, 230, 200, 0.4), transparent 60%),
+        var(--bakelite-cream);
+      background-attachment: fixed;
+      color: var(--fg);
+      font-family: 'Trebuchet MS', 'Arial Rounded MT Bold', Impact, system-ui, sans-serif;
+      position: relative;
+    }
+
+    /* Bakelite texture overlay with scratches and wear */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        /* Random scratches - diagonal */
+        linear-gradient(125deg, transparent 0%, transparent 48%, rgba(0,0,0,0.03) 49%, transparent 50%),
+        linear-gradient(135deg, transparent 0%, transparent 68%, rgba(0,0,0,0.02) 69%, transparent 70%),
+        linear-gradient(155deg, transparent 0%, transparent 28%, rgba(0,0,0,0.025) 29%, transparent 30%),
+        /* Worn spots */
+        radial-gradient(circle at 15% 25%, rgba(210, 200, 180, 0.2), transparent 15%),
+        radial-gradient(circle at 85% 70%, rgba(220, 210, 190, 0.15), transparent 12%),
+        radial-gradient(circle at 45% 85%, rgba(215, 205, 185, 0.18), transparent 10%),
+        /* Subtle discoloration */
+        radial-gradient(ellipse at 70% 30%, rgba(240, 235, 210, 0.3), transparent 40%),
+        radial-gradient(ellipse at 30% 80%, rgba(235, 228, 200, 0.25), transparent 35%),
+        /* Fine texture */
+        repeating-radial-gradient(circle at 50% 50%, transparent 0px, rgba(0,0,0,0.01) 1px, transparent 2px);
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.8;
+    }
+
+    /* Subtle aging animation */
+    @keyframes bakeliteAging {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 0.85; }
+    }
+
+    body::before {
+      animation: bakeliteAging 15s ease-in-out infinite;
+    }
+    header {
+      padding: 16px 20px;
+      border-bottom: 4px solid;
+      border-image: var(--chrome) 1;
+      position: sticky;
+      top: 0;
+      background: linear-gradient(180deg, rgba(250, 247, 240, 0.98) 0%, rgba(240, 235, 224, 0.95) 100%);
+      backdrop-filter: saturate(180%) blur(12px);
+      z-index: 10;
+      box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+        inset 0 -1px 0 rgba(200, 184, 154, 0.4);
+    }
     .header-main{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:16px;justify-content:space-between;flex-wrap:wrap;}
     .header-logo{flex-shrink:0;max-height:60px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.25));}
     .searchbar{flex:1 1 600px;display:flex;gap:8px;align-items:center;min-width:300px;flex-wrap:wrap;}
     .search-fields{display:flex;gap:8px;flex:1 1 auto;min-width:300px;}
     .search-fields[hidden]{display:none !important;}
     .search-fields input{flex:1 1 120px;min-width:120px;}
-    .searchbar input{background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:15px;outline:none;transition:border-color 0.2s ease;}
-    .searchbar input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(98,245,169,0.1);}
+    .searchbar input {
+      background: var(--card-solid);
+      background-image: var(--card);
+      color: var(--fg);
+      border: 3px solid var(--border);
+      border-radius: 20px;
+      padding: 12px 18px;
+      font-size: 16px;
+      font-weight: 600;
+      outline: none;
+      transition: all 0.3s ease;
+      box-shadow:
+        inset 0 2px 8px rgba(0, 0, 0, 0.6),
+        0 0 10px rgba(255, 51, 102, 0.2);
+    }
+
+    .searchbar input:focus {
+      border-color: var(--neon-yellow);
+      box-shadow:
+        0 0 20px var(--neon-yellow),
+        0 0 40px rgba(255, 234, 0, 0.3),
+        inset 0 2px 8px rgba(0, 0, 0, 0.6);
+      color: var(--neon-yellow);
+    }
     .searchbar button{border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0;}
     .searchbar{position:relative;}
     .header-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0;}
@@ -122,29 +226,128 @@
       .view-buttons a,
       .view-buttons button{padding:6px 12px;font-size:12px;}
     }
-    .albums{display:grid;grid-template-columns:repeat(4,195px);grid-template-rows:auto auto;gap:14px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
+    .albums{display:grid;grid-template-columns:repeat(4,240px);grid-template-rows:auto auto;gap:16px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
     /* Featured albums mode: larger 2-column grid */
     .albums[data-mode="featured"]{grid-template-columns:repeat(2,320px);gap:20px;}
-    .albums.single-album{display:flex;flex-direction:column;align-items:center;gap:24px;}
-    .card{background:var(--card);border:2px solid #62f5a9;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px;overflow:hidden;scroll-margin-top:128px;min-height:280px;}
-    .card-buttons{margin-top:8px;display:flex;flex-direction:column;gap:6px;}
-    .card .play-button{border-radius:10px;padding:8px 12px;cursor:pointer;font-weight:600;background:var(--accent);border:none;color:var(--btn-text);width:100%;font-size:14px;}
-    .card .play-button:hover{filter:brightness(1.1);}
+    .albums.single-album{display:flex;flex-direction:column;align-items:flex-start;gap:12px;max-width:380px;}
+    .card {
+      background: var(--card-solid);
+      background-image:
+        /* Subtle bakelite grain */
+        repeating-linear-gradient(90deg, transparent 0px, rgba(0,0,0,0.01) 1px, transparent 2px),
+        /* Age spots */
+        radial-gradient(circle at 20% 30%, rgba(235, 228, 210, 0.3), transparent 40%),
+        radial-gradient(circle at 80% 70%, rgba(240, 235, 220, 0.2), transparent 30%),
+        var(--card);
+      border: 5px solid;
+      border-image: var(--chrome) 1;
+      border-radius: 24px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+      scroll-margin-top: 128px;
+      min-height: 380px;
+      box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.15),
+        0 4px 12px rgba(0, 0, 0, 0.1),
+        inset 0 2px 4px rgba(255, 255, 255, 0.4),
+        inset 0 -2px 4px rgba(200, 184, 154, 0.3);
+      position: relative;
+      transition: all 0.3s ease;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      right: -2px;
+      bottom: -2px;
+      background: linear-gradient(45deg, var(--neon-red), var(--neon-yellow), var(--neon-blue), var(--neon-red));
+      border-radius: 24px;
+      z-index: -1;
+      opacity: 0;
+      animation: neonRotate 3s linear infinite;
+      transition: opacity 0.3s ease;
+    }
+
+    .card:hover::before {
+      opacity: 0.6;
+    }
+
+    .card:hover {
+      transform: translateY(-4px) scale(1.02);
+      box-shadow:
+        0 0 50px rgba(255, 51, 102, 0.7),
+        0 0 80px rgba(255, 204, 0, 0.4),
+        inset 0 2px 4px rgba(255, 204, 0, 0.3),
+        inset 0 -2px 4px rgba(255, 51, 102, 0.3);
+    }
+
+    @keyframes neonRotate {
+      0% { filter: hue-rotate(0deg); }
+      100% { filter: hue-rotate(360deg); }
+    }
+    .card-buttons{margin-top:12px;display:flex;flex-direction:column;gap:10px;}
+    .card .play-button {
+      border-radius: 50px;
+      padding: 14px 20px;
+      cursor: pointer;
+      font-weight: 900;
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, var(--neon-red) 0%, var(--neon-yellow) 100%);
+      border: 3px solid var(--neon-yellow);
+      color: #1a0507;
+      width: 100%;
+      box-shadow:
+        0 0 20px var(--neon-red),
+        0 0 40px var(--neon-yellow),
+        inset 0 2px 4px rgba(255, 255, 255, 0.5);
+      text-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.5),
+        0 0 10px rgba(255, 255, 255, 0.8);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card .play-button::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+      transform: rotate(45deg);
+      animation: buttonShine 3s linear infinite;
+    }
+
+    @keyframes buttonShine {
+      0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+      100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+    }
+
+    .card .play-button:hover {
+      transform: scale(1.05);
+      box-shadow:
+        0 0 30px var(--neon-red),
+        0 0 60px var(--neon-yellow),
+        0 0 90px var(--neon-red),
+        inset 0 2px 4px rgba(255, 255, 255, 0.7);
+      border-color: var(--neon-red);
+    }
+
+    .card .play-button:active {
+      transform: scale(0.98);
+    }
     .card .btn.secondary.small{font-size:12px;padding:6px 10px;}
     .card.pending-audio{opacity:0.8;}
     .card.no-audio{display:none !important;}
-
-    /* Hide featured playlists when not logged in */
-    body:not(.user-logged-in) #publicPlaylistsPanel{display:none !important;}
-
-    /* Joke Ads - Shown to non-authenticated users */
-    .joke-ads{display:flex;flex-direction:column;gap:12px;}
-    body.user-logged-in .joke-ads{display:none !important;}
-    .joke-ad{background:var(--card);border:2px dashed var(--border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:all 0.2s ease;}
-    .joke-ad:hover{border-color:#62f5a9;transform:scale(1.02);}
-    .joke-ad-title{font-weight:700;font-size:14px;margin-bottom:8px;color:var(--text);}
-    .joke-ad-body{font-size:12px;color:var(--muted);line-height:1.4;}
-    .joke-ad-cta{display:inline-block;margin-top:8px;padding:4px 12px;background:#62f5a9;color:#000;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;}
 
     /* Subscription Toast Notification */
     .subscription-toast{position:fixed;bottom:20px;right:20px;background:linear-gradient(135deg, #62f5a9 0%, #4ecf94 100%);color:#000;padding:20px 24px;border-radius:12px;box-shadow:0 8px 24px rgba(98,245,169,0.4);z-index:10000;font-weight:600;font-size:15px;opacity:0;transform:translateX(400px);transition:all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);max-width:320px;}
@@ -156,20 +359,193 @@
     body.missing-audio-mode .missing-mode-banner{display:block !important;}
     .missing-mode-banner{display:none;position:fixed;top:0;left:0;right:0;background:#ff4444;color:#fff;text-align:center;padding:12px;font-weight:700;z-index:9999;box-shadow:0 2px 8px rgba(255,68,68,0.5);}
 
-    /* Cover: small, centered square; never bleeds */
-    .cover-wrap{position:relative;width:var(--cover-size);height:var(--cover-size);border-radius:6px;overflow:hidden;border:1px solid var(--border);background:#101215;margin:0 auto;cursor:pointer;transition:transform 0.15s ease,box-shadow 0.15s ease;}
-    .cover-wrap:hover{transform:scale(1.05);box-shadow:0 4px 12px rgba(0,0,0,0.4);}
-    .cover-wrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
-    /* Featured albums: larger covers */
-    .albums:not(.single-album) .card .cover-wrap{width:200px;height:200px;border-radius:10px;border:2px solid var(--border);}
-    .albums.single-album .cover-wrap{width:260px;height:260px;margin:0 auto 16px;}
+    /* Cover: Vinyl Record Style */
+    .cover-wrap {
+      position: relative;
+      width: var(--cover-size);
+      height: var(--cover-size);
+      border-radius: 50%;
+      overflow: hidden;
+      border: 6px solid;
+      border-image: var(--chrome) 1;
+      background:
+        radial-gradient(circle at center, #1a1a1a 0%, #0a0a0a 30%, #000 100%);
+      margin: 0 auto;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow:
+        0 0 20px rgba(255, 51, 102, 0.5),
+        inset 0 0 30px rgba(0, 0, 0, 0.8),
+        inset 0 2px 4px rgba(255, 255, 255, 0.1);
+    }
 
-    .heading{display:flex;align-items:center;gap:2px;flex-direction:column;justify-content:center;text-align:center;width:100%;}
-    .card h3{margin:0;font-size:18px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;font-weight:700;}
-    .card-artist{color:var(--muted);font-size:15px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;}
-    .albums.single-album .card h3{font-size:26px;}
+    .cover-wrap:hover {
+      transform: scale(1.08);
+      box-shadow:
+        0 0 40px rgba(255, 51, 102, 0.8),
+        0 0 60px rgba(255, 204, 0, 0.5),
+        inset 0 0 30px rgba(0, 0, 0, 0.8),
+        inset 0 2px 4px rgba(255, 255, 255, 0.2);
+    }
+
+    /* Now Playing Turntable - with tonearm and spinning vinyl */
+    .now-playing-thumb {
+      position: relative;
+      overflow: visible !important; /* Allow tonearm to show */
+    }
+
+    /* Make the vinyl image circular */
+    .now-playing-thumb img {
+      border-radius: 50%;
+    }
+
+    /* Spinning vinyl when playing */
+    .now-playing-thumb.playing img {
+      animation: vinylSpin 3s linear infinite;
+    }
+
+    @keyframes vinylSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    /* Tonearm - starts OUT (resting position) */
+    .now-playing-thumb::after {
+      content: '';
+      position: absolute;
+      top: 10%;
+      right: -25%;
+      width: 80%;
+      height: 10px;
+      background: linear-gradient(90deg,
+        #8b7355 0%,
+        #a0876d 30%,
+        #8b7355 60%,
+        transparent 100%);
+      border-radius: 5px 0 0 5px;
+      transform-origin: 95% center;
+      transform: rotate(30deg);
+      box-shadow:
+        0 3px 6px rgba(0, 0, 0, 0.4),
+        inset 0 1px 3px rgba(255, 255, 255, 0.3);
+      transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* Tonearm needle/cartridge - starts OUT */
+    .now-playing-thumb::before {
+      content: '';
+      position: absolute;
+      top: 12%;
+      right: 50%;
+      width: 14px;
+      height: 14px;
+      background: radial-gradient(circle, #e0e0e0 30%, #808080 100%);
+      border-radius: 50%;
+      box-shadow:
+        0 2px 6px rgba(0, 0, 0, 0.5),
+        inset 0 1px 2px rgba(255, 255, 255, 0.4);
+      transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 11;
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    /* When playing, arm swings IN onto record */
+    .now-playing-thumb.playing::after {
+      transform: rotate(-30deg);
+    }
+
+    .now-playing-thumb.playing::before {
+      opacity: 1;
+      top: 40%;
+      right: 45%;
+    }
+
+    .cover-wrap img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 50%;
+      z-index: 0;
+    }
+    /* Featured albums: larger vinyl covers */
+    .albums:not(.single-album) .card .cover-wrap {
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      border: 8px solid;
+      border-image: var(--chrome) 1;
+    }
+    .albums.single-album .cover-wrap {
+      width: 200px;
+      height: 200px;
+      margin: 0 auto 8px;
+      border-radius: 50%;
+      border: 8px solid;
+      border-image: var(--chrome) 1;
+    }
+
+    .heading {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-direction: column;
+      justify-content: center;
+      text-align: center;
+      width: 100%;
+    }
+
+    .card h3 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--neon-yellow);
+      text-shadow:
+        0 0 10px rgba(255, 234, 0, 0.8),
+        0 0 20px rgba(255, 234, 0, 0.5),
+        0 2px 4px rgba(0, 0, 0, 0.8);
+      font-family: Impact, 'Arial Black', sans-serif;
+    }
+
+    .card-artist {
+      color: var(--accent);
+      font-size: 16px;
+      margin-top: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-shadow:
+        0 0 8px rgba(255, 51, 102, 0.6),
+        0 1px 2px rgba(0, 0, 0, 0.8);
+    }
+
+    .albums.single-album .card {
+      width: 100%;
+      max-width: 380px;
+      min-height: 280px;
+      padding: 16px;
+    }
+    .albums.single-album .card h3 {
+      font-size: 24px;
+      letter-spacing: 1.5px;
+    }
     .muted{color:var(--muted);font-size:11px;text-align:center;line-height:1.2;}
-    .albums.single-album .muted{font-size:16px;}
+    .albums.single-album .muted{font-size:13px;}
     .badge{border:1px solid var(--border);border-radius:999px;padding:2px 6px;font-size:9px;color:var(--muted);}
     .badge-warning{background:rgba(255,193,7,0.15);border-color:rgba(255,193,7,0.4);color:#ffc107;}
 
@@ -219,7 +595,20 @@
     .view-buttons a:hover,
     .view-buttons button:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.4);}
 
-    .playlists-panel{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:flex;flex-direction:column;gap:10px;}
+    .playlists-panel {
+      padding: 16px;
+      border: 4px solid;
+      border-image: var(--chrome) 1;
+      border-radius: 20px;
+      background: var(--card-solid);
+      background-image: var(--card);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow:
+        0 0 20px rgba(255, 51, 102, 0.3),
+        inset 0 2px 4px rgba(255, 204, 0, 0.1);
+    }
     .playlists-panel[hidden]{display:none;}
     .playlists-header{display:flex;align-items:center;gap:12px;justify-content:space-between;cursor:pointer;user-select:none;}
     .playlists-header:hover h2{color:var(--accent);}
@@ -266,7 +655,24 @@
     .playlist-tracks.only-current .playlist-empty{display:none;}
     .playlist-tracks.only-current .now-playing-placeholder{display:none;}
 
-    .now-playing{align-self:flex-start;width:100%;min-width:300px;padding:12px 16px;border:1px solid var(--border);border-radius:8px;background:#18191d;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 12px rgba(0,0,0,0.2);}
+    .now-playing {
+      align-self: flex-start;
+      width: 100%;
+      min-width: 300px;
+      padding: 18px 20px;
+      border: 5px solid;
+      border-image: var(--chrome) 1;
+      border-radius: 20px;
+      background: var(--card-solid);
+      background-image: var(--card);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow:
+        0 0 30px rgba(255, 51, 102, 0.5),
+        0 0 60px rgba(255, 204, 0, 0.2),
+        inset 0 2px 4px rgba(255, 204, 0, 0.2);
+    }
     .now-playing[hidden]{display:none !important;}
     .now-playing-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
     .now-playing-header .label{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
@@ -309,9 +715,25 @@
     .image-lightbox-close:hover{background:rgba(0,0,0,0.9);}
 
     /* ======= Modal (centered track window) ======= */
-    .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--overlay);z-index:100;}
+    .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:transparent;z-index:100;}
     .overlay.open{display:flex;}
-    .modal{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.35);width:min(900px,94vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden;}
+    .modal {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.35);
+      width: min(450px, 94vw);   /* was min(900px,94vw) – now ~half width */
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    @media (max-width: 700px) {
+      .modal {
+        width: 94vw;
+      }
+    }
     .modal header{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border);background:#14161a;position:sticky;top:0;z-index:1;}
     .modal .cover-wrap{width:56px;height:56px;margin:0;}
     .modal .meta{display:flex;flex-direction:column;gap:2px;min-width:0;}
@@ -400,11 +822,19 @@
     .modal .close,
     .info-modal .info-close,
     #explore {
-      background:linear-gradient(135deg,var(--btn-gradient-start),var(--btn-gradient-end));
-      color:var(--btn-text);
-      border:none;
-      box-shadow:0 6px 18px var(--btn-shadow);
-      transition:transform 0.15s ease,box-shadow 0.15s ease,opacity 0.15s ease;
+      background: linear-gradient(135deg, var(--neon-blue) 0%, var(--neon-green) 100%);
+      color: #0a0204;
+      border: 3px solid var(--neon-green);
+      border-radius: 30px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      box-shadow:
+        0 0 15px var(--neon-blue),
+        0 0 30px var(--neon-green),
+        inset 0 2px 4px rgba(255, 255, 255, 0.4);
+      transition: all 0.2s ease;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 0 5px rgba(255, 255, 255, 0.5);
     }
 
     .btn:hover,
@@ -414,8 +844,13 @@
     .modal .close:hover,
     .info-modal .info-close:hover,
     #explore:hover {
-      transform:translateY(-1px);
-      box-shadow:0 8px 20px var(--btn-shadow-hover);
+      transform: translateY(-2px) scale(1.03);
+      box-shadow:
+        0 0 25px var(--neon-blue),
+        0 0 50px var(--neon-green),
+        0 0 75px var(--neon-blue),
+        inset 0 2px 4px rgba(255, 255, 255, 0.6);
+      border-color: var(--neon-blue);
     }
 
     .btn:active,
@@ -425,8 +860,11 @@
     .modal .close:active,
     .info-modal .info-close:active,
     #explore:active {
-      transform:translateY(0);
-      box-shadow:0 5px 14px var(--btn-shadow);
+      transform: translateY(0) scale(0.98);
+      box-shadow:
+        0 0 10px var(--neon-blue),
+        0 0 20px var(--neon-green),
+        inset 0 2px 4px rgba(255, 255, 255, 0.3);
     }
 
     button:disabled{opacity:.6;cursor:not-allowed;transform:none !important;box-shadow:none !important;}
@@ -603,7 +1041,7 @@
     }
     .cookie-notice-text {
       font-size: 14px;
-      color: var(--fg);
+      color: #f5f1e8;
       line-height: 1.5;
       flex: 1;
       min-width: 280px;
@@ -660,7 +1098,7 @@
 </head>
 <body>
   <!-- Access Token Entry Overlay -->
-  <div class="access-token-overlay" id="accessTokenOverlay">
+  <div class="access-token-overlay hidden" id="accessTokenOverlay">
     <div class="access-token-box">
       <div class="access-token-title">Welcome to MASS</div>
       <div class="access-token-subtitle">
@@ -703,7 +1141,43 @@
   <header>
     <div class="header-main">
       <img src="/img/MAD_Logo.png" alt="MAD Logo" class="header-logo">
-      <h1 style="font-size: 24px; font-weight: 700; color: var(--accent); margin: 0 16px;">MAD Jukebox</h1>
+      <h1 style="
+        font-size: 36px;
+        font-weight: 900;
+        font-family: Impact, 'Arial Black', sans-serif;
+        color: var(--neon-yellow);
+        margin: 0 16px;
+        text-transform: uppercase;
+        letter-spacing: 3px;
+        text-shadow:
+          0 0 10px var(--neon-yellow),
+          0 0 20px var(--neon-yellow),
+          0 0 30px var(--neon-red),
+          0 0 40px var(--neon-red),
+          0 2px 4px rgba(0, 0, 0, 0.8);
+        filter: drop-shadow(0 0 15px rgba(255, 234, 0, 0.8));
+        animation: jukeboxGlow 2s ease-in-out infinite alternate;
+      ">MAD JUKEBOX</h1>
+      <style>
+        @keyframes jukeboxGlow {
+          0% {
+            text-shadow:
+              0 0 10px var(--neon-yellow),
+              0 0 20px var(--neon-yellow),
+              0 0 30px var(--neon-red),
+              0 0 40px var(--neon-red),
+              0 2px 4px rgba(0, 0, 0, 0.8);
+          }
+          100% {
+            text-shadow:
+              0 0 20px var(--neon-yellow),
+              0 0 30px var(--neon-yellow),
+              0 0 40px var(--neon-red),
+              0 0 60px var(--neon-red),
+              0 2px 4px rgba(0, 0, 0, 0.8);
+          }
+        }
+      </style>
       <div class="searchbar">
         <div class="search-fields" id="searchFields" hidden>
           <input id="searchArtist" type="search" placeholder="Artist" autocomplete="off" />
@@ -840,23 +1314,6 @@
               <button id="sharePlaylistButton" type="button" class="btn small">Share</button>
               <button id="exportPlaylistButton" type="button" class="btn small">Save</button>
             </div>
-          </div>
-        </section>
-        <section id="jokeAdsPanel" class="joke-ads" hidden>
-          <div class="joke-ad" id="jokeAd1">
-            <div class="joke-ad-title">🎸 Guitar Lessons from AI</div>
-            <div class="joke-ad-body">Learn to play Wonderwall in just 3 easy prompts! ChatGPT-certified instructor.</div>
-            <span class="joke-ad-cta">Prompt Now</span>
-          </div>
-          <div class="joke-ad" id="jokeAd2">
-            <div class="joke-ad-title">🎧 Headphones for Dogs</div>
-            <div class="joke-ad-body">Premium noise-cancelling ear muffs so your pup can enjoy classical music during fireworks.</div>
-            <span class="joke-ad-cta">Woof Now</span>
-          </div>
-          <div class="joke-ad" id="jokeAd3">
-            <div class="joke-ad-title">🚀 Vinyl in Space</div>
-            <div class="joke-ad-body">Send your favorite album to orbit. Limited zero-gravity pressing available!</div>
-            <span class="joke-ad-cta">Launch It</span>
           </div>
         </section>
       </aside>
@@ -1597,19 +2054,35 @@
   })();
   </script>
 
-  <script defer src="/app.min.js?v=44"></script>
+  <script>
+  // Check for URL parameters IMMEDIATELY to prevent featured albums from loading
+  (function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const albumParam = urlParams.get('album');
+    const artistParam = urlParams.get('artist');
+
+    if (albumParam || artistParam) {
+      // Set flag to prevent app.min.js from loading featured albums
+      window.__skipFeaturedLoad = true;
+      console.log('[MASS] URL parameters detected early, skipping featured album load');
+    }
+  })();
+  </script>
+  <script defer src="/app.min.js?v=57"></script>
   <script>
   // Override search to use separate fields
   window.addEventListener('DOMContentLoaded', () => {
-    // Wait for app.min.js to load
-    setTimeout(() => {
-      const searchArtistEl = document.getElementById('searchArtist');
-      const searchAlbumEl = document.getElementById('searchAlbum');
-      const searchTrackEl = document.getElementById('searchTrack');
-      const searchFieldsEl = document.getElementById('searchFields');
-      const goEl = document.getElementById('go');
-      const clearEl = document.getElementById('clear');
+    const searchArtistEl = document.getElementById('searchArtist');
+    const searchAlbumEl = document.getElementById('searchAlbum');
+    const searchTrackEl = document.getElementById('searchTrack');
+    const searchFieldsEl = document.getElementById('searchFields');
+    const goEl = document.getElementById('go');
+    const clearEl = document.getElementById('clear');
 
+    // Check if we need to trigger immediate search from URL params
+    const hasUrlParams = window.__skipFeaturedLoad === true;
+
+    function setupSearchOverride() {
       // Store original doSearch if it exists
       const originalDoSearch = window.doSearch;
 
@@ -1690,7 +2163,50 @@
           searchFieldsEl.hidden = true;
         });
       }
-    }, 100);
+
+      // Handle URL parameters for album/artist filtering from Modern View
+      if (hasUrlParams) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const albumParam = urlParams.get('album');
+        const artistParam = urlParams.get('artist');
+
+        if ((albumParam || artistParam) && searchFieldsEl) {
+          console.log('[MASS] URL parameters detected, pre-filling search:', { album: albumParam, artist: artistParam });
+
+          // Show search fields
+          searchFieldsEl.hidden = false;
+
+          // Pre-fill the search fields
+          if (artistParam && searchArtistEl) {
+            searchArtistEl.value = artistParam;
+          }
+          if (albumParam && searchAlbumEl) {
+            searchAlbumEl.value = albumParam;
+          }
+
+          // Trigger search immediately
+          console.log('[MASS] Triggering immediate search from URL parameters');
+          if (typeof window.run === 'function') {
+            window.run(' ');
+          }
+        }
+      }
+    }
+
+    // If window.run is already available (deferred script loaded), setup immediately
+    // Otherwise poll for it (should be very quick with defer)
+    if (typeof window.run === 'function') {
+      setupSearchOverride();
+    } else {
+      const checkInterval = setInterval(() => {
+        if (typeof window.run === 'function') {
+          clearInterval(checkInterval);
+          setupSearchOverride();
+        }
+      }, 10);
+      // Fallback timeout
+      setTimeout(() => clearInterval(checkInterval), 1000);
+    }
   });
   </script>
   <script>
@@ -1829,63 +2345,6 @@
   </script>
 
   <script>
-  // Show joke ads when user is not logged in
-  (function() {
-    const jokeAdsPanel = document.getElementById('jokeAdsPanel');
-    const playlistColumn = document.getElementById('playlistColumn');
-    const playlistsPanel = document.getElementById('playlistsPanel');
-    const publicPlaylistsPanel = document.getElementById('publicPlaylistsPanel');
-    const signupTrigger = document.getElementById('signupTrigger');
-
-    function updateJokeAdsVisibility() {
-      const userBadge = document.getElementById('userBadge');
-      const isLoggedIn = userBadge && !userBadge.hidden;
-
-      if (!jokeAdsPanel || !playlistColumn) return;
-
-      console.log('[Joke Ads] isLoggedIn:', isLoggedIn);
-
-      // Update body class to control CSS visibility
-      if (isLoggedIn) {
-        document.body.classList.add('user-logged-in');
-      } else {
-        document.body.classList.remove('user-logged-in');
-      }
-
-      // Always show playlist column - CSS controls whether to show playlists (logged in) or joke ads (logged out)
-      playlistColumn.hidden = false;
-    }
-
-    // Make joke ads clickable - open subscribe modal
-    if (jokeAdsPanel) {
-      const jokeAds = jokeAdsPanel.querySelectorAll('.joke-ad');
-      jokeAds.forEach(ad => {
-        ad.addEventListener('click', () => {
-          if (signupTrigger) {
-            signupTrigger.click();
-          }
-        });
-      });
-    }
-
-    // Update visibility on page load
-    updateJokeAdsVisibility();
-
-    // Watch for auth state changes
-    const userBadgeObserver = new MutationObserver(() => {
-      updateJokeAdsVisibility();
-    });
-
-    const userBadge = document.getElementById('userBadge');
-    if (userBadge) {
-      userBadgeObserver.observe(userBadge, { attributes: true, attributeFilter: ['hidden'] });
-    }
-
-    console.log('🎭 Joke ads initialized');
-  })();
-  </script>
-
-  <script>
   // Lazy loading for images - improves performance
   (function() {
     // Add lazy loading and async decoding to all existing images
@@ -1922,7 +2381,7 @@
 
   <!-- View Switcher Buttons (Fixed Bottom Right) -->
   <div class="view-buttons">
-    <a href="/modern">✨ Modern</a>
+    <a href="/">✨ MADMusic</a>
     <button id="themeToggle" type="button" class="theme-toggle" aria-pressed="false">🎨 Theme</button>
   </div>
 
@@ -1960,6 +2419,80 @@
     } else {
       console.error('❌ Theme toggle button not found');
     }
+  })();
+  </script>
+
+  <script>
+  // 🎵 Animated Record Player - Tonearm and spinning vinyl (Now Playing only)
+  (function() {
+    let currentAudio = null;
+
+    // Listen for audio playback events
+    document.addEventListener('DOMContentLoaded', () => {
+      const nowPlayingThumb = document.querySelector('.now-playing-thumb');
+
+      if (!nowPlayingThumb) {
+        console.warn('⚠️ Now playing thumb not found');
+        return;
+      }
+
+      // Monitor all audio elements
+      const checkAudioPlayback = () => {
+        const allAudio = document.querySelectorAll('audio');
+
+        allAudio.forEach(audio => {
+          if (!audio.dataset.recordPlayerListenerAdded) {
+            audio.dataset.recordPlayerListenerAdded = 'true';
+
+            // When audio starts playing
+            audio.addEventListener('play', () => {
+              currentAudio = audio;
+              const thumb = document.querySelector('.now-playing-thumb');
+
+              if (thumb) {
+                thumb.classList.add('playing');
+                console.log('🎵 Record player arm engaged - vinyl spinning!');
+              }
+            });
+
+            // When audio pauses
+            audio.addEventListener('pause', () => {
+              const thumb = document.querySelector('.now-playing-thumb');
+
+              if (thumb) {
+                thumb.classList.remove('playing');
+                console.log('⏸️ Record player arm lifted');
+              }
+            });
+
+            // When audio ends
+            audio.addEventListener('ended', () => {
+              const thumb = document.querySelector('.now-playing-thumb');
+
+              if (thumb) {
+                thumb.classList.remove('playing');
+                console.log('⏹️ Record finished playing');
+              }
+            });
+          }
+        });
+      };
+
+      // Initial check
+      checkAudioPlayback();
+
+      // Monitor for new audio elements being added
+      const audioObserver = new MutationObserver(() => {
+        checkAudioPlayback();
+      });
+
+      audioObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+
+      console.log('🎵 Record player animations initialized (Now Playing only)');
+    });
   })();
   </script>
 

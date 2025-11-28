@@ -74,11 +74,147 @@
       display: flex;
       gap: 1rem;
       align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
     .search-box {
       position: relative;
       width: 300px;
+    }
+
+    .genre-selector {
+      width: 220px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .genre-select-wrapper {
+      position: relative;
+    }
+
+    .genre-select {
+      width: 100%;
+      padding: 0.65rem 2.5rem 0.65rem 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      color: var(--text-primary);
+      font-size: 0.875rem;
+      outline: none;
+      appearance: none;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+      cursor: pointer;
+    }
+
+    .genre-select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+    }
+
+    .genre-select-wrapper::after {
+      content: '▾';
+      position: absolute;
+      right: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+      font-size: 0.9rem;
+    }
+
+    .genre-helper-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .genre-helper {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      flex: 1;
+    }
+
+    .genre-clear-btn {
+      border: none;
+      background: transparent;
+      color: var(--accent);
+      font-size: 0.75rem;
+      cursor: pointer;
+      padding: 0.15rem 0.35rem;
+      border-radius: 6px;
+      display: none;
+    }
+
+    .genre-clear-btn.visible {
+      display: inline-flex;
+    }
+
+    .genre-clear-btn:hover {
+      color: var(--accent-hover);
+      background: rgba(74, 144, 226, 0.1);
+    }
+
+    .genre-retry-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      padding: 0.5rem 1.25rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    .genre-retry-btn:hover:not([disabled]) {
+      transform: translateY(-1px);
+    }
+
+    .genre-retry-btn[disabled] {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .genre-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+
+    .genre-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      padding: 0.2rem 0.65rem;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .genre-tag-remove {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .genre-tag-remove:hover {
+      color: var(--text-primary);
+    }
+
+    .genre-feedback {
+      min-height: 1rem;
+      font-size: 0.75rem;
+      color: var(--accent);
     }
 
     .search-input {
@@ -254,6 +390,14 @@
       font-size: 1.5rem;
       color: var(--text-secondary);
       font-weight: 500;
+      margin-bottom: 0.25rem;
+    }
+
+    .featured-album {
+      font-size: 1.2rem;
+      color: var(--text-tertiary);
+      font-weight: 400;
+      font-style: italic;
     }
 
     .featured-actions {
@@ -376,6 +520,119 @@
       box-shadow: 0 4px 16px rgba(0, 113, 227, 0.3);
     }
 
+    /* Trending Now Section */
+    .trending-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .trending-card {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      border-radius: 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .trending-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-3px);
+    }
+
+    .trending-rank {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent);
+      min-width: 32px;
+      text-align: center;
+    }
+
+    .trending-artwork {
+      width: 72px;
+      height: 72px;
+      border-radius: 12px;
+      overflow: hidden;
+      flex-shrink: 0;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .trending-artwork img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .trending-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .trending-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 0.15rem;
+    }
+
+    .trending-artist {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.25rem;
+    }
+
+    .trending-meta {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .trending-play-btn {
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      transition: transform 0.2s ease;
+    }
+
+    .trending-card:hover .trending-play-btn {
+      transform: scale(1.05);
+    }
+
+    .trending-album-btn {
+      border: none;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      transition: transform 0.2s ease, background 0.2s ease;
+      text-decoration: none;
+      border: 1px solid var(--border);
+    }
+
+    .trending-album-btn:hover {
+      background: var(--accent);
+      transform: scale(1.05);
+      border-color: var(--accent);
+    }
+
     .highlight-info {
       display: flex;
       flex-direction: column;
@@ -423,7 +680,6 @@
       border-radius: 12px;
       overflow: hidden;
       transition: all 0.3s ease;
-      cursor: pointer;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
     }
 
@@ -439,6 +695,7 @@
       position: relative;
       overflow: hidden;
       background: #f0f0f5;
+      cursor: pointer;
     }
 
     .random-artwork img {
@@ -478,6 +735,36 @@
       overflow: hidden;
       text-overflow: ellipsis;
       margin-top: 0.25rem;
+    }
+
+    .random-actions {
+      padding: 0 1rem 1rem;
+    }
+
+    .random-album-btn {
+      width: 100%;
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+
+    .random-album-btn:hover {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
     }
 
     /* Loading States */
@@ -656,9 +943,20 @@
         flex-wrap: wrap;
       }
 
+      .nav-actions {
+        width: 100%;
+        justify-content: space-between;
+        gap: 0.75rem;
+      }
+
       .search-box {
         width: 100%;
         order: 3;
+      }
+
+      .genre-selector {
+        width: 100%;
+        order: 4;
       }
 
       .featured-release {
@@ -728,9 +1026,150 @@
         font-size: 1.25rem;
       }
     }
+
+    /* Access Token Entry Screen */
+    .access-token-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--bg-primary);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .access-token-overlay.hidden {
+      display: none;
+    }
+    .access-token-box {
+      background: var(--bg-card);
+      border: 2px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 480px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    }
+    .access-token-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: var(--accent);
+    }
+    .access-token-subtitle {
+      font-size: 16px;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .access-token-input {
+      width: 100%;
+      padding: 14px 18px;
+      font-size: 16px;
+      background: var(--bg-secondary);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-primary);
+      text-align: center;
+      font-family: monospace;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      transition: border-color 0.2s ease;
+    }
+    .access-token-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
+    }
+    .access-token-submit {
+      width: 100%;
+      padding: 14px 24px;
+      font-size: 16px;
+      font-weight: 600;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: filter 0.2s ease;
+    }
+    .access-token-submit:hover {
+      filter: brightness(1.1);
+    }
+    .access-token-submit:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .access-token-error {
+      color: #e74c3c;
+      font-size: 14px;
+      margin-top: 12px;
+      display: none;
+    }
+    .access-token-error.show {
+      display: block;
+    }
+    .access-token-info {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      z-index: 100;
+      max-width: 280px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .access-token-info.hidden {
+      display: none;
+    }
+    .access-token-info strong {
+      color: var(--text-primary);
+      display: block;
+      margin-bottom: 4px;
+    }
   </style>
 </head>
 <body>
+  <!-- Access Token Entry Overlay -->
+  <div class="access-token-overlay hidden" id="accessTokenOverlay">
+    <div class="access-token-box">
+      <div class="access-token-title">Welcome to MADMusic</div>
+      <div class="access-token-subtitle">
+        Please enter your access token to continue
+      </div>
+      <form id="accessTokenForm" onsubmit="return false;">
+        <input
+          type="text"
+          id="accessTokenInput"
+          class="access-token-input"
+          placeholder="MASS-XXXX-XXXXXX"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button type="submit" class="access-token-submit" id="accessTokenSubmit">
+          Activate Access
+        </button>
+        <div class="access-token-error" id="accessTokenError"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Access Token Info Display (shown when logged in) -->
+  <div class="access-token-info hidden" id="accessTokenInfo">
+    <strong>Access Token</strong>
+    <div id="accessTokenStatus"></div>
+    <button id="resetAppBtn" style="margin-top:8px;font-size:11px;padding:4px 8px;background:var(--border);border:1px solid var(--text-muted);border-radius:6px;color:var(--text-muted);cursor:pointer;">Reset App</button>
+  </div>
+
   <!-- Navigation Header -->
   <nav class="nav-header">
     <div class="logo">
@@ -749,7 +1188,27 @@
         <span class="search-icon" id="searchIcon">🔍</span>
         <button class="search-clear" id="searchClear" style="display: none;">✕</button>
       </div>
-      <a href="/" class="view-switcher">← MASS View</a>
+      <div class="genre-selector">
+        <div class="genre-select-wrapper">
+          <select
+            id="genreSelect"
+            class="genre-select"
+            aria-label="Filter by genre"
+            aria-describedby="genreHelperText"
+          >
+            <option value="" selected>Browse genres</option>
+          </select>
+        </div>
+        <div class="genre-helper-row">
+          <span id="genreHelperText" class="genre-helper">Select up to 5 genres</span>
+          <button type="button" id="clearGenres" class="genre-clear-btn" aria-label="Clear selected genres">
+            Clear
+          </button>
+        </div>
+        <div id="genreTags" class="genre-tags" aria-live="polite"></div>
+        <div id="genreFeedback" class="genre-feedback" role="status" aria-live="polite"></div>
+      </div>
+      <a href="/classic" class="view-switcher">🎵 Jukebox View</a>
     </div>
   </nav>
 
@@ -779,6 +1238,21 @@
       </div>
     </section>
 
+    <!-- Trending Now Section -->
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Trending Now</h2>
+          <p class="section-subtitle">Most streamed songs this week</p>
+        </div>
+      </div>
+      <div id="trendingContainer" class="trending-grid">
+        <div class="loading">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- Random Selection Section -->
     <section class="section">
       <div class="section-header">
@@ -786,6 +1260,7 @@
           <h2 class="section-title" id="randomTitle">Discover More</h2>
           <p class="section-subtitle" id="randomSubtitle">Fresh picks from your collection</p>
         </div>
+        <button type="button" id="genreRetryButton" class="genre-retry-btn" hidden>Get More Songs</button>
       </div>
       <div id="randomContainer" class="random-grid">
         <div class="loading">
@@ -815,18 +1290,710 @@
   </div>
 
   <script>
-    // Access Token Management
+  // ========= ACCESS TOKEN MANAGEMENT =========
+  // IMPORTANT: This must run BEFORE other scripts to intercept fetch calls
+  (function() {
     const STORAGE_KEY = 'mass_access_token';
+    const STORAGE_INFO_KEY = 'mass_access_token_info';
+
+    // Load token from localStorage IMMEDIATELY before anything else
     let currentAccessToken = localStorage.getItem(STORAGE_KEY);
+    let tokenInfo = null;
+    try {
+      const infoStr = localStorage.getItem(STORAGE_INFO_KEY);
+      if (infoStr) {
+        tokenInfo = JSON.parse(infoStr);
+      }
+    } catch (e) {
+      console.warn('[Access Token] Failed to parse token info:', e);
+    }
+
+    console.log('[Access Token] Pre-loaded token:', currentAccessToken ? 'YES' : 'NO');
+
+    const overlay = document.getElementById('accessTokenOverlay');
+    const form = document.getElementById('accessTokenForm');
+    const input = document.getElementById('accessTokenInput');
+    const submitBtn = document.getElementById('accessTokenSubmit');
+    const errorDiv = document.getElementById('accessTokenError');
+    const infoDiv = document.getElementById('accessTokenInfo');
+    const statusDiv = document.getElementById('accessTokenStatus');
+
+    // Intercept all fetch requests to add access token header
+    const originalFetch = window.fetch;
+    window.fetch = function(url, options = {}) {
+      const isApiCall = url.includes('/api/') || url.startsWith('/api/');
+      const isAccessValidateCall = url.includes('/api/access/validate');
+
+      // Block API calls without token (except the validate endpoint itself)
+      if (isApiCall && !currentAccessToken && !isAccessValidateCall) {
+        console.warn('[Access Token] Blocking API call without token:', url);
+        return Promise.reject(new Error('API call attempted before access token was ready'));
+      }
+
+      // Add access token header if we have one and it's an API request
+      if (currentAccessToken && isApiCall) {
+        console.log('[Access Token] Adding token to request:', url);
+
+        // Initialize headers if not present
+        if (!options.headers) {
+          options.headers = {};
+        }
+
+        // Handle both Headers objects and plain objects
+        if (options.headers instanceof Headers) {
+          options.headers.set('X-Access-Token', currentAccessToken);
+        } else if (typeof options.headers === 'object') {
+          options.headers['X-Access-Token'] = currentAccessToken;
+        }
+      }
+
+      // Call original fetch and handle 403 errors
+      return originalFetch(url, options).then(response => {
+        // If we get 403 and it requires access token, show the overlay
+        if (response.status === 403 && url.includes('/api/')) {
+          response.clone().json().then(data => {
+            if (data.requiresAccessToken) {
+              console.log('[Access Token] 403 error - token required or invalid');
+              clearAccessToken();
+              showTokenOverlay();
+            }
+          }).catch(() => {});
+        }
+        return response;
+      });
+    };
+
+    function showError(message) {
+      errorDiv.textContent = message;
+      errorDiv.classList.add('show');
+      setTimeout(() => {
+        errorDiv.classList.remove('show');
+      }, 5000);
+    }
+
+    function showTokenOverlay() {
+      overlay.classList.remove('hidden');
+      input.value = '';
+      input.focus();
+    }
+
+    function hideTokenOverlay() {
+      overlay.classList.add('hidden');
+    }
+
+    function updateTokenInfo() {
+      if (!tokenInfo) {
+        infoDiv.classList.add('hidden');
+        return;
+      }
+
+      let statusText = '';
+      if (tokenInfo.type === 'unlimited') {
+        statusText = 'Unlimited Access';
+      } else if (tokenInfo.expirationDate && tokenInfo.expirationDate.trim() !== '') {
+        const expDate = new Date(tokenInfo.expirationDate);
+        const now = new Date();
+
+        // Check if date is valid
+        if (isNaN(expDate.getTime())) {
+          statusText = 'Active';
+        } else {
+          const hoursLeft = (expDate - now) / (1000 * 60 * 60);
+          const daysLeft = Math.ceil(hoursLeft / 24);
+
+          if (hoursLeft < 1) {
+            statusText = 'Expired';
+          } else if (hoursLeft < 24) {
+            statusText = `Expires in ${Math.floor(hoursLeft)} hour${Math.floor(hoursLeft) !== 1 ? 's' : ''}`;
+          } else if (daysLeft === 1) {
+            statusText = `Expires in 1 day`;
+          } else {
+            statusText = `Expires in ${daysLeft} days`;
+          }
+        }
+      } else {
+        statusText = 'Active (no expiration)';
+      }
+
+      statusDiv.textContent = statusText;
+      infoDiv.classList.remove('hidden');
+    }
+
+    function saveAccessToken(token, info) {
+      currentAccessToken = token;
+      tokenInfo = info;
+      localStorage.setItem(STORAGE_KEY, token);
+      localStorage.setItem(STORAGE_INFO_KEY, JSON.stringify(info));
+      updateTokenInfo();
+      // Update global variable for other scripts
+      window.currentAccessToken = token;
+    }
+
+    function loadAccessToken() {
+      // Token already loaded at script start, just update UI and return it
+      if (currentAccessToken) {
+        updateTokenInfo();
+        // Update global variable for other scripts
+        window.currentAccessToken = currentAccessToken;
+      }
+      return currentAccessToken;
+    }
+
+    function clearAccessToken() {
+      currentAccessToken = null;
+      tokenInfo = null;
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(STORAGE_INFO_KEY);
+      infoDiv.classList.add('hidden');
+      // Update global variable for other scripts
+      window.currentAccessToken = null;
+    }
+
+    async function validateToken(token) {
+      try {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Validating...';
+        errorDiv.classList.remove('show');
+
+        const response = await originalFetch('/api/access/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: token.trim().toUpperCase() })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.valid) {
+          const normalized = token.trim().toUpperCase();
+          saveAccessToken(normalized, {
+            type: data.type,
+            expirationDate: data.expirationDate
+          });
+          hideTokenOverlay();
+          console.log('[Access Token] Token validated successfully');
+
+          // Notify app that access is ready so it can do its initial load
+          window.dispatchEvent(new CustomEvent('mass:access-ready', {
+            detail: { token: normalized }
+          }));
+
+          return true;
+        } else {
+          showError(data.reason || data.error || 'Invalid token');
+          return false;
+        }
+      } catch (err) {
+        console.error('[Access Token] Validation error:', err);
+        showError('Failed to validate token. Please try again.');
+        return false;
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Activate Access';
+      }
+    }
+
+    // Form submission handler
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const token = input.value.trim();
+
+      if (!token) {
+        showError('Please enter an access token');
+        return;
+      }
+
+      await validateToken(token);
+    });
+
+    // Check for existing token on page load
+    const existingToken = loadAccessToken();
+    if (existingToken) {
+      console.log('[Access Token] Found existing token, validating...');
+      // Validate the existing token (validateToken will dispatch 'mass:access-ready' if valid)
+      validateToken(existingToken).then(valid => {
+        if (!valid) {
+          console.log('[Access Token] Existing token invalid, showing overlay');
+          showTokenOverlay();
+        } else {
+          console.log('[Access Token] Existing token valid (event already dispatched)');
+          // Note: hideTokenOverlay and event dispatch already handled in validateToken
+        }
+      });
+    } else {
+      console.log('[Access Token] No existing token, showing overlay');
+      showTokenOverlay();
+    }
+
+    // Allow clearing token with Ctrl+Shift+T (for testing)
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'T') {
+        console.log('[Access Token] Clearing token (Ctrl+Shift+T)');
+        clearAccessToken();
+        showTokenOverlay();
+      }
+    });
+
+    // Reset App button handler
+    const resetAppBtn = document.getElementById('resetAppBtn');
+    if (resetAppBtn) {
+      resetAppBtn.addEventListener('click', () => {
+        if (confirm('Reset app? This will clear all stored data (access token, cookies, settings) and reload the page.')) {
+          console.log('[Access Token] Resetting app - clearing all localStorage');
+          localStorage.clear();
+          sessionStorage.clear();
+          // Also clear cookies
+          document.cookie.split(";").forEach((c) => {
+            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+          });
+          location.reload(true); // Force reload from server, not cache
+        }
+      });
+    }
+
+    console.log('[Access Token] Token management initialized');
+
+    // Make currentAccessToken available globally for backward compatibility
+    window.currentAccessToken = currentAccessToken;
+  })();
+  </script>
+
+  <script>
+    // Legacy access token variable for compatibility
+    let currentAccessToken = window.currentAccessToken || localStorage.getItem('mass_access_token');
 
     // API endpoints
     const API = {
       featured: '/api/featured-albums?limit=1',
       highlights: '/api/random-songs?count=2&_t=' + Date.now(),
       random: '/api/random-songs?count=20&_t=' + Date.now(), // Increased to 20, added timestamp for fresh results
+      trending: '/api/trending',
       search: '/api/search',
       container: '/api/container'
     };
+
+    const MAX_GENRE_SELECTION = 5;
+    // How many genre cards we want to show in the grid
+    const GENRE_RESULT_LIMIT = 10;
+
+    // Over-fetch to ensure we have enough unique albums to display
+    const GENRE_FETCH_LIMIT = GENRE_RESULT_LIMIT * 10;
+    const TRENDING_RESULT_LIMIT = 5;
+    const GENRE_TITLE = 'Discover by Genre';
+    let selectedGenres = [];
+    let randomItems = [];
+    let currentGenreRequestId = 0;
+    let genreFetchController = null;
+    let randomTitleDefault = 'Discover More';
+    let randomSubtitleDefault = 'Fresh picks from your collection';
+    let genreResultOffset = 0;
+    let genreResultTotal = 0;
+    const genreRetryButton = document.getElementById('genreRetryButton');
+
+    const GENRE_OPTIONS = [
+      "50's",
+      "50s",
+      "60's",
+      "60s",
+      "70's",
+      "80'",
+      "80's",
+      "90's",
+      "Adult Contemporary",
+      "Adult Contemporary (Singer/Songwriter",
+      "Adult Contemporary (Singer/Songwriter)",
+      "African",
+      "African Jazz",
+      "Afro Beat",
+      "Afro Dancehall",
+      "Afro Folk",
+      "Afro Fusion",
+      "Afro House",
+      "Afro Jazz",
+      "Afro Pop",
+      "Afro Pop ",
+      "Afro Rock",
+      "Afro Soul",
+      "Afro-folk",
+      "Afro-fusion",
+      "Afro-Pop",
+      "Big Band",
+      "Blues",
+      "Children",
+      "Childrens Music",
+      "Chillout",
+      "Choral",
+      "Christian",
+      "Christmas",
+      "Classic Lounge",
+      "Classic Rock",
+      "Classic Soul",
+      "Classical",
+      "Comedy",
+      "Cool Jazz",
+      "Country",
+      "Country (Contemporary)",
+      "Country (Traditional)",
+      "Country Rock",
+      "Dance",
+      "Devotional",
+      "Disco",
+      "Easy Listening",
+      "Electro Pop",
+      "Electronic",
+      "Film Scores",
+      "Folk",
+      "Folk (Singer/Songwriter)",
+      "Funk",
+      "Funky House",
+      "Gospel",
+      "Gqom",
+      "Hip Hop",
+      "Hip-Hop",
+      "Inspirational",
+      "Instrumental",
+      "Isichathamiya",
+      "Jazz",
+      "Jazz (Contemporary)",
+      "Jazz (Traditional)",
+      "Jazz Fusion",
+      "Jewish",
+      "Jive 80s",
+      "Kids",
+      "Kwaito",
+      "Latin",
+      "Latin Music",
+      "Live",
+      "Live Recordings",
+      "Maskandi",
+      "Modern Classical",
+      "Motswako",
+      "Music Feature Films",
+      "Musicals",
+      "Oldies",
+      "Other",
+      "Pop",
+      "Pop (Singer/Songwriter)",
+      "Pop Rock",
+      "Prog Rock",
+      "R & B/Soul",
+      "Reggae",
+      "RnB",
+      "Rock",
+      "Smooth Jazz",
+      "Soul",
+      "Soul-Jazz",
+      "Soundtrack",
+      "Soundtracks",
+      "Spoken Word",
+      "Swing Music",
+      "Traditional",
+      "Vocal",
+      "Volksmusik",
+      "World",
+      "World Music"
+    ];
+    window.MAD_GENRE_OPTIONS = GENRE_OPTIONS.slice();
+
+    function cleanGenreLabel(value) {
+      if (typeof value !== 'string') return '';
+      return value.replace(/\s+/g, ' ').trim();
+    }
+
+    function normalizeGenreLabel(value) {
+      if (!value && value !== 0) return '';
+      return value
+        .toString()
+        .toLowerCase()
+        .replace(/&/g, 'and')
+        .replace(/[^a-z0-9]+/g, '')
+        .trim();
+    }
+
+    function setGenreFeedback(message = '') {
+      const feedbackEl = document.getElementById('genreFeedback');
+      if (feedbackEl) {
+        feedbackEl.textContent = message;
+      }
+    }
+
+    function resetGenreSelect() {
+      const selectEl = document.getElementById('genreSelect');
+      if (!selectEl) return;
+      selectEl.value = '';
+      if (selectEl.options.length) {
+        selectEl.selectedIndex = 0;
+      }
+    }
+
+    function updateGenreTags() {
+      const container = document.getElementById('genreTags');
+      const clearBtn = document.getElementById('clearGenres');
+      if (!container) return;
+
+      container.innerHTML = '';
+
+      if (!selectedGenres.length) {
+        if (clearBtn) clearBtn.classList.remove('visible');
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+
+      selectedGenres.forEach((genre) => {
+        const tag = document.createElement('span');
+        tag.className = 'genre-tag';
+
+        const label = document.createElement('span');
+        label.textContent = genre;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'genre-tag-remove';
+        removeBtn.setAttribute('aria-label', `Remove ${genre}`);
+        removeBtn.textContent = '✕';
+        removeBtn.addEventListener('click', () => {
+          removeGenre(genre);
+        });
+
+        tag.appendChild(label);
+        tag.appendChild(removeBtn);
+        fragment.appendChild(tag);
+      });
+
+      container.appendChild(fragment);
+      if (clearBtn) {
+        clearBtn.classList.toggle('visible', selectedGenres.length > 0);
+      }
+    }
+
+    function handleGenreSelection(rawValue) {
+      const label = cleanGenreLabel(rawValue);
+      if (!label) {
+        resetGenreSelect();
+        return;
+      }
+
+      const normalized = normalizeGenreLabel(label);
+      if (!normalized) {
+        resetGenreSelect();
+        return;
+      }
+
+      const alreadySelected = selectedGenres.some(
+        (existing) => normalizeGenreLabel(existing) === normalized
+      );
+      if (alreadySelected) {
+        setGenreFeedback(`${label} is already selected`);
+        resetGenreSelect();
+        return;
+      }
+
+      if (selectedGenres.length >= MAX_GENRE_SELECTION) {
+        setGenreFeedback(`You can select up to ${MAX_GENRE_SELECTION} genres`);
+        resetGenreSelect();
+        return;
+      }
+
+      selectedGenres = [...selectedGenres, label];
+      resetGenrePagination();
+      setGenreFeedback('');
+      updateGenreTags();
+      resetGenreSelect();
+
+      if (isSearching) {
+        clearSearch();
+      } else {
+        syncGenreFilters();
+      }
+    }
+
+    function removeGenre(label) {
+      const normalized = normalizeGenreLabel(label);
+      const nextGenres = selectedGenres.filter(
+        (item) => normalizeGenreLabel(item) !== normalized
+      );
+      if (nextGenres.length === selectedGenres.length) return;
+      selectedGenres = nextGenres;
+      resetGenrePagination();
+      setGenreFeedback('');
+      updateGenreTags();
+      syncGenreFilters();
+    }
+
+    function clearSelectedGenres() {
+      if (!selectedGenres.length) return;
+      selectedGenres = [];
+      setGenreFeedback('');
+      updateGenreTags();
+      resetGenreSelect();
+      resetGenrePagination();
+      syncGenreFilters({ forceReloadRandom: true });
+    }
+
+    function resetGenrePagination() {
+      genreResultOffset = 0;
+      genreResultTotal = 0;
+    }
+
+    function updateGenreRetryButton() {
+      if (!genreRetryButton) return;
+      const hasGenres = selectedGenres.length > 0;
+      if (!hasGenres) {
+        genreRetryButton.hidden = true;
+        genreRetryButton.disabled = false;
+        genreRetryButton.textContent = 'Get More Songs';
+        return;
+      }
+      genreRetryButton.hidden = false;
+      const loading = Boolean(genreFetchController);
+      genreRetryButton.disabled = loading;
+      genreRetryButton.textContent = loading ? 'Searching…' : 'Get More Songs';
+    }
+
+    function setDiscoverTitle(isGenreMode) {
+      const titleEl = document.getElementById('randomTitle');
+      if (!titleEl) return;
+      titleEl.textContent = isGenreMode ? GENRE_TITLE : randomTitleDefault;
+    }
+
+    function setDiscoverSubtitleDefault() {
+      const subtitleEl = document.getElementById('randomSubtitle');
+      if (subtitleEl) {
+        subtitleEl.textContent = randomSubtitleDefault;
+      }
+    }
+
+    function setGenreSubtitle(state, count = 0) {
+      const subtitleEl = document.getElementById('randomSubtitle');
+      if (!subtitleEl) return;
+      const readableGenres = selectedGenres.join(', ');
+      if (!readableGenres) {
+        subtitleEl.textContent = randomSubtitleDefault;
+        return;
+      }
+      if (state === 'loading') {
+        subtitleEl.textContent = `Searching ${readableGenres}...`;
+      } else if (state === 'error') {
+        subtitleEl.textContent = `Could not load ${readableGenres}. Try again.`;
+      } else if (state === 'empty') {
+        subtitleEl.textContent = `No tracks found for ${readableGenres}`;
+      } else {
+        subtitleEl.textContent = `Showing ${count} track${count === 1 ? '' : 's'} for ${readableGenres}`;
+      }
+    }
+
+    function syncGenreFilters(options = {}) {
+      const { forceReloadRandom = false } = options;
+      if (isSearching) return;
+      updateGenreRetryButton();
+      if (!selectedGenres.length) {
+        if (genreFetchController) {
+          genreFetchController.abort();
+          genreFetchController = null;
+        }
+        resetGenrePagination();
+        setDiscoverTitle(false);
+        if (randomItems.length && !forceReloadRandom) {
+          setDiscoverSubtitleDefault();
+          renderRandom(randomItems);
+        } else {
+          loadRandom(true);
+        }
+        return;
+      }
+      loadGenreResults();
+    }
+
+    async function loadGenreResults() {
+      if (!selectedGenres.length || isSearching) {
+        return;
+      }
+
+      if (genreFetchController) {
+        genreFetchController.abort();
+      }
+
+      setDiscoverTitle(true);
+      setGenreSubtitle('loading');
+
+      const container = document.getElementById('randomContainer');
+      if (container) {
+        container.innerHTML = `
+          <div class="loading">
+            <div class="spinner"></div>
+          </div>
+        `;
+      }
+
+      const params = new URLSearchParams();
+
+      // Over-fetch so we can ensure 10 distinct albums after dedupe
+      params.set('limit', String(GENRE_FETCH_LIMIT));
+      params.set('offset', String(Math.max(0, genreResultOffset)));
+      selectedGenres.forEach((genre) => {
+        params.append('genre', genre);
+      });
+
+      const controller = new AbortController();
+      genreFetchController = controller;
+      const requestId = ++currentGenreRequestId;
+      updateGenreRetryButton();
+
+      try {
+        const response = await apiFetch(`${API.search}?${params.toString()}`, { signal: controller.signal });
+        const data = await response.json();
+        if (requestId !== currentGenreRequestId) return;
+
+        const items = Array.isArray(data.items) ? data.items : [];
+
+        // Group results by album and only keep the first track per album
+        const albums = groupByAlbum(items);
+        const representativeTracks = albums
+          .map((album) => album.tracks[0])
+          .filter(Boolean);
+
+        const displayedTracks = representativeTracks.slice(0, GENRE_RESULT_LIMIT);
+
+        renderRandom(displayedTracks);
+
+        if (displayedTracks.length) {
+          setGenreSubtitle('success', displayedTracks.length);
+        } else {
+          setGenreSubtitle('empty');
+        }
+
+        const parsedTotal = Number(data.total);
+        genreResultTotal = Number.isFinite(parsedTotal) ? parsedTotal : representativeTracks.length;
+        const rawReturned = Number.isFinite(Number(data.rawReturnedCount))
+          ? Number(data.rawReturnedCount)
+          : items.length;
+        const responseOffset = Number.isFinite(Number(data.offset)) ? Number(data.offset) : 0;
+        genreResultOffset = responseOffset + (rawReturned || 0);
+        if (genreResultTotal && genreResultOffset >= genreResultTotal) {
+          genreResultOffset = 0;
+        }
+      } catch (error) {
+        if (requestId !== currentGenreRequestId) return;
+        if (error?.name === 'AbortError') {
+          return;
+        }
+        console.error('[Genre Filter] Failed to load:', error);
+        if (container) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">⚠️</div>
+              <p>Failed to load genre results</p>
+            </div>
+          `;
+        }
+        setGenreSubtitle('error');
+      } finally {
+        if (requestId === currentGenreRequestId) {
+          genreFetchController = null;
+        }
+        updateGenreRetryButton();
+      }
+    }
 
     // Global storage for items (so we can reference them by ID in onclick handlers)
     const itemsStore = new Map();
@@ -862,35 +2029,29 @@
     let hasReportedPlay = false; // Flag to prevent duplicate PLAY events
     let isSwitchingTracks = false; // Flag to prevent events when switching tracks
 
-    // Fetch wrapper with access token
+    // Fetch wrapper with access token (now handled by global fetch interceptor)
     async function apiFetch(url, options = {}) {
-      const headers = new Headers(options.headers || {});
+      // The global fetch interceptor already handles adding the access token header
+      // and showing the overlay on 403 errors, so we just pass through to fetch
+      return fetch(url, options);
+    }
 
-      if (currentAccessToken) {
-        headers.set('X-Access-Token', currentAccessToken);
+    function populateGenreDropdown(targetEl) {
+      const selectEl = targetEl || document.getElementById('genreSelect');
+      if (!selectEl) return;
+      const seen = new Set();
+      const fragment = document.createDocumentFragment();
+      for (const rawGenre of GENRE_OPTIONS) {
+        const label = cleanGenreLabel(rawGenre);
+        const normalized = normalizeGenreLabel(label);
+        if (!label || !normalized || seen.has(normalized)) continue;
+        seen.add(normalized);
+        const option = document.createElement('option');
+        option.value = label;
+        option.textContent = label;
+        fragment.appendChild(option);
       }
-
-      const response = await fetch(url, {
-        ...options,
-        headers
-      });
-
-      // Check if access token is required
-      if (response.status === 403) {
-        const data = await response.json();
-        if (data.requiresAccessToken && !currentAccessToken) {
-          // Prompt user for access token
-          const token = prompt('This application requires an access token. Please enter your access token:');
-          if (token) {
-            currentAccessToken = token.trim();
-            localStorage.setItem(STORAGE_KEY, currentAccessToken);
-            // Retry the request
-            return apiFetch(url, options);
-          }
-        }
-      }
-
-      return response;
+      selectEl.appendChild(fragment);
     }
 
     // Stream Event Tracking Functions
@@ -1035,19 +2196,53 @@
       return `/api/track/${recordId}/container`;
     }
 
+    // Check if an item has valid audio
+    function hasValidAudio(item) {
+      if (!item || !item.fields) return false;
+      const audioFields = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
+      const audio = getFieldValue(item.fields, audioFields);
+
+      // Check if audio field exists and is not empty
+      if (!audio) return false;
+      if (typeof audio === 'string' && audio.trim() === '') return false;
+
+      return true;
+    }
+
     function getTitleField(fields) {
-      const titleFields = ['Track Title', 'Song Title', 'Title', 'Track Name'];
+      const titleFields = ['Track Name', 'Song Name', 'Track Title', 'Song Title', 'Title'];
       return getFieldValue(fields, titleFields) || 'Unknown Track';
     }
 
     function getArtistField(fields) {
-      const artistFields = ['Artist Name', 'Artist', 'Album Artist'];
+      const artistFields = ['Album Artist', 'Artist', 'Artist Name'];
       return getFieldValue(fields, artistFields) || 'Unknown Artist';
     }
 
     function getAlbumField(fields) {
       const albumFields = ['Album Title', 'Album', 'Album Name'];
       return getFieldValue(fields, albumFields) || 'Unknown Album';
+    }
+
+    function formatRelativeTime(value) {
+      if (!value) return '';
+      const date = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(date.getTime())) return '';
+      const diffMs = Date.now() - date.getTime();
+      const minutes = Math.max(0, Math.round(diffMs / 60000));
+      if (minutes < 1) return 'Just now';
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.round(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.round(hours / 24);
+      return `${days}d ago`;
+    }
+
+    function formatTrendingMeta(metrics = {}) {
+      const plays = Number(metrics.playCount) || 0;
+      const playLabel = plays ? `${plays} play${plays === 1 ? '' : 's'}` : '';
+      const relative = metrics.lastEventUTC ? formatRelativeTime(metrics.lastEventUTC) : '';
+      return [playLabel, relative].filter(Boolean).join(' · ');
     }
 
     // Group tracks by album
@@ -1287,7 +2482,21 @@
         return;
       }
 
-      const item = items[0];
+      // Filter items to only include those with valid audio
+      const validItems = items.filter(item => hasValidAudio(item));
+      console.log('[Featured] Filtered', validItems.length, 'items with valid audio out of', items.length, 'total');
+
+      if (validItems.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🎵</div>
+            <p>No featured releases with audio available</p>
+          </div>
+        `;
+        return;
+      }
+
+      const item = validItems[0];
       const fields = item.fields || {};
       const artworkUrl = getArtworkUrl(fields);
       const title = getTitleField(fields);
@@ -1309,8 +2518,9 @@
           </div>
           <div class="featured-info">
             <div class="featured-label">Featured Release</div>
-            <h1 class="featured-title">${album}</h1>
+            <h1 class="featured-title">${title}</h1>
             <p class="featured-artist">${artist}</p>
+            <p class="featured-album">${album}</p>
             <div class="featured-actions">
               <button class="btn-play" onclick="playSong('${item.recordId}')">
                 ▶ Play Now
@@ -1337,7 +2547,21 @@
         return;
       }
 
-      container.innerHTML = items.slice(0, 2).map(item => {
+      // Filter items to only include those with valid audio
+      const validItems = items.filter(item => hasValidAudio(item));
+      console.log('[Highlights] Filtered', validItems.length, 'items with valid audio out of', items.length, 'total');
+
+      if (validItems.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🎵</div>
+            <p>No highlights with audio available</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = validItems.slice(0, 2).map(item => {
         const fields = item.fields || {};
         const artworkUrl = getArtworkUrl(fields);
         const title = getTitleField(fields);
@@ -1368,6 +2592,68 @@
       }).join('');
     }
 
+    function renderTrending(items) {
+      const container = document.getElementById('trendingContainer');
+      if (!container) return;
+
+      if (!Array.isArray(items) || !items.length) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📈</div>
+            <p>No trending songs yet</p>
+          </div>
+        `;
+        return;
+      }
+
+      const validItems = items.filter(item => hasValidAudio(item));
+      if (!validItems.length) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📈</div>
+            <p>No trending songs with playback available</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = validItems.slice(0, TRENDING_RESULT_LIMIT).map((item, index) => {
+        const fields = item.fields || {};
+        const artworkUrl = getArtworkUrl(fields);
+        const title = getTitleField(fields);
+        const artist = getArtistField(fields);
+        const album = getAlbumField(fields);
+        const meta = formatTrendingMeta(item.metrics || {});
+
+        itemsStore.set(item.recordId, item);
+
+        // Create URL for Jukebox view with album filter
+        const jukeboxUrl = `/classic?album=${encodeURIComponent(album)}&artist=${encodeURIComponent(artist)}`;
+
+        return `
+          <div class="trending-card">
+            <div class="trending-rank">#${index + 1}</div>
+            <div class="trending-artwork" onclick="playSong('${item.recordId}')">
+              ${artworkUrl
+                ? `<img src="${artworkUrl}" alt="${title}" onerror="this.parentElement.innerHTML='<div class=\\'artwork-placeholder\\'>♪</div>'" />`
+                : '<div class="artwork-placeholder">♪</div>'
+              }
+              <div class="play-overlay">
+                <div class="play-icon">▶</div>
+              </div>
+            </div>
+            <div class="trending-info">
+              <div class="trending-title">${title}</div>
+              <div class="trending-artist">${artist}</div>
+              <div class="trending-meta">${meta || 'Now playing across MAD'}</div>
+            </div>
+            <button class="trending-play-btn" onclick="playSong('${item.recordId}')">▶</button>
+            <a href="${jukeboxUrl}" class="trending-album-btn" title="View album in Jukebox">💿</a>
+          </div>
+        `;
+      }).join('');
+    }
+
     function renderRandom(items) {
       const container = document.getElementById('randomContainer');
 
@@ -1381,19 +2667,38 @@
         return;
       }
 
-      container.innerHTML = items.map(item => {
+      // Filter items to only include those with valid audio
+      const validItems = items.filter(item => hasValidAudio(item));
+      console.log('[Random] Filtered', validItems.length, 'items with valid audio out of', items.length, 'total');
+
+      if (validItems.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🎵</div>
+            <p>No songs with audio available</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = validItems.map(item => {
         const fields = item.fields || {};
         const artworkUrl = getArtworkUrl(fields);
         const title = getTitleField(fields);
         const artist = getArtistField(fields);
         const album = getAlbumField(fields);
 
+        console.log('[Random] Item:', {recordId: item.recordId, title, artist, album, artworkUrl});
+
         // Store item for later reference
         itemsStore.set(item.recordId, item);
 
+        // Create URL for Jukebox view with album filter
+        const jukeboxUrl = `/classic?album=${encodeURIComponent(album)}&artist=${encodeURIComponent(artist)}`;
+
         return `
-          <div class="random-card" onclick="playSong('${item.recordId}')">
-            <div class="random-artwork">
+          <div class="random-card">
+            <div class="random-artwork" onclick="playSong('${item.recordId}')">
               ${artworkUrl
                 ? `<img src="${artworkUrl}" alt="${album}" onerror="this.parentElement.innerHTML='<div class=\\'artwork-placeholder\\'>♪</div>'" />`
                 : '<div class="artwork-placeholder">♪</div>'
@@ -1406,6 +2711,9 @@
               <div class="random-title">${title}</div>
               <div class="random-artist">${artist}</div>
               <div class="random-album">${album}</div>
+            </div>
+            <div class="random-actions">
+              <a href="${jukeboxUrl}" class="random-album-btn" title="View album in Jukebox">💿 View Album</a>
             </div>
           </div>
         `;
@@ -1438,9 +2746,12 @@
         // Get first track's recordId for playing
         const firstTrackId = tracks[0]?.recordId;
 
+        // Create URL for Jukebox view with album filter
+        const jukeboxUrl = `/classic?album=${encodeURIComponent(album)}&artist=${encodeURIComponent(artist)}`;
+
         return `
-          <div class="random-card" onclick="playSong('${firstTrackId}')">
-            <div class="random-artwork">
+          <div class="random-card">
+            <div class="random-artwork" onclick="playSong('${firstTrackId}')">
               ${artwork
                 ? `<img src="${artwork}" alt="${album}" onerror="this.parentElement.innerHTML='<div class=\\'artwork-placeholder\\'>♪</div>'" />`
                 : '<div class="artwork-placeholder">♪</div>'
@@ -1453,6 +2764,9 @@
               <div class="random-title">${album}</div>
               <div class="random-artist">${artist}</div>
               <div class="random-album">${trackCount} track${trackCount !== 1 ? 's' : ''}</div>
+            </div>
+            <div class="random-actions">
+              <a href="${jukeboxUrl}" class="random-album-btn" title="View album in Jukebox">💿 View Album</a>
             </div>
           </div>
         `;
@@ -1503,28 +2817,71 @@
       }
     }
 
-    async function loadRandom() {
+    async function loadTrending() {
+      const container = document.getElementById('trendingContainer');
+      if (!container) return;
       try {
+        console.log('[Trending] Fetching...');
+        const response = await apiFetch(`${API.trending}?limit=${TRENDING_RESULT_LIMIT}&_t=${Date.now()}`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        const items = Array.isArray(data?.items) ? data.items : [];
+        renderTrending(items);
+      } catch (error) {
+        console.error('[Trending] Failed to load:', error);
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⚠️</div>
+            <p>Failed to load trending songs</p>
+          </div>
+        `;
+      }
+    }
+
+    async function loadRandom(showSpinner = false) {
+      try {
+        if (showSpinner) {
+          const container = document.getElementById('randomContainer');
+          if (container) {
+            container.innerHTML = `
+              <div class="loading">
+                <div class="spinner"></div>
+              </div>
+            `;
+          }
+        }
         console.log('[Random] Fetching...');
         const response = await apiFetch(API.random);
         const data = await response.json();
         console.log('[Random] Response:', data);
         if (data.ok && data.items) {
-          console.log('[Random] Rendering', data.items.length, 'items');
-
-          // Group tracks by album for cleaner display
-          const albums = groupByAlbum(data.items);
-          console.log('[Random] Grouped into', albums.length, 'albums');
-          renderAlbums(albums);
+          const items = Array.isArray(data.items) ? data.items : [];
+          randomItems = items;
+          console.log('[Random] Loaded', items.length, 'items');
+          if (!selectedGenres.length && !isSearching) {
+            setDiscoverTitle(false);
+            setDiscoverSubtitleDefault();
+            renderRandom(items);
+          }
+        } else {
+          randomItems = [];
+          if (!selectedGenres.length && !isSearching) {
+            renderRandom([]);
+          }
         }
       } catch (error) {
         console.error('[Random] Failed to load:', error);
-        document.getElementById('randomContainer').innerHTML = `
-          <div class="empty-state">
-            <div class="empty-state-icon">⚠️</div>
-            <p>Failed to load songs</p>
-          </div>
-        `;
+        randomItems = [];
+        if (!selectedGenres.length && !isSearching) {
+          document.getElementById('randomContainer').innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">⚠️</div>
+              <p>Failed to load songs</p>
+            </div>
+          `;
+        }
       }
     }
 
@@ -1533,13 +2890,12 @@
 
     async function performSearch(query) {
       if (!query) {
-        // Clear search - reload random songs
+        // Clear search - restore random/genre view
         isSearching = false;
-        document.getElementById('randomTitle').textContent = 'Discover More';
-        document.getElementById('randomSubtitle').textContent = 'Fresh picks from your collection';
         document.getElementById('searchClear').style.display = 'none';
         document.getElementById('searchIcon').classList.remove('loading');
-        loadRandom();
+        document.getElementById('searchIcon').textContent = '🔍';
+        syncGenreFilters({ forceReloadRandom: selectedGenres.length === 0 });
         return;
       }
 
@@ -1588,6 +2944,7 @@
         }
       } catch (error) {
         console.error('[Search] Failed:', error);
+        isSearching = false;
         document.getElementById('searchIcon').classList.remove('loading');
         document.getElementById('searchIcon').textContent = '🔍';
         document.getElementById('randomContainer').innerHTML = `
@@ -1637,13 +2994,64 @@
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
-      loadFeatured();
-      loadHighlights();
-      loadRandom();
+      // Don't load content yet - wait for access token to be ready
 
       // Setup mini player controls
       document.getElementById('playerPause').addEventListener('click', togglePause);
       document.getElementById('playerStop').addEventListener('click', stopPlayback);
+
+      populateGenreDropdown();
+      const titleEl = document.getElementById('randomTitle');
+      if (titleEl) {
+        randomTitleDefault = titleEl.textContent || randomTitleDefault;
+      }
+      const subtitleEl = document.getElementById('randomSubtitle');
+      if (subtitleEl) {
+        randomSubtitleDefault = subtitleEl.textContent || randomSubtitleDefault;
+      }
+      setDiscoverTitle(false);
+      setDiscoverSubtitleDefault();
+      updateGenreTags();
+      setGenreFeedback('');
+
+      const genreSelect = document.getElementById('genreSelect');
+      if (genreSelect) {
+        genreSelect.addEventListener('change', (event) => {
+          const selected = event.target.value;
+          handleGenreSelection(selected);
+        });
+      }
+
+      const clearBtn = document.getElementById('clearGenres');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', clearSelectedGenres);
+      }
+
+      if (genreRetryButton) {
+        genreRetryButton.addEventListener('click', () => {
+          if (genreRetryButton.disabled) return;
+          if (!selectedGenres.length) {
+            loadRandom(true);
+            return;
+          }
+          loadGenreResults();
+        });
+      }
+
+      updateGenreRetryButton();
+    });
+
+    // Load content when access token is ready
+    window.addEventListener('mass:access-ready', (e) => {
+      console.log('[MADMusic] Access token ready, loading content...');
+      // Update local currentAccessToken variable
+      currentAccessToken = window.currentAccessToken || e.detail?.token || localStorage.getItem('mass_access_token');
+      console.log('[MADMusic] Updated currentAccessToken:', currentAccessToken ? 'YES' : 'NO');
+
+      loadFeatured();
+      loadHighlights();
+      loadTrending();
+      loadRandom(true);
     });
   </script>
 </body>

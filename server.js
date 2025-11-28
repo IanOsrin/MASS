@@ -9,7 +9,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
-import { searchCache, exploreCache, albumCache, publicPlaylistsCache } from './cache.js';
+import { searchCache, exploreCache, albumCache, publicPlaylistsCache, trendingCache } from './cache.js';
 const { AbortController } = globalThis;
 
 // Request deduplication - prevent duplicate simultaneous requests to FileMaker
@@ -109,12 +109,81 @@ function parsePositiveInt(value, fallback) {
   return fallback;
 }
 
+function parseNonNegativeInt(value, fallback) {
+  const num = Number.parseInt(value, 10);
+  if (Number.isFinite(num) && num >= 0) {
+    return num;
+  }
+  return fallback;
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const FM_TIMEOUT_MS = parsePositiveInt(process.env.FM_TIMEOUT_MS, 45000);
 const fmDefaultFetchOptions = { timeoutMs: FM_TIMEOUT_MS, retries: 1 };
+const FM_MAX_CONCURRENT_REQUESTS = parsePositiveInt(process.env.FM_MAX_CONCURRENT_REQUESTS, 4);
+const FM_MIN_REQUEST_INTERVAL_MS = parseNonNegativeInt(process.env.FM_MIN_REQUEST_INTERVAL_MS, 100);
+
+const fmRequestQueue = [];
+let fmActiveRequests = 0;
+let fmLastRequestTime = 0;
+let fmStartChain = Promise.resolve();
+
+async function takeStartSlot() {
+  let release;
+  const prev = fmStartChain;
+  fmStartChain = new Promise((resolve) => {
+    release = resolve;
+  });
+  await prev;
+  try {
+    if (FM_MIN_REQUEST_INTERVAL_MS > 0) {
+      const elapsed = Date.now() - fmLastRequestTime;
+      const waitMs = FM_MIN_REQUEST_INTERVAL_MS - elapsed;
+      if (waitMs > 0) {
+        await sleep(waitMs);
+      }
+    }
+    fmLastRequestTime = Date.now();
+  } finally {
+    release();
+  }
+}
+
+function processFmQueue() {
+  while (fmRequestQueue.length && fmActiveRequests < FM_MAX_CONCURRENT_REQUESTS) {
+    const job = fmRequestQueue.shift();
+    fmActiveRequests += 1;
+    (async () => {
+      try {
+        await takeStartSlot();
+        const result = await job.task();
+        job.resolve(result);
+      } catch (err) {
+        job.reject(err);
+      } finally {
+        fmActiveRequests -= 1;
+        if (fmRequestQueue.length) {
+          process.nextTick(processFmQueue);
+        }
+      }
+    })();
+  }
+}
+
+function enqueueFmRequest(task) {
+  return new Promise((resolve, reject) => {
+    fmRequestQueue.push({ task, resolve, reject });
+    if (fmRequestQueue.length > FM_MAX_CONCURRENT_REQUESTS * 4) {
+      console.warn(`[FM] Request queue length: ${fmRequestQueue.length}`);
+    }
+    processFmQueue();
+  });
+}
 
 function fmSafeFetch(url, options, overrides = {}) {
   const finalOptions = { ...fmDefaultFetchOptions, ...overrides };
-  return safeFetch(url, options, finalOptions);
+  return enqueueFmRequest(() => safeFetch(url, options, finalOptions));
 }
 
 const app = express();
@@ -314,6 +383,7 @@ const ACCESS_TOKENS_PATH = path.join(DATA_DIR, 'access-tokens.json');
 // This bypasses rate limiting, JSON parsing, and other API-specific middleware
 const REGEX_STATIC_FILES = /\.(jpe?g|png|gif|svg|webp|ico|woff2?|ttf|eot|mp3|mp4|webm)$/i;
 app.use(express.static(PUBLIC_DIR, {
+  index: false, // Don't auto-serve index.html - we handle routes manually
   setHeaders: (res, filePath) => {
     // Versioned files (contain ?v= or .min.) get immutable caching for 1 year
     if (filePath.includes('.min.') || /\.[a-f0-9]{8,}\./i.test(filePath)) {
@@ -869,10 +939,12 @@ let fmToken = null;
 let fmTokenExpiresAt = 0;
 let fmLoginPromise = null;
 
+const TRENDING_LOOKBACK_HOURS = parsePositiveInt(process.env.TRENDING_LOOKBACK_HOURS, 168);
+const TRENDING_FETCH_LIMIT = parsePositiveInt(process.env.TRENDING_FETCH_LIMIT, 400);
+const TRENDING_MAX_LIMIT = parsePositiveInt(process.env.TRENDING_MAX_LIMIT, 20);
+
 const RETRYABLE_CODES = new Set(['UND_ERR_SOCKET', 'ECONNRESET', 'ETIMEDOUT']);
 const RETRYABLE_NAMES = new Set(['AbortError']);
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function safeFetch(url, options = {}, { timeoutMs = 15000, retries = 2 } = {}) {
   let attempt = 0;
@@ -2194,6 +2266,27 @@ function formatTimestampUTC(dateInput = new Date()) {
   return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
 }
 
+function parseFileMakerTimestamp(value) {
+  if (value instanceof Date) {
+    const ts = value.getTime();
+    return Number.isNaN(ts) ? 0 : ts;
+  }
+  if (typeof value !== 'string') {
+    if (value === null || value === undefined) return 0;
+    return parseFileMakerTimestamp(String(value));
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const parsed = Date.parse(trimmed);
+  if (Number.isNaN(parsed)) {
+    // FileMaker uses MM/DD/YYYY HH:MM:SS - Date.parse usually handles it; fallback to Date constructor
+    const fallback = new Date(trimmed.replace(/-/g, '/'));
+    const ts = fallback.getTime();
+    return Number.isNaN(ts) ? 0 : ts;
+  }
+  return parsed;
+}
+
 app.post('/api/stream-events', async (req, res) => {
   try {
     // Debug: Check if access token is available
@@ -2376,6 +2469,132 @@ app.post('/api/stream-events', async (req, res) => {
     res.status(500).json({ ok: false, error: errorMessage });
   }
 });
+
+async function collectTrendingStats({ limit, lookbackHours, fetchLimit }) {
+  const normalizedLimit = Math.max(1, limit || 5);
+  const cutoffDate = lookbackHours && lookbackHours > 0
+    ? new Date(Date.now() - lookbackHours * 60 * 60 * 1000)
+    : null;
+  const baseQuery = { TrackRecordID: '*' };
+  if (cutoffDate) {
+    baseQuery.LastEventUTC = `>=${formatTimestampUTC(cutoffDate)}`;
+  }
+
+  const findResult = await fmFindRecords(
+    FM_STREAM_EVENTS_LAYOUT,
+    [baseQuery],
+    {
+      limit: fetchLimit,
+      offset: 1,
+      sort: [
+        { fieldName: 'TimestampUTC', sortOrder: 'descend' }
+      ]
+    }
+  );
+
+  if (!findResult.ok) {
+    const detail = `${findResult.msg || 'FM error'}${findResult.code ? ` (FM ${findResult.code})` : ''}`;
+    throw new Error(`Trending stream query failed: ${detail}`);
+  }
+
+  const statsByTrack = new Map();
+  for (const entry of findResult.data) {
+    const fields = entry?.fieldData || {};
+    const trackRecordId = normalizeRecordId(fields.TrackRecordID || fields['Track Record ID'] || '');
+    if (!trackRecordId) continue;
+    const totalSeconds = normalizeSeconds(
+      fields.TotalPlayedSec ??
+      fields[STREAM_TIME_FIELD] ??
+      fields.DurationSec ??
+      fields.DeltaSec ??
+      0
+    );
+    const lastEventTs = parseFileMakerTimestamp(fields.LastEventUTC || fields.TimestampUTC);
+    const sessionId = toCleanString(fields.SessionID || fields['Session ID'] || '');
+    if (!statsByTrack.has(trackRecordId)) {
+      statsByTrack.set(trackRecordId, {
+        trackRecordId,
+        totalSeconds: 0,
+        playCount: 0,
+        sessionIds: new Set(),
+        lastEvent: 0
+      });
+    }
+    const stat = statsByTrack.get(trackRecordId);
+    stat.totalSeconds += totalSeconds || 0;
+    stat.playCount += 1;
+    if (sessionId) stat.sessionIds.add(sessionId);
+    if (lastEventTs > stat.lastEvent) {
+      stat.lastEvent = lastEventTs;
+    }
+  }
+
+  if (!statsByTrack.size) {
+    return [];
+  }
+
+  const sortedStats = Array.from(statsByTrack.values()).sort((a, b) => {
+    if (b.totalSeconds !== a.totalSeconds) return b.totalSeconds - a.totalSeconds;
+    if (b.playCount !== a.playCount) return b.playCount - a.playCount;
+    return b.lastEvent - a.lastEvent;
+  });
+
+  const results = [];
+  for (const stat of sortedStats) {
+    const record = await fmGetRecordById(FM_LAYOUT, stat.trackRecordId);
+    if (!record) continue;
+    const fields = record.fieldData || {};
+    if (!recordIsVisible(fields)) continue;
+    if (!hasValidAudio(fields)) continue;
+    results.push({
+      recordId: record.recordId || stat.trackRecordId,
+      modId: record.modId || '0',
+      fields,
+      metrics: {
+        plays: stat.playCount,
+        uniqueListeners: stat.sessionIds.size || 0,
+        lastPlayedAt: stat.lastEvent ? new Date(stat.lastEvent).toISOString() : null
+      }
+    });
+    if (results.length >= normalizedLimit) break;
+  }
+
+  return results;
+}
+
+async function fetchTrendingTracks(limit = 5) {
+  const normalizedLimit = Math.max(1, Math.min(TRENDING_MAX_LIMIT, limit || 5));
+  const baseFetchLimit = Math.min(2000, Math.max(normalizedLimit * 80, TRENDING_FETCH_LIMIT));
+  const attempts = [];
+  if (TRENDING_LOOKBACK_HOURS > 0) {
+    attempts.push({
+      lookbackHours: TRENDING_LOOKBACK_HOURS,
+      fetchLimit: baseFetchLimit
+    });
+  }
+  attempts.push({
+    lookbackHours: 0,
+    fetchLimit: Math.min(2000, baseFetchLimit * 2)
+  });
+
+  for (let i = 0; i < attempts.length; i += 1) {
+    const attempt = attempts[i];
+    try {
+      const items = await collectTrendingStats({
+        limit: normalizedLimit,
+        lookbackHours: attempt.lookbackHours,
+        fetchLimit: attempt.fetchLimit
+      });
+      if (items.length || i === attempts.length - 1) {
+        return items.slice(0, normalizedLimit);
+      }
+    } catch (err) {
+      if (i === attempts.length - 1) throw err;
+      console.warn('[TRENDING] Attempt failed (will retry with fallback):', err?.message || err);
+    }
+  }
+  return [];
+}
 
 async function requireUser(req, res) {
   const user = await authenticateRequest(req);
@@ -3179,8 +3398,10 @@ app.get('/api/cache/stats', (req, res) => {
 /* ========= Static site ========= */
 // Note: express.static() moved to top of file (line ~206) for better performance
 // Static files now bypass rate limiting and API middleware
-app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
-app.get('/modern', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'modern-view.html')));
+// Default to MADMusic (modern-view) layout
+app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'modern-view.html')));
+// Classic view available at /classic
+app.get('/classic', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
 /* ========= Search ========= */
 const SEARCH_FIELDS_BASE = ['Album Artist', 'Album Title', 'Track Name'];
@@ -3212,6 +3433,7 @@ const parseFieldList = (envKey, fallback) => {
 };
 
 const AI_GENRE_FIELDS = parseFieldList('FM_GENRE_FIELDS', ['Local Genre', 'Genre']);
+const SEARCH_GENRE_FIELDS = ['Local Genre', 'Genre'];
 const AI_LANGUAGE_FIELDS = parseFieldList('FM_LANGUAGE_FIELDS', ['Language Code']);
 
 const listSearchFields = (base, optional, includeOptional) =>
@@ -3428,7 +3650,10 @@ async function buildAiResponseFromCriteria(rawCriteria, userQuery, logLabel = ''
   }
 
   const rawData = findJson?.response?.data || [];
-  const validRecords = rawData.filter((record) => hasValidAudio(record.fieldData || {}));
+  const validRecords = rawData.filter((record) => {
+    const fields = record.fieldData || {};
+    return hasValidAudio(fields) && hasValidArtwork(fields);
+  });
 
   return {
     payload: {
@@ -3463,6 +3688,9 @@ app.get('/api/wake', async (req, res) => {
   }
 });
 
+// Update the version to bust cached search responses when the shape changes
+const SEARCH_CACHE_VERSION = 'genre-one-per-album-v1';
+
 app.get('/api/search', async (req, res) => {
   try {
     // Validate search inputs (prevent injection)
@@ -3491,20 +3719,63 @@ app.get('/api/search', async (req, res) => {
       const offsetResult = validators.offset(req.query.offset);
       if (!offsetResult.valid) validationErrors.offset = offsetResult.error;
     }
-    if (Object.keys(validationErrors).length > 0) {
-      return res.status(400).json({ error: 'Invalid input', details: validationErrors });
-    }
-
     const q = (req.query.q || '').toString().trim();
     const artist = (req.query.artist || '').toString().trim();
     const album = (req.query.album || '').toString().trim();
     const track = (req.query.track || '').toString().trim();
-    const limit = Math.max(1, Math.min(500, parseInt(req.query.limit || '30', 10)));
+    const limit = Math.max(1, Math.min(10, parseInt(req.query.limit || '10', 10)));
     const uiOff0 = Math.max(0, parseInt(req.query.offset || '0', 10));
     const fmOff = uiOff0 + 1;
 
+    const rawGenreInput = req.query.genre;
+    const genreFragments = [];
+    if (Array.isArray(rawGenreInput)) {
+      rawGenreInput.forEach((value) => {
+        if (value === undefined || value === null) return;
+        String(value)
+          .split(/[,\|]/)
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .forEach((part) => genreFragments.push(part));
+      });
+    } else if (rawGenreInput !== undefined && rawGenreInput !== null) {
+      String(rawGenreInput)
+        .split(/[,\|]/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .forEach((part) => genreFragments.push(part));
+    }
+
+    const MAX_GENRE_FILTERS = 5;
+    const genreFilters = [];
+    const normalizedGenreKeys = new Set();
+    for (const fragment of genreFragments) {
+      if (genreFilters.length >= MAX_GENRE_FILTERS) break;
+      const validation = validators.searchQuery(fragment);
+      if (!validation.valid) {
+        validationErrors.genre = validation.error;
+        break;
+      }
+      const normalizedKey = validation.value.toLowerCase();
+      if (normalizedGenreKeys.has(normalizedKey)) continue;
+      normalizedGenreKeys.add(normalizedKey);
+      genreFilters.push(validation.value);
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      return res.status(400).json({ error: 'Invalid input', details: validationErrors });
+    }
+
+    const genreCacheKey = genreFilters.length
+      ? genreFilters.map((g) => g.toLowerCase()).sort().join('|')
+      : '';
+
+    if (genreFilters.length) {
+      console.log('[SEARCH] Genre filters:', genreFilters.join(', '));
+    }
+
     // Check cache
-    const cacheKey = `search:${q}:${artist}:${album}:${track}:${limit}:${uiOff0}`;
+    const cacheKey = `search:${SEARCH_CACHE_VERSION}:${q}:${artist}:${album}:${track}:${limit}:${uiOff0}:${genreCacheKey}`;
     const cached = searchCache.get(cacheKey);
     if (cached) {
       console.log(`[CACHE HIT] search: ${cacheKey.slice(0, 50)}...`);
@@ -3512,17 +3783,71 @@ app.get('/api/search', async (req, res) => {
       return res.json(cached);
     }
 
-    const makePayload = (includeOptionalFields, overrides) => ({
-      query: buildSearchQueries({ q, artist, album, track }, includeOptionalFields, overrides),
-      limit,
-      offset: fmOff
-    });
+    const applyGenreFiltersToQueries = (queries, candidateFields = SEARCH_GENRE_FIELDS) => {
+      if (!genreFilters.length) return queries;
+      const fields = Array.isArray(candidateFields) ? candidateFields.filter(Boolean) : [];
+      if (!fields.length) return queries;
+      const augmented = [];
+      for (const baseQuery of queries) {
+        for (const genreValue of genreFilters) {
+          const pattern = `*${genreValue}*`;
+          fields.forEach((field) => {
+            augmented.push({
+              ...baseQuery,
+              [field]: pattern
+            });
+          });
+        }
+      }
+      return augmented.length ? augmented : queries;
+    };
 
-    const runSearch = async (includeOptionalFields, overrides) => {
-      const payload = makePayload(includeOptionalFields, overrides);
-      const response = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
-      const json = await response.json().catch(() => ({}));
-      return { response, json };
+    const makePayload = (
+      includeOptionalFields,
+      overrides,
+      genreFields = SEARCH_GENRE_FIELDS,
+      customOffset,
+      customLimit
+    ) => {
+      const baseQueries = buildSearchQueries({ q, artist, album, track }, includeOptionalFields, overrides);
+      const queryWithGenres = applyGenreFiltersToQueries(baseQueries, genreFields);
+      return {
+        query: queryWithGenres,
+        limit: typeof customLimit === 'number' ? customLimit : limit,
+        offset: typeof customOffset === 'number' ? customOffset : fmOff
+      };
+    };
+
+    const runSearch = async (includeOptionalFields, overrides, customOffset, customLimit) => {
+      const genreFieldCandidates = SEARCH_GENRE_FIELDS.filter(Boolean);
+      let activeGenreFields = genreFieldCandidates.slice();
+
+      while (true) {
+        const payload = makePayload(
+          includeOptionalFields,
+          overrides,
+          activeGenreFields,
+          customOffset,
+          customLimit
+        );
+        const response = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, payload);
+        const json = await response.json().catch(() => ({}));
+
+        if (!genreFilters.length) {
+          return { response, json };
+        }
+
+        const code = json?.messages?.[0]?.code;
+        const codeStr = code === undefined || code === null ? '' : String(code);
+
+        if (codeStr === '102' && activeGenreFields.length > 1) {
+          const removedField = activeGenreFields.pop();
+          console.warn(`[SEARCH] Genre field "${removedField}" missing (102); retrying with remaining fields`);
+          continue;
+        }
+
+        return { response, json };
+      }
     };
 
     const hasOnlyArtist = Boolean(artist) && !album && !track && !q;
@@ -3537,13 +3862,21 @@ app.get('/api/search', async (req, res) => {
     const usingTargetedOverrides = Object.keys(targetedOverrides).length > 0;
 
     let attemptUsedOptional = !usingTargetedOverrides;
-    let attempt = await runSearch(attemptUsedOptional, usingTargetedOverrides ? targetedOverrides : undefined);
+    const fmQueryLimit = Math.min(500, Math.max(limit * 10, 50));
+    const MAX_GENRE_FETCH_BATCHES = Math.max(1, parsePositiveInt(process.env.SEARCH_GENRE_MAX_BATCHES, 20));
+
+    let attempt = await runSearch(
+      attemptUsedOptional,
+      usingTargetedOverrides ? targetedOverrides : undefined,
+      undefined,
+      fmQueryLimit
+    );
 
     if (!attempt.response.ok) {
       const code = attempt.json?.messages?.[0]?.code;
       if (String(code) === '102' && attemptUsedOptional) {
         attemptUsedOptional = false;
-        attempt = await runSearch(false);
+        attempt = await runSearch(false, undefined, undefined, fmQueryLimit);
       }
     }
 
@@ -3562,44 +3895,98 @@ app.get('/api/search', async (req, res) => {
       (attempt.json?.response?.dataInfo?.returnedCount ?? attempt.json?.response?.data?.length ?? 0) === 0
     ) {
       attemptUsedOptional = true;
-      attempt = await runSearch(true);
+      attempt = await runSearch(true, undefined, undefined, fmQueryLimit);
     }
 
-    const rawData = attempt.json?.response?.data || [];
+    let aggregatedRawData = Array.isArray(attempt.json?.response?.data)
+      ? attempt.json.response.data.slice()
+      : [];
+    let aggregatedRawCount = aggregatedRawData.length;
+    const initialFoundCount = Number(attempt.json?.response?.dataInfo?.foundCount);
+    let rawTotal = Number.isFinite(initialFoundCount) ? initialFoundCount : null;
 
-    // Filter to only include records with valid audio
-    const data = rawData.filter(record => hasValidAudio(record.fieldData || {}));
+    const filterValidRecords = () =>
+      aggregatedRawData.filter((record) => {
+        const fields = record.fieldData || {};
+        return hasValidAudio(fields) && hasValidArtwork(fields);
+      });
+    const dedupeByAlbum = (records) => {
+      const seenAlbums = new Set();
+      const deduped = [];
+      for (const record of records) {
+        const fields = record.fieldData || {};
+        const catalogue = firstNonEmptyFast(fields, CATALOGUE_FIELD_CANDIDATES);
+        const albumTitle = firstNonEmptyFast(fields, ['Album Title', 'Tape Files::Album_Title', 'Tape Files::Album Title']);
+        const albumArtist = firstNonEmptyFast(fields, ['Album Artist', 'Tape Files::Album Artist', 'Artist']);
+        const trackName = firstNonEmptyFast(fields, ['Track Name', 'Tape Files::Track Name', 'Song Name', 'Title']);
+        const trackArtist = firstNonEmptyFast(fields, ['Track Artist', 'Tape Files::Track Artist', 'Artist']) || albumArtist;
 
-    const total = attempt.json?.response?.dataInfo?.foundCount ?? data.length;
+        let albumKey = makeAlbumKey(catalogue, albumTitle, albumArtist);
+        const fallbackKey = record.recordId
+          ? `record:${record.recordId}`
+          : `track:${normTitle(trackName)}|artist:${normTitle(trackArtist)}`;
+        if (!albumKey || albumKey === 'title:|artist:') {
+          albumKey = fallbackKey || `row:${deduped.length}`;
+        }
 
-    // Deduplicate by album to ensure diverse results
-    // Group tracks by album key and keep representative tracks from each
-    const albumMap = new Map();
-    const MIN_ALBUMS = 8;
-
-    for (const record of data) {
-      const fields = record.fieldData || {};
-      const catalogue = firstNonEmptyFast(fields, CATALOGUE_FIELD_CANDIDATES);
-      const albumTitle = firstNonEmptyFast(fields, ['Album Title', 'Tape Files::Album_Title', 'Tape Files::Album Title']);
-      const albumArtist = firstNonEmptyFast(fields, ['Album Artist', 'Tape Files::Album Artist', 'Artist']);
-
-      const albumKey = makeAlbumKey(catalogue, albumTitle, albumArtist);
-
-      if (!albumMap.has(albumKey)) {
-        albumMap.set(albumKey, []);
+        if (seenAlbums.has(albumKey)) continue;
+        seenAlbums.add(albumKey);
+        deduped.push(record);
       }
-      albumMap.get(albumKey).push(record);
+      return deduped;
+    };
+
+    let validRecords = filterValidRecords();
+    let processedRecords = genreFilters.length ? dedupeByAlbum(validRecords) : validRecords.slice();
+
+    if (genreFilters.length) {
+      let batchesFetched = 1;
+      let nextFmOffset = fmOff + aggregatedRawCount;
+      while (
+        processedRecords.length < limit &&
+        batchesFetched < MAX_GENRE_FETCH_BATCHES &&
+        (rawTotal === null || nextFmOffset <= rawTotal)
+      ) {
+        const nextAttempt = await runSearch(
+          attemptUsedOptional,
+          usingTargetedOverrides ? targetedOverrides : undefined,
+          nextFmOffset,
+          fmQueryLimit
+        );
+        if (!nextAttempt.response.ok) {
+          break;
+        }
+        const nextRaw = nextAttempt.json?.response?.data || [];
+        if (!nextRaw.length) {
+          break;
+        }
+        aggregatedRawData = aggregatedRawData.concat(nextRaw);
+        aggregatedRawCount += nextRaw.length;
+        batchesFetched += 1;
+        nextFmOffset += nextRaw.length;
+        if (rawTotal === null) {
+          const nextFound = Number(nextAttempt.json?.response?.dataInfo?.foundCount);
+          if (Number.isFinite(nextFound)) {
+            rawTotal = nextFound;
+          }
+        }
+        validRecords = filterValidRecords();
+        processedRecords = dedupeByAlbum(validRecords);
+      }
     }
 
-    // Return all tracks for each album to show complete album contents
-    // Frontend will handle grouping by album
-    let finalData = data;
+    const limitedRecords = processedRecords.slice(0, limit);
+    if (rawTotal === null) {
+      rawTotal = limitedRecords.length;
+    }
+    const rawReturnedCount = aggregatedRawCount;
 
     const response = {
-      items: finalData.map((d) => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} })),
-      total,
+      items: limitedRecords.map((d) => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} })),
+      total: rawTotal,
       offset: uiOff0,
-      limit
+      limit,
+      rawReturnedCount
     };
 
     // Cache the response
@@ -3711,6 +4098,29 @@ app.get('/api/ai-search', async (req, res) => {
     console.error('[AI SEARCH] Error:', err);
     const detail = err?.message || String(err);
     res.status(500).json({ error: 'AI search failed', status: 500, detail });
+  }
+});
+
+app.get('/api/trending', async (req, res) => {
+  try {
+    const limitParam = Number.parseInt(req.query.limit || '5', 10);
+    const limit = Number.isFinite(limitParam)
+      ? Math.max(1, Math.min(TRENDING_MAX_LIMIT, limitParam))
+      : 5;
+    const cacheKey = `trending:${limit}`;
+    const cached = trendingCache.get(cacheKey);
+    if (cached) {
+      res.setHeader('X-Cache-Hit', 'true');
+      return res.json({ items: cached });
+    }
+
+    const items = await fetchTrendingTracks(limit);
+    trendingCache.set(cacheKey, items);
+    res.json({ items });
+  } catch (err) {
+    console.error('[TRENDING] Failed to load trending tracks:', err);
+    const detail = err?.message || 'Trending lookup failed';
+    res.status(500).json({ error: detail || 'Failed to load trending tracks' });
   }
 });
 
