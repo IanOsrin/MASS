@@ -2726,14 +2726,25 @@
             // Track playback progress and move tonearm progressively
             audio.addEventListener('timeupdate', () => {
               const thumb = document.querySelector('.now-playing-thumb');
-              if (thumb && audio.duration && !audio.paused) {
+              const progressFill = document.getElementById('nowPlayingProgressFill');
+
+              if (audio.duration && !audio.paused) {
                 const progress = audio.currentTime / audio.duration;
-                // Tonearm moves from outer circumference (8deg) to inner groove (-22deg)
-                // 8deg positions needle precisely on outer edge of vinyl
-                const startAngle = 8;      // outer circumference of record (precise landing)
-                const endAngle = -22;      // inner groove
-                const currentAngle = startAngle + progress * (endAngle - startAngle);
-                thumb.style.setProperty('--tonearm-angle', `${currentAngle}deg`);
+
+                // Update tonearm position
+                if (thumb) {
+                  // Tonearm moves from outer circumference (8deg) to inner groove (-22deg)
+                  // 8deg positions needle precisely on outer edge of vinyl
+                  const startAngle = 8;      // outer circumference of record (precise landing)
+                  const endAngle = -22;      // inner groove
+                  const currentAngle = startAngle + progress * (endAngle - startAngle);
+                  thumb.style.setProperty('--tonearm-angle', `${currentAngle}deg`);
+                }
+
+                // Update progress bar
+                if (progressFill) {
+                  progressFill.style.width = `${progress * 100}%`;
+                }
               }
             });
 
@@ -2751,6 +2762,7 @@
             // When audio ends
             audio.addEventListener('ended', () => {
               const thumb = document.querySelector('.now-playing-thumb');
+              const progressFill = document.getElementById('nowPlayingProgressFill');
 
               if (thumb) {
                 thumb.classList.remove('playing');
@@ -2760,6 +2772,12 @@
                 }, 100);
                 console.log('⏹️ Record finished playing');
               }
+
+              // Reset progress bar
+              if (progressFill) {
+                progressFill.style.width = '0%';
+              }
+
               toggleJukeboxGlow(false);
             });
           }
