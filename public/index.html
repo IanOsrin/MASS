@@ -80,6 +80,34 @@
       opacity: 0.8;
     }
 
+    /* Fixed decorative jukebox in the background */
+    .jukebox-backdrop {
+      position: fixed;
+      right: 3vw;
+      bottom: 0;
+      width: min(420px, 30vw);
+      opacity: 0.22;
+      pointer-events: none; /* purely visual */
+      filter:
+        drop-shadow(0 14px 40px rgba(0, 0, 0, 0.65))
+        saturate(1.2);
+      z-index: -1; /* behind the main app */
+    }
+
+    .jukebox-backdrop img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 28px;
+    }
+
+    /* Hide background jukebox on smaller screens to keep layout clean */
+    @media (max-width: 900px) {
+      .jukebox-backdrop {
+        display: none;
+      }
+    }
+
     /* Subtle aging animation */
     @keyframes bakeliteAging {
       0%, 100% { opacity: 0.8; }
@@ -174,10 +202,10 @@
     .public-playlists{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;}
     .public-playlists .playlists-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
     .public-playlists-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}
-    .public-playlist-item button{width:100%;text-align:left;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 16px;color:var(--fg);font-size:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;transition:background .15s ease,border-color .15s ease;}
+    .public-playlist-item button{width:100%;text-align:left;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;color:var(--fg);font-size:16px;display:flex;align-items:flex-start;gap:12px;cursor:pointer;transition:background .15s ease,border-color .15s ease;}
     .public-playlist-item button:hover{background:var(--border);}
     .public-playlist-item button.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:rgba(98,245,169,0.15);}
-    .public-playlist-count{color:var(--muted);font-size:15px;font-weight:500;}
+    .public-playlist-count{color:var(--muted);font-size:14px;font-weight:500;line-height:1.4;}
     .public-featured-row{display:flex;align-items:flex-start;gap:18px;width:100%;margin-bottom:16px;}
     .public-featured-row > .public-playlists{flex:0 0 220px;max-width:240px;}
     .public-playlist-view{display:flex;flex-direction:column;gap:12px;border:1px solid var(--border);border-radius:14px;background:var(--card);padding:12px;flex:1;min-width:0;}
@@ -190,12 +218,11 @@
     .public-playlist-tracks::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:999px;}
     .public-playlist-track .track-name-title{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .public-playlist-track .track-name-artist{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .public-playlist-item button{justify-content:flex-start;gap:14px;}
     .public-playlist-thumb{width:70px;height:70px;border-radius:12px;background:#101215 center/cover no-repeat;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:28px;overflow:hidden;transition:background .2s ease, color .2s ease;}
     .public-playlist-thumb.has-art{color:transparent;}
     .public-playlist-label{display:flex;flex-direction:column;align-items:flex-start;gap:4px;flex:1;min-width:0;}
-    .public-playlist-name{font-weight:600;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .public-playlist-count{color:var(--muted);font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .public-playlist-name{font-weight:600;font-size:16px;line-height:1.35;word-break:break-word;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+    .public-playlist-count{color:var(--muted);font-size:14px;font-weight:500;line-height:1.4;white-space:normal;}
     .public-playlist-hero{border-radius:16px;overflow:hidden;background:#11141a;display:flex;align-items:center;justify-content:center;padding:12px;}
     .public-playlist-hero[hidden]{display:none;}
     .public-playlist-hero img{display:block;width:60%;height:auto;max-height:240px;object-fit:contain;}
@@ -223,8 +250,7 @@
       .ai-search-row{flex-direction:column;align-items:stretch;}
       .ai-search-row button{width:100%;}
       .view-buttons{bottom:100px;right:10px;gap:8px;}
-      .view-buttons a,
-      .view-buttons button{padding:6px 12px;font-size:12px;}
+      .view-buttons a{padding:6px 12px;font-size:12px;}
     }
     .albums{display:grid;grid-template-columns:repeat(4,240px);grid-template-rows:auto auto;gap:16px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
     /* Featured albums mode: larger 2-column grid */
@@ -355,6 +381,96 @@
     .subscription-toast-close{position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.1);border:none;color:#000;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;}
     .subscription-toast-close:hover{background:rgba(0,0,0,0.2);}
 
+    /* Interactive mini-jukebox widget */
+    .jukebox-widget {
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      width: 150px;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.7),
+        0 0 25px rgba(255, 234, 0, 0.4);
+      background: radial-gradient(circle at top, #402016 0%, #140807 60%);
+      cursor: pointer;
+      z-index: 40;
+      transform: translateZ(0);
+    }
+
+    .jukebox-widget-image {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .jukebox-widget-overlay {
+      position: absolute;
+      inset: auto 0 0 0;
+      padding: 8px 10px;
+      background: linear-gradient(
+        to top,
+        rgba(0, 0, 0, 0.9),
+        rgba(0, 0, 0, 0)
+      );
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      align-items: flex-start;
+    }
+
+    .jukebox-label {
+      font-size: 11px;
+      letter-spacing: 1px;
+      font-weight: 700;
+      color: var(--neon-yellow);
+      text-shadow:
+        0 0 6px rgba(255, 234, 0, 0.9),
+        0 0 14px rgba(255, 136, 0, 0.9);
+    }
+
+    .jukebox-widget-btn {
+      margin-top: 2px;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+      text-transform: uppercase;
+      background: linear-gradient(90deg, var(--btn-gradient-start), var(--btn-gradient-end));
+      color: var(--btn-text);
+      box-shadow:
+        0 0 10px rgba(255, 234, 0, 0.7),
+        0 0 16px rgba(255, 51, 102, 0.7);
+    }
+
+    .jukebox-widget.loading {
+      opacity: 0.8;
+      filter: saturate(0.6);
+    }
+
+    .jukebox-widget.loading .jukebox-widget-btn {
+      pointer-events: none;
+      opacity: 0.7;
+    }
+
+    /* Glow when music is playing */
+    .jukebox-widget.playing .jukebox-widget-image {
+      filter:
+        drop-shadow(0 0 18px rgba(255, 234, 0, 0.9))
+        saturate(1.3);
+    }
+
+    /* Hide the widget on very small screens */
+    @media (max-width: 680px) {
+      .jukebox-widget {
+        width: 120px;
+        left: 8px;
+        bottom: 8px;
+      }
+    }
+
     /* Missing Audio Mode - Secret feature for operators */
     body.missing-audio-mode .missing-mode-banner{display:block !important;}
     .missing-mode-banner{display:none;position:fixed;top:0;left:0;right:0;background:#ff4444;color:#fff;text-align:center;padding:12px;font-weight:700;z-index:9999;box-shadow:0 2px 8px rgba(255,68,68,0.5);}
@@ -392,11 +508,23 @@
     .now-playing-thumb {
       position: relative;
       overflow: visible !important; /* Allow tonearm to show */
+      background: radial-gradient(circle, #1a1a1a 0%, #0d0d0d 100%);
+      box-shadow:
+        inset 0 0 20px rgba(0, 0, 0, 0.8),
+        0 4px 12px rgba(0, 0, 0, 0.5);
     }
 
-    /* Make the vinyl image circular */
+    /* Turntable platter with vinyl grooves */
     .now-playing-thumb img {
       border-radius: 50%;
+      box-shadow:
+        0 0 0 2px #000,
+        0 0 0 3px #222,
+        0 4px 12px rgba(0, 0, 0, 0.6),
+        inset 0 0 15px rgba(0, 0, 0, 0.4);
+      position: relative;
+      /* Add subtle groove texture */
+      filter: contrast(1.05);
     }
 
     /* Spinning vinyl when playing */
@@ -409,58 +537,60 @@
       to { transform: rotate(360deg); }
     }
 
+    /* Center label on vinyl */
+    .now-playing-thumb::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 26px;
+      height: 26px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: radial-gradient(circle,
+        #f5f5f5 0%,
+        #e0e0e0 30%,
+        #c0c0c0 60%,
+        #909090 100%);
+      box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.3),
+        0 2px 5px rgba(0, 0, 0, 0.4),
+        inset 0 0 10px rgba(255, 255, 255, 0.4),
+        inset 0 1px 2px rgba(255, 255, 255, 0.6);
+      z-index: 5;
+      pointer-events: none;
+    }
+
     /* Tonearm - starts OUT (resting position) */
     .now-playing-thumb::after {
       content: '';
       position: absolute;
-      top: 10%;
-      right: -25%;
-      width: 80%;
-      height: 10px;
-      background: linear-gradient(90deg,
-        #8b7355 0%,
-        #a0876d 30%,
-        #8b7355 60%,
+      top: 8%;
+      right: -30%;
+      width: 88%;
+      height: 8px;
+      background: linear-gradient(to right,
+        #1a1a1a 0%,
+        #2d2d2d 8%,
+        #4a4a4a 15%,
+        #5d5d5d 25%,
+        #4a4a4a 50%,
+        #3a3a3a 70%,
+        #2a2a2a 85%,
         transparent 100%);
-      border-radius: 5px 0 0 5px;
-      transform-origin: 95% center;
-      transform: rotate(30deg);
+      border-radius: 4px 0 0 4px;
+      transform-origin: 96% center;
+      transform: rotate(var(--tonearm-angle, 30deg));
       box-shadow:
-        0 3px 6px rgba(0, 0, 0, 0.4),
-        inset 0 1px 3px rgba(255, 255, 255, 0.3);
-      transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        0 4px 8px rgba(0, 0, 0, 0.7),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+        inset 2px 0 3px rgba(0, 0, 0, 0.3);
+      transition: transform 1s linear;
       z-index: 10;
       pointer-events: none;
-    }
-
-    /* Tonearm needle/cartridge - starts OUT */
-    .now-playing-thumb::before {
-      content: '';
-      position: absolute;
-      top: 12%;
-      right: 50%;
-      width: 14px;
-      height: 14px;
-      background: radial-gradient(circle, #e0e0e0 30%, #808080 100%);
-      border-radius: 50%;
-      box-shadow:
-        0 2px 6px rgba(0, 0, 0, 0.5),
-        inset 0 1px 2px rgba(255, 255, 255, 0.4);
-      transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-      z-index: 11;
-      pointer-events: none;
-      opacity: 0;
-    }
-
-    /* When playing, arm swings IN onto record */
-    .now-playing-thumb.playing::after {
-      transform: rotate(-30deg);
-    }
-
-    .now-playing-thumb.playing::before {
-      opacity: 1;
-      top: 40%;
-      right: 45%;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.5);
     }
 
     .cover-wrap img {
@@ -590,10 +720,9 @@
     #authError{margin-top:12px;}
 
     .view-buttons{position:fixed;bottom:120px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:100;}
-    .view-buttons a,
-    .view-buttons button{border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;text-decoration:none;background:transparent;border:1px solid var(--border);color:var(--fg);transition:all 0.2s ease;display:inline-block;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);backdrop-filter:blur(8px);}
-    .view-buttons a:hover,
-    .view-buttons button:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.4);}
+    .view-buttons a{border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;text-decoration:none;background:transparent;border:1px solid var(--border);color:var(--fg);transition:all 0.2s ease;display:inline-block;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);backdrop-filter:blur(8px);}
+    .view-buttons a:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.4);}
+    .view-buttons .genre-note{font-size:11px;line-height:1.5;color:var(--muted);max-width:220px;background:rgba(0,0,0,0.35);padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);backdrop-filter:blur(6px);}
 
     .playlists-panel {
       padding: 16px;
@@ -677,7 +806,7 @@
     .now-playing-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
     .now-playing-header .label{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
     .now-playing-body{display:flex;align-items:center;gap:12px;}
-    .now-playing-thumb{width:64px;height:64px;border-radius:8px;overflow:hidden;flex-shrink:0;background:#0e1014;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);}
+    .now-playing-thumb{width:96px;height:96px;border-radius:8px;overflow:hidden;flex-shrink:0;background:#0e1014;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);}
     .now-playing-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
     .now-playing-meta{display:flex;flex-direction:column;gap:3px;min-width:0;}
     .now-playing-title{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -745,13 +874,13 @@
     .album-actions{display:flex;justify-content:flex-end;gap:10px;margin:0 0 12px;}
     .album-actions .btn{white-space:nowrap;}
     .tracks{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;}
-    .track{background:#1f1f23;padding:8px 10px;border-radius:8px;display:flex;flex-direction:column;gap:6px;}
+    .track{background:#1f1f23;padding:8px 10px;border-radius:8px;display:flex;flex-direction:column;gap:6px;color:#f8f4eb;}
     .track.loading{opacity:0.75;}
     .track.loading .btn.small{pointer-events:none;}
     .track-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
     .track-title{display:flex;flex-direction:column;flex:1;min-width:0;}
-    .track .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .track .artist{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .track .name{white-space:normal;word-break:break-word;overflow:visible;text-overflow:unset;line-height:1.35;color:#fef9ef;}
+    .track .artist{color:rgba(255,255,255,0.7);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .controls{display:flex;align-items:center;gap:6px;}
     .playing{outline:1px solid var(--accent); background:#202427;}
     .progress{display:flex;align-items:center;gap:8px;margin-top:6px;}
@@ -786,8 +915,6 @@
     .status[hidden]{display:none;}
     .status .pulse{width:8px;height:8px;border-radius:50%;background:var(--accent);
       box-shadow:0 0 0 0 rgba(98,245,169,.7);animation:pulse 1.3s infinite;}
-    .theme-toggle{border-radius:999px;padding:7px 14px;font-weight:600;font-size:12px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:var(--fg);cursor:pointer;transition:all 0.2s ease;}
-    .theme-toggle:hover{border-color:var(--accent);color:var(--accent);}
     body.alt-theme{
       --bg:#f2f0ec;
       --fg:#1f1c17;
@@ -1097,6 +1224,10 @@
   </style>
 </head>
 <body>
+  <div class="jukebox-backdrop" aria-hidden="true">
+    <img src="/img/jukebox.png" alt="">
+  </div>
+
   <!-- Access Token Entry Overlay -->
   <div class="access-token-overlay hidden" id="accessTokenOverlay">
     <div class="access-token-box">
@@ -1252,7 +1383,6 @@
           <div class="now-playing-header">
             <span class="label">Now Playing</span>
             <div style="display: flex; gap: 6px;">
-              <button id="nowPlayingInfo" type="button" class="btn small" title="Show metadata">⋯</button>
               <button id="nowPlayingCollapse" type="button" class="btn small">Hide</button>
             </div>
           </div>
@@ -1270,7 +1400,6 @@
             <button id="nowPlayingAdd" type="button" class="btn small" hidden>+ Playlist</button>
             <button id="nowPlayingToggle" type="button" class="btn small">Play</button>
           </div>
-          <div id="nowPlayingMetadata" class="now-playing-meta-list" style="display:none;"></div>
           <div class="now-playing-progress">
             <div id="nowPlayingProgressFill" class="fill"></div>
           </div>
@@ -1469,6 +1598,16 @@
   <div id="imageLightbox" class="image-lightbox" aria-hidden="true">
     <button id="imageLightboxClose" class="image-lightbox-close" aria-label="Close">&times;</button>
     <img id="imageLightboxImg" alt="Album artwork" />
+  </div>
+
+  <div class="jukebox-widget" id="jukeboxWidget">
+    <img src="/img/jukebox.png" alt="MAD Jukebox" class="jukebox-widget-image">
+    <div class="jukebox-widget-overlay">
+      <span class="jukebox-label">MAD JUKEBOX</span>
+      <button type="button" class="jukebox-widget-btn" id="jukeboxShuffleButton">
+        Feeling Lucky
+      </button>
+    </div>
   </div>
 
   <script>
@@ -2209,6 +2348,161 @@
     }
   });
   </script>
+
+  <script>
+  // Hook jukebox widget into random track controls
+  window.addEventListener('DOMContentLoaded', () => {
+    const jukeboxWidget = document.getElementById('jukeboxWidget');
+    const jukeboxShuffleButton = document.getElementById('jukeboxShuffleButton');
+    const GENRE_PREF_STORAGE_KEY = 'madmusic.genrePreferences';
+    const genreNote = document.getElementById('genrePreferenceNote');
+    const genreList = document.getElementById('genrePreferenceList');
+
+    const ensureNowPlayingVisible = () => {
+      const playlistColumn = document.getElementById('playlistColumn');
+      const nowPlayingCard = document.getElementById('nowPlayingCard');
+      if (playlistColumn) playlistColumn.hidden = false;
+      if (nowPlayingCard) {
+        nowPlayingCard.hidden = false;
+        nowPlayingCard.classList.remove('collapsed');
+      }
+    };
+
+    const readPreferredGenres = () => {
+      try {
+        const raw = localStorage.getItem(GENRE_PREF_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter(Boolean);
+      } catch (err) {
+        console.warn('[Jukebox] Failed to read genre preferences', err);
+        return [];
+      }
+    };
+
+    const updateGenreNote = () => {
+      if (!genreNote || !genreList) return;
+      const prefs = readPreferredGenres();
+      if (!prefs.length) {
+        genreNote.hidden = false;
+        genreList.textContent = 'None selected';
+        return;
+      }
+      genreNote.hidden = false;
+      genreList.textContent = prefs.join(', ');
+    };
+    updateGenreNote();
+
+    const ensureShuffleAutoplay = () => {
+      const shufflePlayBtn = document.getElementById('shufflePlayBtn');
+      if (!shufflePlayBtn) return;
+      const label = (shufflePlayBtn.textContent || '').toLowerCase();
+      const isActive = label.includes('stop shuffle');
+      const isLoading = label.includes('loading');
+      if (isActive || isLoading) return;
+      shufflePlayBtn.hidden = false;
+      shufflePlayBtn.click();
+    };
+
+    const pickPlayableButton = (preferredGenres = []) => {
+      const selectors = [
+        '#albums .play-button',
+        '#albums .track button',
+        '#albums button[data-play-label]'
+      ];
+      const buttons = Array.from(document.querySelectorAll(selectors.join(',')))
+        .filter((btn) => {
+          if (!(btn instanceof HTMLButtonElement)) return false;
+          if (btn.disabled || btn.offsetParent === null) return false;
+          return btn.classList.contains('play-button') || btn.dataset.playLabel;
+        });
+      if (!buttons.length) return null;
+
+      const normalizedPrefs = Array.isArray(preferredGenres)
+        ? preferredGenres.map((genre) => genre.toLowerCase()).filter(Boolean)
+        : [];
+
+      let candidateButtons = buttons;
+      if (normalizedPrefs.length) {
+        const genreMatches = buttons.filter((btn) => {
+          const card = btn.closest('.card');
+          if (!card || !card._meta) return false;
+          const cardGenre = (card._meta.genre || '').toString().toLowerCase();
+          if (!cardGenre) return false;
+          return normalizedPrefs.some((pref) => cardGenre.includes(pref));
+        });
+        if (genreMatches.length) {
+          candidateButtons = genreMatches;
+        }
+      }
+
+      if (!candidateButtons.length) return null;
+      const index = Math.floor(Math.random() * candidateButtons.length);
+      return candidateButtons[index];
+    };
+
+    const playRandomTrack = async () => {
+      const preferredGenres = readPreferredGenres();
+
+      const attemptPlay = (allowAny = false) => {
+        const btn = pickPlayableButton(allowAny ? [] : preferredGenres);
+        if (!btn) return false;
+        ensureNowPlayingVisible();
+        btn.click();
+        ensureShuffleAutoplay();
+        return true;
+      };
+
+      if (attemptPlay()) return;
+
+      const loadFn = typeof window.loadRandomSongs === 'function' ? window.loadRandomSongs : null;
+      if (!loadFn) {
+        console.warn('[Jukebox] loadRandomSongs() unavailable');
+        if (!preferredGenres.length && !attemptPlay(true)) {
+          console.warn('[Jukebox] Unable to find any playable track');
+        }
+        return;
+      }
+
+      const maxGenreAttempts = preferredGenres.length ? 3 : 1;
+
+      if (jukeboxWidget) jukeboxWidget.classList.add('loading');
+      try {
+        for (let attempt = 0; attempt < maxGenreAttempts; attempt += 1) {
+          await loadFn({ genres: preferredGenres });
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          if (attemptPlay()) return;
+        }
+        if (!preferredGenres.length && !attemptPlay(true)) {
+          console.warn('[Jukebox] Unable to find playable track after genre-filtered loads');
+        } else if (preferredGenres.length) {
+          console.warn('[Jukebox] No tracks matched saved genres after multiple attempts');
+        }
+      } catch (err) {
+        console.error('[Jukebox] Failed to load random songs', err);
+        if (!preferredGenres.length && !attemptPlay(true)) {
+          console.warn('[Jukebox] No fallback track available after error');
+        }
+      } finally {
+        if (jukeboxWidget) jukeboxWidget.classList.remove('loading');
+      }
+    };
+
+    if (jukeboxShuffleButton) {
+      jukeboxShuffleButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        playRandomTrack();
+      });
+    }
+
+    if (jukeboxWidget) {
+      jukeboxWidget.addEventListener('click', playRandomTrack);
+    }
+  });
+  </script>
   <script>
   // Secret keystroke: Ctrl+Shift+M to toggle/refresh Missing Audio Mode, Escape to exit
   document.addEventListener('keydown', async (e) => {
@@ -2382,45 +2676,11 @@
   <!-- View Switcher Buttons (Fixed Bottom Right) -->
   <div class="view-buttons">
     <a href="/">✨ MADMusic</a>
-    <button id="themeToggle" type="button" class="theme-toggle" aria-pressed="false">🎨 Theme</button>
+    <div class="genre-note" id="genrePreferenceNote" hidden>
+      <strong>Your genres:</strong>
+      <span id="genrePreferenceList">None selected</span>
+    </div>
   </div>
-
-  <script>
-  // Theme toggle functionality
-  (function() {
-    const themeToggle = document.getElementById('themeToggle');
-    const THEME_STORAGE_KEY = 'mass.theme';
-
-    function applyTheme(isAltTheme) {
-      if (isAltTheme) {
-        document.body.classList.add('alt-theme');
-        if (themeToggle) themeToggle.setAttribute('aria-pressed', 'true');
-      } else {
-        document.body.classList.remove('alt-theme');
-        if (themeToggle) themeToggle.setAttribute('aria-pressed', 'false');
-      }
-      localStorage.setItem(THEME_STORAGE_KEY, isAltTheme ? 'alt' : 'default');
-      console.log(`🎨 Theme changed to: ${isAltTheme ? 'alternate' : 'default'}`);
-    }
-
-    // Load saved theme preference on page load
-    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-    if (savedTheme === 'alt') {
-      applyTheme(true);
-    }
-
-    // Toggle theme on button click
-    if (themeToggle) {
-      themeToggle.addEventListener('click', () => {
-        const isCurrentlyAlt = document.body.classList.contains('alt-theme');
-        applyTheme(!isCurrentlyAlt);
-      });
-      console.log('🎨 Theme toggle initialized');
-    } else {
-      console.error('❌ Theme toggle button not found');
-    }
-  })();
-  </script>
 
   <script>
   // 🎵 Animated Record Player - Tonearm and spinning vinyl (Now Playing only)
@@ -2444,6 +2704,13 @@
           if (!audio.dataset.recordPlayerListenerAdded) {
             audio.dataset.recordPlayerListenerAdded = 'true';
 
+            const toggleJukeboxGlow = (isPlaying) => {
+              const jukeboxWidget = document.getElementById('jukeboxWidget');
+              if (jukeboxWidget) {
+                jukeboxWidget.classList.toggle('playing', isPlaying);
+              }
+            };
+
             // When audio starts playing
             audio.addEventListener('play', () => {
               currentAudio = audio;
@@ -2452,6 +2719,20 @@
               if (thumb) {
                 thumb.classList.add('playing');
                 console.log('🎵 Record player arm engaged - vinyl spinning!');
+              }
+              toggleJukeboxGlow(true);
+            });
+
+            // Track playback progress and move tonearm progressively
+            audio.addEventListener('timeupdate', () => {
+              const thumb = document.querySelector('.now-playing-thumb');
+              if (thumb && audio.duration && !audio.paused) {
+                const progress = audio.currentTime / audio.duration;
+                // Tonearm moves from outer circumference (0deg) to inner groove (-15deg)
+                const startAngle = 0;      // outer circumference of record
+                const endAngle = -15;      // inner groove
+                const currentAngle = startAngle + progress * (endAngle - startAngle);
+                thumb.style.setProperty('--tonearm-angle', `${currentAngle}deg`);
               }
             });
 
@@ -2463,6 +2744,7 @@
                 thumb.classList.remove('playing');
                 console.log('⏸️ Record player arm lifted');
               }
+              toggleJukeboxGlow(false);
             });
 
             // When audio ends
@@ -2471,8 +2753,13 @@
 
               if (thumb) {
                 thumb.classList.remove('playing');
+                // Reset tonearm to resting position (same as parked outer edge)
+                setTimeout(() => {
+                  thumb.style.setProperty('--tonearm-angle', '30deg');
+                }, 100);
                 console.log('⏹️ Record finished playing');
               }
+              toggleJukeboxGlow(false);
             });
           }
         });

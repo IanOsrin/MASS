@@ -402,6 +402,18 @@ app.use(express.static(PUBLIC_DIR, {
   etag: true,
   lastModified: true
 }));
+const JUKEBOX_IMAGE_PATH = path.join(PUBLIC_DIR, 'img', 'jukebox.png');
+
+app.get('/img/jukebox.webp', async (req, res, next) => {
+  try {
+    await fs.access(JUKEBOX_IMAGE_PATH);
+    res.type('image/png');
+    res.sendFile(JUKEBOX_IMAGE_PATH);
+  } catch (err) {
+    if (err && (err.code === 'ENOENT' || err.code === 'ENAMETOOLONG')) return next();
+    next(err);
+  }
+});
 const fallbackAuthSecretPath = path.join(DATA_DIR, '.auth_secret');
 const RANDOM_SONG_CACHE_PATH = path.join(DATA_DIR, 'random-songs-cache.json');
 const RANDOM_SONG_SEED_LOCK_PATH = path.join(DATA_DIR, '.random-songs-cache.lock');
@@ -5236,10 +5248,17 @@ async function buildPlaylistSeedItems(count) {
   return cloneRandomSongItems(finalItems, count);
 }
 
-async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = null }) {
+async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = null, genreFilters = [] }) {
   const maxOffset = 5000;
   const fetchLimit = Math.min(120, Math.max(count * 5, 30));
   const baseQuery = { 'Album Title': '*' };
+  const normalizedGenres = Array.isArray(genreFilters)
+    ? genreFilters.map((value) => value.trim()).filter(Boolean)
+    : [];
+  const genreFieldCandidates = SEARCH_GENRE_FIELDS.filter(Boolean);
+  let activeGenreFieldIndex = 0;
+  let activeGenreFilters = normalizedGenres.slice(0, 5);
+  let currentGenreField = activeGenreFilters.length ? genreFieldCandidates[activeGenreFieldIndex] || null : null;
 
   let randomOffset;
   if (mode === 'initial' && typeof cacheSlot === 'number') {
@@ -5255,44 +5274,76 @@ async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = nul
     extrasMap: new Map()
   };
 
-  const runQuery = async (offset) => {
-    let queryWithVisibility = [applyVisibility(baseQuery)];
-    let r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
-      query: queryWithVisibility,
-      limit: fetchLimit,
-      offset
-    });
-    let json = await r.json().catch(() => ({}));
+  const buildQueries = () => {
+    const applyGenreField = (fieldName) => {
+      if (!fieldName || !activeGenreFilters.length) return [applyVisibility({ ...baseQuery })];
+      return activeGenreFilters.map((genre) => applyVisibility({ ...baseQuery, [fieldName]: `*${genre}*` }));
+    };
+    return applyGenreField(currentGenreField);
+  };
 
-    if (!r.ok && shouldFallbackVisibility(json)) {
-      console.warn('[random-songs] Visibility field not available; retrying without filter');
-      queryWithVisibility = [baseQuery];
-      r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
+  const runQuery = async (offset) => {
+    while (true) {
+      let queryWithVisibility = buildQueries();
+      let r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
         query: queryWithVisibility,
         limit: fetchLimit,
         offset
       });
-      json = await r.json().catch(() => ({}));
-    }
+      let json = await r.json().catch(() => ({}));
 
-    if (!r.ok) {
-      const msg = json?.messages?.[0]?.message || 'FM error';
-      const code = json?.messages?.[0]?.code;
-      throw new HttpError(500, { error: 'Random songs failed', status: r.status, detail: `${msg} (${code})` }, { offset, fetchLimit });
-    }
+      if (!r.ok && shouldFallbackVisibility(json)) {
+        console.warn('[random-songs] Visibility field not available; retrying without filter');
+        queryWithVisibility = queryWithVisibility.map((entry) => {
+          const clone = { ...entry };
+          delete clone[FM_VISIBILITY_FIELD];
+          delete clone['Tape Files::Visibility'];
+          return clone;
+        });
+        r = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
+          query: queryWithVisibility,
+          limit: fetchLimit,
+          offset
+        });
+        json = await r.json().catch(() => ({}));
+      }
+
+      if (!r.ok) {
+        const msg = json?.messages?.[0]?.message || 'FM error';
+        const code = json?.messages?.[0]?.code;
+        const codeStr = code === undefined || code === null ? '' : String(code);
+        if (codeStr === '102' && currentGenreField) {
+          const hasNext = activeGenreFieldIndex < genreFieldCandidates.length - 1;
+          if (hasNext) {
+            const previous = currentGenreField;
+            activeGenreFieldIndex += 1;
+            currentGenreField = genreFieldCandidates[activeGenreFieldIndex] || null;
+            console.warn(`[random-songs] Genre field "${previous}" unavailable; retrying with "${currentGenreField}"`);
+            continue;
+          }
+          if (activeGenreFilters.length) {
+            console.warn('[random-songs] Genre filters unavailable; retrying without genre filter');
+            activeGenreFilters = [];
+            currentGenreField = null;
+            continue;
+          }
+        }
+        throw new HttpError(500, { error: 'Random songs failed', status: r.status, detail: `${msg} (${codeStr})` }, { offset, fetchLimit });
+      }
 
     const rawData = json?.response?.data || [];
-    let filtered = rawData
+      let filtered = rawData
       .filter(record => recordIsVisible(record.fieldData || {}))
       .filter(record => hasValidAudio(record.fieldData || {}));
 
-    const beforeArtworkCount = filtered.length;
-    filtered = filtered.filter(record => hasValidArtwork(record.fieldData || {}));
-    if (beforeArtworkCount !== filtered.length) {
-      console.log(`[random-songs] Artwork filter (${mode}) ${beforeArtworkCount} → ${filtered.length} tracks`);
-    }
+      const beforeArtworkCount = filtered.length;
+      filtered = filtered.filter(record => hasValidArtwork(record.fieldData || {}));
+      if (beforeArtworkCount !== filtered.length) {
+        console.log(`[random-songs] Artwork filter (${mode}) ${beforeArtworkCount} → ${filtered.length} tracks`);
+      }
 
-    return filtered;
+      return filtered;
+    }
   };
 
   let dataWithVisibility = await runQuery(randomOffset);
@@ -5332,7 +5383,7 @@ async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = nul
   };
 }
 
-async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot }) {
+async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot, genreFilters = [] }) {
   const maxOffset = 5000;
   let randomOffset;
   if (!isLoadMore && typeof cacheSlot === 'number') {
@@ -5343,33 +5394,75 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot }) {
 
   const fetchLimit = Math.min(60, count * 4);
   const baseQuery = { 'Album Title': '*' };
+  const normalizedGenres = Array.isArray(genreFilters)
+    ? genreFilters.map((value) => value.trim()).filter(Boolean)
+    : [];
+  const genreFieldCandidates = SEARCH_GENRE_FIELDS.filter(Boolean);
+  let activeGenreFieldIndex = 0;
+  let activeGenreFilters = normalizedGenres.slice(0, 5);
+  let currentGenreField = activeGenreFilters.length ? genreFieldCandidates[activeGenreFieldIndex] || null : null;
 
-  let queryWithVisibility = [applyVisibility(baseQuery)];
-  let response = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
-    query: queryWithVisibility,
-    limit: fetchLimit,
-    offset: randomOffset
-  });
-  let json = await response.json().catch(() => ({}));
+  const buildGenreQueries = () => {
+    if (!activeGenreFilters.length || !currentGenreField) {
+      return [applyVisibility({ ...baseQuery })];
+    }
+    return activeGenreFilters.map((genre) => applyVisibility({ ...baseQuery, [currentGenreField]: `*${genre}*` }));
+  };
 
-  if (!response.ok && shouldFallbackVisibility(json)) {
-    console.warn('[random-songs] Visibility field not available; retrying without filter (legacy)');
-    queryWithVisibility = [baseQuery];
-    response = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
-      query: queryWithVisibility,
-      limit: fetchLimit,
-      offset: randomOffset
-    });
-    json = await response.json().catch(() => ({}));
-  }
+  const runLegacyQuery = async (offset) => {
+    while (true) {
+      let queryWithVisibility = buildGenreQueries();
+      let response = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
+        query: queryWithVisibility,
+        limit: fetchLimit,
+        offset
+      });
+      let json = await response.json().catch(() => ({}));
 
-  if (!response.ok) {
-    const msg = json?.messages?.[0]?.message || 'FM error';
-    const code = json?.messages?.[0]?.code;
-    throw new HttpError(500, { error: 'Random songs failed', status: response.status, detail: `${msg} (${code})` }, { offset: randomOffset, fetchLimit });
-  }
+      if (!response.ok && shouldFallbackVisibility(json)) {
+        console.warn('[random-songs] Visibility field not available; retrying without filter (legacy)');
+        queryWithVisibility = queryWithVisibility.map((entry) => {
+          const clone = { ...entry };
+          delete clone[FM_VISIBILITY_FIELD];
+          delete clone['Tape Files::Visibility'];
+          return clone;
+        });
+        response = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, {
+          query: queryWithVisibility,
+          limit: fetchLimit,
+          offset
+        });
+        json = await response.json().catch(() => ({}));
+      }
 
-  let rawData = json?.response?.data || [];
+      if (!response.ok) {
+        const msg = json?.messages?.[0]?.message || 'FM error';
+        const code = json?.messages?.[0]?.code;
+        const codeStr = code === undefined || code === null ? '' : String(code);
+        if (codeStr === '102' && currentGenreField) {
+          const hasNext = activeGenreFieldIndex < genreFieldCandidates.length - 1;
+          if (hasNext) {
+            const previous = currentGenreField;
+            activeGenreFieldIndex += 1;
+            currentGenreField = genreFieldCandidates[activeGenreFieldIndex] || null;
+            console.warn(`[random-songs] Legacy genre field "${previous}" unavailable; retrying with "${currentGenreField}"`);
+            continue;
+          }
+          if (activeGenreFilters.length) {
+            console.warn('[random-songs] Legacy retry without genre filters');
+            activeGenreFilters = [];
+            currentGenreField = null;
+            continue;
+          }
+        }
+        throw new HttpError(500, { error: 'Random songs failed', status: response.status, detail: `${msg} (${codeStr})` }, { offset, fetchLimit });
+      }
+
+      return json?.response?.data || [];
+    }
+  };
+
+  let rawData = await runLegacyQuery(randomOffset);
   let visible = rawData
     .filter(record => recordIsVisible(record.fieldData || {}))
     .filter(record => hasValidAudio(record.fieldData || {}))
@@ -5377,21 +5470,13 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot }) {
 
   if (!visible.length) {
     console.warn(`[random-songs] Legacy fetch empty at offset ${randomOffset}, retrying from start`);
-    const retryPayload = {
-      query: [applyVisibility(baseQuery)],
-      limit: fetchLimit,
-      offset: 1
-    };
-    const retryResponse = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, retryPayload);
-    const retryJson = await retryResponse.json().catch(() => ({}));
-    if (retryResponse.ok) {
-      rawData = retryJson?.response?.data || [];
+    const retryJson = await runLegacyQuery(1);
+    if (retryJson && retryJson.length) {
+      rawData = retryJson;
       visible = rawData
         .filter(record => recordIsVisible(record.fieldData || {}))
         .filter(record => hasValidAudio(record.fieldData || {}))
         .filter(record => hasValidArtwork(record.fieldData || {}));
-    } else {
-      console.warn('[random-songs] Legacy retry fetch failed', retryJson?.messages?.[0]);
     }
   }
 
@@ -5432,47 +5517,20 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot }) {
     const usedArtists = new Set(selected.map(record => resolveArtist(record.fieldData || {})));
     const selectedIds = new Set(selected.map(record => record.recordId));
     const additionalOffset = Math.floor(Math.random() * maxOffset) + 1;
-    let secondQueryUsesVisibility = Boolean(FM_VISIBILITY_FIELD);
-    let secondQueryPayload = {
-      query: [secondQueryUsesVisibility ? applyVisibility(baseQuery) : baseQuery],
-      limit: fetchLimit,
-      offset: additionalOffset
-    };
+    const additionalRawData = await runLegacyQuery(additionalOffset);
+    let additionalVisible = additionalRawData
+      .filter(record => recordIsVisible(record.fieldData || {}))
+      .filter(record => hasValidAudio(record.fieldData || {}))
+      .filter(record => hasValidArtwork(record.fieldData || {}));
+    const shuffledTracks = shuffleArray(additionalVisible.slice());
 
-    let secondResponse = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, secondQueryPayload);
-    let secondJson = await secondResponse.json().catch(() => ({}));
-    if (!secondResponse.ok && secondQueryUsesVisibility && shouldFallbackVisibility(secondJson)) {
-      console.warn('[random-songs] Visibility field not available for legacy retry; retrying without filter');
-      secondQueryUsesVisibility = false;
-      secondQueryPayload = {
-        query: [baseQuery],
-        limit: fetchLimit,
-        offset: additionalOffset
-      };
-      secondResponse = await fmPost(`/layouts/${encodeURIComponent(FM_LAYOUT)}/_find`, secondQueryPayload);
-      secondJson = await secondResponse.json().catch(() => ({}));
-    }
-
-    if (secondResponse.ok) {
-      let additionalRawData = secondJson?.response?.data || [];
-      if (secondQueryUsesVisibility) {
-        additionalRawData = additionalRawData.filter(record => recordIsVisible(record.fieldData || {}));
-      }
-      additionalRawData = additionalRawData
-        .filter(record => hasValidAudio(record.fieldData || {}))
-        .filter(record => hasValidArtwork(record.fieldData || {}));
-      const shuffledTracks = shuffleArray(additionalRawData.slice());
-
-      for (const track of shuffledTracks) {
-        if (selected.length >= count) break;
-        const artist = resolveArtist(track.fieldData || {});
-        if (usedArtists.has(artist) || selectedIds.has(track.recordId)) continue;
-        selected.push(track);
-        selectedIds.add(track.recordId);
-        usedArtists.add(artist);
-      }
-    } else {
-      console.warn('[random-songs] Legacy secondary fetch failed', secondJson?.messages?.[0]);
+    for (const track of shuffledTracks) {
+      if (selected.length >= count) break;
+      const artist = resolveArtist(track.fieldData || {});
+      if (usedArtists.has(artist) || selectedIds.has(track.recordId)) continue;
+      selected.push(track);
+      selectedIds.add(track.recordId);
+      usedArtists.add(artist);
     }
   }
 
@@ -5555,12 +5613,54 @@ app.get('/api/random-songs', async (req, res) => {
   try {
     const count = Math.max(1, Math.min(50, parseInt(req.query.count || '8', 10)));
 
+    const rawGenreInput = req.query.genre;
+    const genreFragments = [];
+    if (Array.isArray(rawGenreInput)) {
+      rawGenreInput.forEach((value) => {
+        if (value === undefined || value === null) return;
+        String(value)
+          .split(/[,\|]/)
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .forEach((part) => genreFragments.push(part));
+      });
+    } else if (rawGenreInput !== undefined && rawGenreInput !== null) {
+      String(rawGenreInput)
+        .split(/[,\|]/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .forEach((part) => genreFragments.push(part));
+    }
+
+    const MAX_GENRE_FILTERS = 5;
+    const genreFilters = [];
+    const normalizedGenreKeys = new Set();
+    for (const fragment of genreFragments) {
+      if (genreFilters.length >= MAX_GENRE_FILTERS) break;
+      const validation = validators.searchQuery(fragment);
+      if (!validation.valid) {
+        return res.status(400).json({ error: 'Invalid genre filter', detail: validation.error });
+      }
+      const normalizedKey = validation.value.toLowerCase();
+      if (normalizedGenreKeys.has(normalizedKey)) continue;
+      normalizedGenreKeys.add(normalizedKey);
+      genreFilters.push(validation.value);
+    }
+
+    const genreCacheKey = genreFilters.length
+      ? genreFilters.map((g) => g.toLowerCase()).sort().join('|')
+      : '';
+
+    console.log(`[random-songs] Parsed genre filters:`, genreFilters, `(count: ${genreFilters.length})`);
+
     // If _t parameter is present, user clicked "Load More" - bypass cache for fresh songs
     const isLoadMore = !!req.query._t;
     const cacheSlot = !isLoadMore ? Math.floor(Date.now() / 30000) : null;
-    const cacheKey = computeCacheKey(count, cacheSlot);
+    const cacheKey = !isLoadMore
+      ? `${computeCacheKey(count, cacheSlot)}:${genreCacheKey || 'all'}`
+      : null;
 
-    if (!isLoadMore && cacheKey) {
+    if (!isLoadMore && cacheKey && !genreFilters.length) {
       const cached = searchCache.get(cacheKey);
       if (cached) {
         console.log('[CACHE HIT] random-songs (30s window)');
@@ -5570,14 +5670,16 @@ app.get('/api/random-songs', async (req, res) => {
       }
     }
 
-    if (!isLoadMore) {
+    if (!isLoadMore && !genreFilters.length) {
       // Warm the buffer in the background with featured albums if needed
       if (bufferUniqueArtistCount() < RANDOM_SONG_BUFFER_WARM_COUNT) {
         void warmRandomSongBuffer(count * 2);
       }
     }
 
-    if (isLoadMore) {
+    console.log(`[random-songs] Buffer check: isLoadMore=${isLoadMore}, genreFilters.length=${genreFilters.length}, will use buffer=${isLoadMore && !genreFilters.length}`);
+
+    if (isLoadMore && !genreFilters.length) {
       // First try the buffer for truly random songs
       const buffered = bufferTake(count);
       if (buffered && buffered.length === count) {
@@ -5600,7 +5702,8 @@ app.get('/api/random-songs', async (req, res) => {
       batch = await fetchRandomSongsBatch({
         count,
         mode: isLoadMore ? 'loadMore' : 'initial',
-        cacheSlot
+        cacheSlot,
+        genreFilters
       });
     } catch (err) {
       if (!isAbortError(err)) throw err;
@@ -5608,7 +5711,8 @@ app.get('/api/random-songs', async (req, res) => {
       batch = await fetchRandomSongsLegacy({
         count,
         isLoadMore,
-        cacheSlot
+        cacheSlot,
+        genreFilters
       });
     }
 
@@ -5617,7 +5721,8 @@ app.get('/api/random-songs', async (req, res) => {
       batch = await fetchRandomSongsLegacy({
         count,
         isLoadMore,
-        cacheSlot
+        cacheSlot,
+        genreFilters
       });
     }
 
@@ -5638,7 +5743,7 @@ app.get('/api/random-songs', async (req, res) => {
     const items = mapRecordsToItems(batch.selected);
     const result = { ok: true, items, total: items.length };
 
-    if (!isLoadMore && cacheKey) {
+    if (!isLoadMore && cacheKey && !genreFilters.length) {
       searchCache.set(cacheKey, result);
       res.setHeader('X-Cache-Hit', 'false');
       res.setHeader('Cache-Control', 'public, max-age=30');
@@ -5647,9 +5752,11 @@ app.get('/api/random-songs', async (req, res) => {
       console.log(`[LOAD MORE] Fetched ${items.length} songs (offset ${batch.meta?.randomOffset ?? 'n/a'}, limit ${batch.meta?.fetchLimit ?? 'n/a'})`);
     }
 
-    updatePersistedRandomSongs(items);
-    if (bufferUniqueArtistCount() < RANDOM_SONG_BUFFER_WARM_COUNT) {
-      void warmRandomSongBuffer(count * 2);
+    if (!genreFilters.length) {
+      updatePersistedRandomSongs(items);
+      if (bufferUniqueArtistCount() < RANDOM_SONG_BUFFER_WARM_COUNT) {
+        void warmRandomSongBuffer(count * 2);
+      }
     }
 
     return res.json(result);

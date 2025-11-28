@@ -1579,7 +1579,36 @@
     const GENRE_FETCH_LIMIT = GENRE_RESULT_LIMIT * 10;
     const TRENDING_RESULT_LIMIT = 5;
     const GENRE_TITLE = 'Discover by Genre';
-    let selectedGenres = [];
+    const GENRE_PREF_STORAGE_KEY = 'madmusic.genrePreferences';
+    let selectedGenres = loadStoredGenrePreferences();
+
+    function loadStoredGenrePreferences() {
+      try {
+        const raw = localStorage.getItem(GENRE_PREF_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        const cleaned = parsed
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter(Boolean);
+        if (cleaned.length > MAX_GENRE_SELECTION) {
+          return cleaned.slice(0, MAX_GENRE_SELECTION);
+        }
+        return cleaned;
+      } catch (err) {
+        console.warn('[MADMusic] Failed to load genre preferences', err);
+        return [];
+      }
+    }
+
+    function persistGenrePreferences(genres) {
+      try {
+        const payload = Array.isArray(genres) ? genres : [];
+        localStorage.setItem(GENRE_PREF_STORAGE_KEY, JSON.stringify(payload));
+      } catch (err) {
+        console.warn('[MADMusic] Failed to save genre preferences', err);
+      }
+    }
     let randomItems = [];
     let currentGenreRequestId = 0;
     let genreFetchController = null;
@@ -1795,6 +1824,7 @@
       }
 
       selectedGenres = [...selectedGenres, label];
+      persistGenrePreferences(selectedGenres);
       resetGenrePagination();
       setGenreFeedback('');
       updateGenreTags();
@@ -1814,6 +1844,7 @@
       );
       if (nextGenres.length === selectedGenres.length) return;
       selectedGenres = nextGenres;
+      persistGenrePreferences(selectedGenres);
       resetGenrePagination();
       setGenreFeedback('');
       updateGenreTags();
@@ -1823,6 +1854,7 @@
     function clearSelectedGenres() {
       if (!selectedGenres.length) return;
       selectedGenres = [];
+      persistGenrePreferences(selectedGenres);
       setGenreFeedback('');
       updateGenreTags();
       resetGenreSelect();
@@ -3051,7 +3083,7 @@
       loadFeatured();
       loadHighlights();
       loadTrending();
-      loadRandom(true);
+      syncGenreFilters({ forceReloadRandom: true });
     });
   </script>
 </body>

@@ -329,10 +329,26 @@
         "audioField": "mp3",
         "artworkField": "Artwork::Picture",
         "addedAt": "2025-11-27T17:44:42.935Z"
+      },
+      {
+        "id": "6aeb8fe7-2c30-4abc-91c2-b595f4c45c07",
+        "trackRecordId": "11497",
+        "name": "The Leopard",
+        "albumTitle": "",
+        "albumArtist": "Nyanga",
+        "catalogue": "HEDL 5598",
+        "trackArtist": "Nyanga",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/6DAA7A04FF24D9E6881C47CEBC8963F14E5A661FDBCD8C49FBF01EFC6A9EE387.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F6DAA7A04FF24D9E6881C47CEBC8963F14E5A661FDBCD8C49FBF01EFC6A9EE387.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/3D8DDD229E734BF0253B13C080E1227A8180F25049986371A251FFB662AFBD29.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-11-28T09:56:07.003Z"
       }
     ],
     "createdAt": "2025-10-30T18:05:09.961Z",
-    "updatedAt": "2025-11-27T17:44:42.935Z",
+    "updatedAt": "2025-11-28T09:56:07.003Z",
     "shareId": "8baf254cad054e3cb0bc27930997f643",
     "sharedAt": "2025-11-20T17:51:22.192Z"
   },
@@ -472,10 +488,42 @@
         "audioField": "mp3",
         "artworkField": "Artwork::Picture",
         "addedAt": "2025-11-27T17:45:19.949Z"
+      },
+      {
+        "id": "3ad8b716-d007-4932-b22b-9948fb5fa85c",
+        "trackRecordId": "1290",
+        "name": "Maroma",
+        "albumTitle": "",
+        "albumArtist": "The Times",
+        "catalogue": "TUH 10",
+        "trackArtist": "The Times",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/B2CD23D35448867E2E7EE9763E1CF642E8D5BBD73E8F937DB00AE0F88F884A50.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2FB2CD23D35448867E2E7EE9763E1CF642E8D5BBD73E8F937DB00AE0F88F884A50.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/9E56D1DD5F068B16FC840ADD48D0A6BDF937FECDCB9DE032CCD200255E203863.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-11-27T22:42:55.184Z"
+      },
+      {
+        "id": "11a466c4-e506-46d9-98c8-d069a1b5e67a",
+        "trackRecordId": "129014",
+        "name": "Vha Mbengelani?",
+        "albumTitle": "",
+        "albumArtist": "Takalani Band",
+        "catalogue": "BL BC 360",
+        "trackArtist": "Takalani Band",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/6F4FBFFC088D00FF4DE0D55B51A353667268F71C304196673172C8DD4D5AE102.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F6F4FBFFC088D00FF4DE0D55B51A353667268F71C304196673172C8DD4D5AE102.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/C4F67D9CF0DE2AA828B98A10F6969414EF9F628FD4B2FC70A2BD6F4D01988869.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-11-28T19:32:08.821Z"
       }
     ],
     "createdAt": "2025-10-30T18:08:13.410Z",
-    "updatedAt": "2025-11-27T17:45:19.949Z",
+    "updatedAt": "2025-11-28T19:32:08.821Z",
     "shareId": "24feb12884b946bba337b96a99ebabeb",
     "sharedAt": "2025-11-20T17:57:53.529Z"
   },
@@ -613,9 +661,50 @@
         "audioField": "mp3",
         "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/4A7E2AC0E2DE863C5BAC90C9B22A0B81500872AB9C8BA41F1703F2009FF353BE.jpg?RCType=RCFileProcessor",
         "artworkField": "Artwork::Picture"
+      },
+      {
+        "id": "3cd36c2b-021e-49b1-9736-f530b999d85c",
+        "trackRecordId": "3894",
+        "name": "Sdudla",
+        "albumTitle": "",
+        "albumArtist": "Alexandra Souls",
+        "catalogue": "HBL 5500",
+        "trackArtist": "Alexandra Souls",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/92DE8B7D4A022ED188E8EB827F8E15B9CE96A29A9AFB720938B29F35DDBEB8F0.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F92DE8B7D4A022ED188E8EB827F8E15B9CE96A29A9AFB720938B29F35DDBEB8F0.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/666E581280AE952C8E1EA36A462C9940C7D8C4C5C05FEA49285B285ECDA32CAB.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-11-28T09:44:52.280Z"
       }
     ],
     "createdAt": "2025-11-02T09:33:20.996Z",
-    "updatedAt": "2025-11-02T09:33:20.996Z"
+    "updatedAt": "2025-11-28T09:44:52.280Z"
+  },
+  {
+    "id": "cac27b4c-2a1b-4271-aa35-7d34638a7cad",
+    "userId": "4",
+    "name": "Afro Hits",
+    "tracks": [
+      {
+        "id": "b33709c9-71a5-40f9-8490-12e4a34a5f33",
+        "trackRecordId": "11497",
+        "name": "The Leopard",
+        "albumTitle": "",
+        "albumArtist": "Nyanga",
+        "catalogue": "HEDL 5598",
+        "trackArtist": "Nyanga",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/6DAA7A04FF24D9E6881C47CEBC8963F14E5A661FDBCD8C49FBF01EFC6A9EE387.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2F6DAA7A04FF24D9E6881C47CEBC8963F14E5A661FDBCD8C49FBF01EFC6A9EE387.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/3D8DDD229E734BF0253B13C080E1227A8180F25049986371A251FFB662AFBD29.jpg?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-11-28T09:56:42.611Z"
+      }
+    ],
+    "createdAt": "2025-11-28T09:56:42.550Z",
+    "updatedAt": "2025-11-28T09:56:42.611Z"
   }
 ]
