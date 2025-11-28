@@ -565,10 +565,10 @@
     .now-playing-thumb::after {
       content: '';
       position: absolute;
-      top: 8%;
+      top: 10%;
       right: -30%;
       width: 88%;
-      height: 8px;
+      height: 5px;
       background: linear-gradient(to right,
         #1a1a1a 0%,
         #2d2d2d 8%,
@@ -578,19 +578,19 @@
         #3a3a3a 70%,
         #2a2a2a 85%,
         transparent 100%);
-      border-radius: 4px 0 0 4px;
+      border-radius: 3px 0 0 3px;
       transform-origin: 96% center;
       transform: rotate(var(--tonearm-angle, 30deg));
       box-shadow:
-        0 4px 8px rgba(0, 0, 0, 0.7),
+        0 3px 6px rgba(0, 0, 0, 0.7),
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
         inset 0 -1px 0 rgba(0, 0, 0, 0.4),
-        inset 2px 0 3px rgba(0, 0, 0, 0.3);
+        inset 2px 0 2px rgba(0, 0, 0, 0.3);
       transition: transform 1s linear;
       z-index: 10;
       pointer-events: none;
-      border-top: 1px solid rgba(255, 255, 255, 0.05);
-      border-bottom: 1px solid rgba(0, 0, 0, 0.5);
+      border-top: 0.5px solid rgba(255, 255, 255, 0.05);
+      border-bottom: 0.5px solid rgba(0, 0, 0, 0.5);
     }
 
     .cover-wrap img {
@@ -2728,9 +2728,10 @@
               const thumb = document.querySelector('.now-playing-thumb');
               if (thumb && audio.duration && !audio.paused) {
                 const progress = audio.currentTime / audio.duration;
-                // Tonearm moves from outer circumference (0deg) to inner groove (-15deg)
-                const startAngle = 0;      // outer circumference of record
-                const endAngle = -15;      // inner groove
+                // Tonearm moves from outer circumference (8deg) to inner groove (-22deg)
+                // 8deg positions needle precisely on outer edge of vinyl
+                const startAngle = 8;      // outer circumference of record (precise landing)
+                const endAngle = -22;      // inner groove
                 const currentAngle = startAngle + progress * (endAngle - startAngle);
                 thumb.style.setProperty('--tonearm-angle', `${currentAngle}deg`);
               }
