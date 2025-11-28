@@ -520,10 +520,26 @@
         "audioField": "mp3",
         "artworkField": "Artwork::Picture",
         "addedAt": "2025-11-28T19:32:08.821Z"
+      },
+      {
+        "id": "6585b6b7-2cb6-424b-b0c7-c5d4c51240a5",
+        "trackRecordId": "48100",
+        "name": "Herdboy",
+        "albumTitle": "",
+        "albumArtist": "Nico Carstens",
+        "catalogue": "MFP 57038",
+        "trackArtist": "Nico Carstens",
+        "mp3": "https://digitalcupboard.app/Streaming_SSL/Additional_1/EB2F4B57D524C404042C461154BAB909A8A12ADD778AE17785518F2AFD9B74F9.mp3?RCType=RCFileProcessor",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fdigitalcupboard.app%2FStreaming_SSL%2FAdditional_1%2FEB2F4B57D524C404042C461154BAB909A8A12ADD778AE17785518F2AFD9B74F9.mp3%3FRCType%3DRCFileProcessor",
+        "seq": null,
+        "artwork": "https://digitalcupboard.app/Streaming_SSL/Additional_1/00D66DB2FB469CCD4D7FE46D9580E33A83EFF6AE119DF626745B174B28FC544F.png?RCType=RCFileProcessor",
+        "audioField": "mp3",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-11-28T20:53:25.791Z"
       }
     ],
     "createdAt": "2025-10-30T18:08:13.410Z",
-    "updatedAt": "2025-11-28T19:32:08.821Z",
+    "updatedAt": "2025-11-28T20:53:25.791Z",
     "shareId": "24feb12884b946bba337b96a99ebabeb",
     "sharedAt": "2025-11-20T17:57:53.529Z"
   },

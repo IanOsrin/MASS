@@ -5655,20 +5655,21 @@ app.get('/api/random-songs', async (req, res) => {
 
     // If _t parameter is present, user clicked "Load More" - bypass cache for fresh songs
     const isLoadMore = !!req.query._t;
-    const cacheSlot = !isLoadMore ? Math.floor(Date.now() / 30000) : null;
-    const cacheKey = !isLoadMore
-      ? `${computeCacheKey(count, cacheSlot)}:${genreCacheKey || 'all'}`
-      : null;
 
-    if (!isLoadMore && cacheKey && !genreFilters.length) {
-      const cached = searchCache.get(cacheKey);
-      if (cached) {
-        console.log('[CACHE HIT] random-songs (30s window)');
-        res.setHeader('X-Cache-Hit', 'true');
-        res.setHeader('Cache-Control', 'public, max-age=30');
-        return res.json(cached);
-      }
-    }
+    // Disable caching for random songs to ensure true randomness every time
+    // const cacheSlot = !isLoadMore ? Math.floor(Date.now() / 30000) : null;
+    // const cacheKey = !isLoadMore
+    //   ? `${computeCacheKey(count, cacheSlot)}:${genreCacheKey || 'all'}`
+    //   : null;
+    // if (!isLoadMore && cacheKey && !genreFilters.length) {
+    //   const cached = searchCache.get(cacheKey);
+    //   if (cached) {
+    //     console.log('[CACHE HIT] random-songs (30s window)');
+    //     res.setHeader('X-Cache-Hit', 'true');
+    //     res.setHeader('Cache-Control', 'public, max-age=30');
+    //     return res.json(cached);
+    //   }
+    // }
 
     if (!isLoadMore && !genreFilters.length) {
       // Warm the buffer in the background with featured albums if needed
