@@ -36,3 +36,10 @@ export const trendingCache = new LRUCache({
   updateAgeOnGet: false, // Don't reset TTL on access - we want it to refresh daily
   updateAgeOnHas: false
 });
+
+export const genreCache = new LRUCache({
+  max: 500, // Cache genre searches (each genre combo gets an entry)
+  ttl: 1000 * 60 * 30, // 30 minutes - genres don't change often
+  updateAgeOnGet: true, // Keep popular genre combos cached
+  updateAgeOnHas: true
+});

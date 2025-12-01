@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <!-- Resource hints for better performance -->
-  <link rel="preconnect" href="/" crossorigin>
   <link rel="dns-prefetch" href="/">
   <link rel="preload" href="/app.min.js?v=57" as="script">
   <title>MAD JUKEBOX - Bakelite Edition</title>
@@ -124,12 +123,17 @@
       position: sticky;
       top: 0;
       background: linear-gradient(180deg, rgba(250, 247, 240, 0.98) 0%, rgba(240, 235, 224, 0.95) 100%);
-      backdrop-filter: saturate(180%) blur(12px);
       z-index: 10;
       box-shadow:
         0 4px 20px rgba(0, 0, 0, 0.15),
         inset 0 1px 0 rgba(255, 255, 255, 0.6),
         inset 0 -1px 0 rgba(200, 184, 154, 0.4);
+    }
+
+    @media (min-width: 768px) {
+      header {
+        backdrop-filter: saturate(180%) blur(12px);
+      }
     }
     .header-main{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:16px;justify-content:space-between;flex-wrap:wrap;}
     .header-logo{flex-shrink:0;max-height:60px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.25));}
@@ -1225,7 +1229,7 @@
 </head>
 <body>
   <div class="jukebox-backdrop" aria-hidden="true">
-    <img src="/img/jukebox.png" alt="">
+    <img src="/img/jukebox.png" alt="" loading="lazy" decoding="async">
   </div>
 
   <!-- Access Token Entry Overlay -->
@@ -1271,7 +1275,7 @@
 
   <header>
     <div class="header-main">
-      <img src="/img/MAD_Logo.png" alt="MAD Logo" class="header-logo">
+      <img src="/img/MAD_Logo.png" alt="MAD Logo" class="header-logo" loading="lazy" decoding="async">
       <h1 style="
         font-size: 36px;
         font-weight: 900;
@@ -1460,7 +1464,7 @@
           </div>
           <div id="publicPlaylistStatus" class="public-playlist-status" hidden></div>
           <div id="publicPlaylistHero" class="public-playlist-hero" hidden>
-            <img id="publicPlaylistArt" alt="Playlist artwork" />
+            <img id="publicPlaylistArt" alt="Playlist artwork" loading="lazy" decoding="async" />
           </div>
           <ul id="publicPlaylistTracks" class="tracks public-playlist-tracks"></ul>
           <div id="publicPlaylistEmpty" class="playlist-empty" hidden>No tracks in this playlist.</div>
@@ -1472,7 +1476,7 @@
           </div>
           <div id="sharedPlaylistStatus" class="public-playlist-status" hidden></div>
           <div id="sharedPlaylistHero" class="public-playlist-hero" hidden>
-            <img id="sharedPlaylistArt" alt="Playlist artwork" />
+            <img id="sharedPlaylistArt" alt="Playlist artwork" loading="lazy" decoding="async" />
           </div>
           <ul id="sharedPlaylistTracks" class="tracks public-playlist-tracks"></ul>
           <div id="sharedPlaylistEmpty" class="playlist-empty" hidden>No tracks are available in this shared playlist.</div>
@@ -1482,7 +1486,7 @@
           </div>
         </section>
         <div id="loadingIndicator" class="loading-indicator">
-          <img src="/img/placeholder.png" alt="" class="loading-background" />
+          <img src="/img/placeholder.png" alt="" class="loading-background" loading="lazy" decoding="async" />
           <div class="loading-spinner"></div>
           <div class="loading-text">Loading albums...</div>
         </div>
@@ -1597,11 +1601,11 @@
   <!-- Image Lightbox for enlarged album artwork -->
   <div id="imageLightbox" class="image-lightbox" aria-hidden="true">
     <button id="imageLightboxClose" class="image-lightbox-close" aria-label="Close">&times;</button>
-    <img id="imageLightboxImg" alt="Album artwork" />
+    <img id="imageLightboxImg" alt="Album artwork" loading="lazy" decoding="async" />
   </div>
 
   <div class="jukebox-widget" id="jukeboxWidget">
-    <img src="/img/jukebox.png" alt="MAD Jukebox" class="jukebox-widget-image">
+    <img src="/img/jukebox.png" alt="MAD Jukebox" class="jukebox-widget-image" loading="lazy" decoding="async">
     <div class="jukebox-widget-overlay">
       <span class="jukebox-label">MAD JUKEBOX</span>
       <button type="button" class="jukebox-widget-btn" id="jukeboxShuffleButton">

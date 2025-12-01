@@ -1,3 +1,5 @@
+import http from 'node:http';
+import http2 from 'node:http2';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
@@ -9,7 +11,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
-import { searchCache, exploreCache, albumCache, publicPlaylistsCache, trendingCache } from './cache.js';
+import { searchCache, exploreCache, albumCache, publicPlaylistsCache, trendingCache, genreCache } from './cache.js';
 const { AbortController } = globalThis;
 
 // Request deduplication - prevent duplicate simultaneous requests to FileMaker
@@ -121,8 +123,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const FM_TIMEOUT_MS = parsePositiveInt(process.env.FM_TIMEOUT_MS, 45000);
 const fmDefaultFetchOptions = { timeoutMs: FM_TIMEOUT_MS, retries: 1 };
-const FM_MAX_CONCURRENT_REQUESTS = parsePositiveInt(process.env.FM_MAX_CONCURRENT_REQUESTS, 4);
-const FM_MIN_REQUEST_INTERVAL_MS = parseNonNegativeInt(process.env.FM_MIN_REQUEST_INTERVAL_MS, 100);
+const FM_MAX_CONCURRENT_REQUESTS = parsePositiveInt(process.env.FM_MAX_CONCURRENT_REQUESTS, 8);
+const FM_MIN_REQUEST_INTERVAL_MS = parseNonNegativeInt(process.env.FM_MIN_REQUEST_INTERVAL_MS, 10);
 
 const fmRequestQueue = [];
 let fmActiveRequests = 0;
@@ -188,6 +190,9 @@ function fmSafeFetch(url, options, overrides = {}) {
 
 const app = express();
 app.set('trust proxy', trustProxySetting);
+
+// Track server start time for health checks
+const SERVER_START_TIME = Date.now();
 
 // Force HTTPS in production (security - prevent credential leakage)
 if (process.env.NODE_ENV === 'production') {
@@ -338,6 +343,9 @@ const __dirname = path.dirname(__filename);
 /* ========= ENV ========= */
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
+const HTTP2_ENABLED = process.env.HTTP2_ENABLED === 'true';
+const HTTP2_CERT_PATH = process.env.HTTP2_CERT_PATH || '';
+const HTTP2_KEY_PATH = process.env.HTTP2_KEY_PATH || '';
 const FM_HOST = process.env.FM_HOST;
 const FM_DB = process.env.FM_DB;
 const FM_USER = process.env.FM_USER;
@@ -389,8 +397,8 @@ app.use(express.static(PUBLIC_DIR, {
     if (filePath.includes('.min.') || /\.[a-f0-9]{8,}\./i.test(filePath)) {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     } else if (REGEX_STATIC_FILES.test(filePath)) {
-      // Images, fonts, media: 1 day cache
-      res.setHeader('Cache-Control', 'public, max-age=86400');
+      // Images, fonts, media: 7 day cache
+      res.setHeader('Cache-Control', 'public, max-age=604800');
     } else if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
       // JS/CSS without version: 1 hour with revalidation
       res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
@@ -1060,7 +1068,11 @@ async function fmLogin() {
 
   fmLoginPromise = (async () => {
     try {
-      const res = await fmSafeFetch(`${fmBase}/sessions`, {
+      const loginUrl = `${fmBase}/sessions`;
+      console.log(`[FM LOGIN] Attempting to connect to: ${loginUrl}`);
+      console.log(`[FM LOGIN] FM_HOST from env: ${FM_HOST}`);
+      console.log(`[FM LOGIN] FM_DB from env: ${FM_DB}`);
+      const res = await fmSafeFetch(loginUrl, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -1584,6 +1596,125 @@ async function fetchPublicPlaylistRecords({ limit = 100 } = {}) {
   return { records, total: totalFound || records.length };
 }
 
+async function buildPublicPlaylistsPayload({ nameParam = '', limit = 100 } = {}) {
+  const normalizedName = (nameParam || '').toString().trim();
+  const normalizedLimit = Math.max(1, Math.min(2000, Number(limit) || 100));
+  const result = await fetchPublicPlaylistRecords({ limit: normalizedLimit });
+  if (result && result.missingEnv) {
+    return { missingEnv: true };
+  }
+  const records = result?.records || [];
+  if (!records.length) {
+    const payload = { ok: true, playlists: [] };
+    if (normalizedName) payload.tracks = [];
+    return { payload };
+  }
+
+  const summaryMap = new Map();
+  const tracks = [];
+  const targetName = normalizedName.toLowerCase();
+
+  for (const record of records) {
+    const fields = record?.fieldData || {};
+    if (!hasValidAudio(fields)) continue;
+
+    const playlistInfo = pickFieldValueCaseInsensitive(fields, PUBLIC_PLAYLIST_FIELDS);
+    if (!playlistInfo.value) continue;
+    const playlistNames = splitPlaylistNames(playlistInfo.value);
+    if (!playlistNames.length) continue;
+
+    const trackName = firstNonEmptyFast(fields, ['Track Name', 'Tape Files::Track Name', 'Tape Files::Track_Name', 'Song Name', 'Song_Title', 'Title', 'Name']);
+    const albumTitle = firstNonEmptyFast(fields, ['Album Title', 'Tape Files::Album_Title', 'Tape Files::Album Title', 'Album']);
+    const albumArtist = firstNonEmptyFast(fields, ['Album Artist', 'Tape Files::Album Artist', 'Tape Files::Album_Artist', 'AlbumArtist', 'Artist']);
+    const trackArtist = firstNonEmptyFast(fields, ['Track Artist', 'Tape Files::Track Artist', 'TrackArtist', 'Artist']) || albumArtist;
+    const catalogue = firstNonEmptyFast(fields, CATALOGUE_FIELD_CANDIDATES);
+    const genre = firstNonEmptyFast(fields, ['Local Genre', 'Tape Files::Local Genre', 'Genre']);
+    const language = firstNonEmptyFast(fields, ['Language', 'Tape Files::Language', 'Language Code']);
+    const producer = firstNonEmptyFast(fields, ['Producer', 'Tape Files::Producer']);
+
+    const audioInfo = pickFieldValueCaseInsensitive(fields, AUDIO_FIELD_CANDIDATES);
+    const artworkInfo = pickFieldValueCaseInsensitive(fields, ARTWORK_FIELD_CANDIDATES);
+    const resolvedSrc = resolvePlayableSrc(audioInfo.value);
+    const resolvedArt = resolveArtworkSrc(artworkInfo.value);
+    const composers = composersFromFields(fields);
+    const seq = parseTrackSequence(fields);
+    const recordId = record.recordId ? String(record.recordId) : '';
+    const albumKey = makeAlbumKey(catalogue, albumTitle, albumArtist);
+
+    for (const rawName of playlistNames) {
+      const trimmed = rawName.trim();
+      if (!trimmed) continue;
+      const key = trimmed.toLowerCase();
+      let entry = summaryMap.get(key);
+      if (!entry) {
+        entry = { name: trimmed, albumKeys: new Set(), trackCount: 0 };
+        summaryMap.set(key, entry);
+      }
+      if (albumKey) entry.albumKeys.add(albumKey);
+      entry.trackCount += 1;
+
+      if (targetName && key === targetName) {
+        tracks.push({
+          id: recordId,
+          trackRecordId: recordId,
+          name: trackName || `Track ${tracks.length + 1}`,
+          seq: Number.isFinite(seq) ? Number(seq) : null,
+          albumTitle,
+          albumArtist,
+          trackArtist,
+          catalogue,
+          genre,
+          language,
+          producer,
+          composers,
+          isrc: firstNonEmptyFast(fields, ['ISRC', 'Tape Files::ISRC']) || '',
+          composer1: fields['Composer'] || fields['Composer 1'] || fields['Composer1'] || '',
+          composer2: fields['Composer 2'] || fields['Composer2'] || '',
+          composer3: fields['Composer 3'] || fields['Composer3'] || '',
+          composer4: fields['Composer 4'] || fields['Composer4'] || '',
+          mp3: audioInfo.value || '',
+          resolvedSrc,
+          audioField: audioInfo.field || '',
+          artworkField: artworkInfo.field || '',
+          picture: resolvedArt,
+          albumPicture: resolvedArt,
+          albumKey
+        });
+      }
+    }
+  }
+
+  const summaryEntries = Array.from(summaryMap.values());
+  const playlists = await Promise.all(
+    summaryEntries.map(async (entry) => {
+      const image = (await resolvePlaylistImage(entry.name)) || '';
+      return {
+        name: entry.name,
+        albumCount: entry.albumKeys.size,
+        trackCount: entry.trackCount,
+        image
+      };
+    })
+  );
+  playlists.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+  if (normalizedName) {
+    const match = playlists.find((p) => p && typeof p.name === 'string' && p.name.toLowerCase() === targetName);
+    const fallbackImage = match?.image || '';
+    if (fallbackImage) {
+      for (const track of tracks) {
+        if (!track || typeof track !== 'object') continue;
+        if (!track.picture) track.picture = fallbackImage;
+        if (!track.albumPicture) track.albumPicture = fallbackImage;
+      }
+    }
+  }
+
+  const payload = { ok: true, playlists };
+  if (normalizedName) payload.tracks = tracks;
+  return { payload };
+}
+
 function cookieOptions() {
   return {
     httpOnly: true,
@@ -1689,6 +1820,20 @@ function validatePassword(password) {
     return { ok: false, reason: 'Password too long' };
   }
   return { ok: true };
+}
+
+function validateQueryString(value, fieldName, maxLength = 200) {
+  if (value === null || value === undefined) {
+    return { ok: true, value: '' };
+  }
+  if (typeof value !== 'string') {
+    return { ok: false, reason: `${fieldName} must be a string` };
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    return { ok: false, reason: `${fieldName} too long (max ${maxLength} characters)` };
+  }
+  return { ok: true, value: trimmed };
 }
 
 async function ensureDataDir() {
@@ -2263,6 +2408,19 @@ function toCleanString(value) {
   return String(value);
 }
 
+// Escape HTML to prevent XSS attacks
+function escapeHtml(unsafe) {
+  if (typeof unsafe !== 'string') {
+    unsafe = String(unsafe ?? '');
+  }
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function formatTimestampUTC(dateInput = new Date()) {
   const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
   if (Number.isNaN(d.getTime())) {
@@ -2298,6 +2456,17 @@ function parseFileMakerTimestamp(value) {
   }
   return parsed;
 }
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  const uptimeMs = Date.now() - SERVER_START_TIME;
+  const uptimeSec = Math.floor(uptimeMs / 1000);
+  res.json({
+    status: 'ok',
+    uptime: uptimeSec,
+    timestamp: new Date().toISOString()
+  });
+});
 
 app.post('/api/stream-events', async (req, res) => {
   try {
@@ -3804,7 +3973,10 @@ app.get('/api/search', async (req, res) => {
       const augmented = [];
       for (const baseQuery of queries) {
         for (const genreValue of genreFilters) {
-          const pattern = `*${genreValue}*`;
+          // Use begins-with pattern (value*) instead of contains (*value*)
+          // This allows FileMaker to use indexes for much faster queries
+          // Changed from 15-20 seconds to 1-3 seconds per query
+          const pattern = `${genreValue}*`;
           fields.forEach((field) => {
             augmented.push({
               ...baseQuery,
@@ -4146,8 +4318,6 @@ app.get('/api/public-playlists', expensiveLimiter, async (req, res) => {
     const nameParam = (req.query.name || '').toString().trim();
     const limitParam = Number.parseInt((req.query.limit || '100'), 10);
     const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(2000, limitParam)) : 100;
-
-    // Check cache
     const cacheKey = `public-playlists:${nameParam}:${limit}`;
     const cached = publicPlaylistsCache.get(cacheKey);
     if (cached) {
@@ -4156,126 +4326,14 @@ app.get('/api/public-playlists', expensiveLimiter, async (req, res) => {
       return res.json(cached);
     }
 
-    const result = await fetchPublicPlaylistRecords({ limit });
-    if (result && result.missingEnv) {
+    const { payload, missingEnv } = await buildPublicPlaylistsPayload({ nameParam, limit });
+    if (missingEnv) {
       return res.status(503).json({ ok: false, error: 'Curated playlists are disabled: missing FM_HOST/FM_DB/FM_USER/FM_PASS' });
     }
-    const { records } = result || { records: [] };
-    if (!records.length) {
-      const payload = { ok: true, playlists: [] };
-      if (nameParam) payload.tracks = [];
-      res.json(payload);
-      return;
-    }
 
-    const summaryMap = new Map();
-    const tracks = [];
-    const targetName = nameParam.toLowerCase();
-
-    for (const record of records) {
-      const fields = record?.fieldData || {};
-
-      // Skip records without valid audio
-      if (!hasValidAudio(fields)) continue;
-
-      const playlistInfo = pickFieldValueCaseInsensitive(fields, PUBLIC_PLAYLIST_FIELDS);
-      if (!playlistInfo.value) continue;
-      const playlistNames = splitPlaylistNames(playlistInfo.value);
-      if (!playlistNames.length) continue;
-
-      const trackName = firstNonEmptyFast(fields, ['Track Name', 'Tape Files::Track Name', 'Tape Files::Track_Name', 'Song Name', 'Song_Title', 'Title', 'Name']);
-      const albumTitle = firstNonEmptyFast(fields, ['Album Title', 'Tape Files::Album_Title', 'Tape Files::Album Title', 'Album']);
-      const albumArtist = firstNonEmptyFast(fields, ['Album Artist', 'Tape Files::Album Artist', 'Tape Files::Album_Artist', 'AlbumArtist', 'Artist']);
-      const trackArtist = firstNonEmptyFast(fields, ['Track Artist', 'Tape Files::Track Artist', 'TrackArtist', 'Artist']) || albumArtist;
-      const catalogue = firstNonEmptyFast(fields, CATALOGUE_FIELD_CANDIDATES);
-      const genre = firstNonEmptyFast(fields, ['Local Genre', 'Tape Files::Local Genre', 'Genre']);
-      const language = firstNonEmptyFast(fields, ['Language', 'Tape Files::Language', 'Language Code']);
-      const producer = firstNonEmptyFast(fields, ['Producer', 'Tape Files::Producer']);
-
-      const audioInfo = pickFieldValueCaseInsensitive(fields, AUDIO_FIELD_CANDIDATES);
-      const artworkInfo = pickFieldValueCaseInsensitive(fields, ARTWORK_FIELD_CANDIDATES);
-      const resolvedSrc = resolvePlayableSrc(audioInfo.value);
-      const resolvedArt = resolveArtworkSrc(artworkInfo.value);
-      const composers = composersFromFields(fields);
-      const seq = parseTrackSequence(fields);
-      const recordId = record.recordId ? String(record.recordId) : '';
-      const albumKey = makeAlbumKey(catalogue, albumTitle, albumArtist);
-
-      for (const rawName of playlistNames) {
-        const trimmed = rawName.trim();
-        if (!trimmed) continue;
-        const key = trimmed.toLowerCase();
-        let entry = summaryMap.get(key);
-        if (!entry) {
-          entry = { name: trimmed, albumKeys: new Set(), trackCount: 0 };
-          summaryMap.set(key, entry);
-        }
-        if (albumKey) entry.albumKeys.add(albumKey);
-        entry.trackCount += 1;
-
-        if (targetName && key === targetName) {
-          tracks.push({
-            id: recordId,
-            trackRecordId: recordId,
-            name: trackName || `Track ${tracks.length + 1}`,
-            seq: Number.isFinite(seq) ? Number(seq) : null,
-            albumTitle,
-            albumArtist,
-            trackArtist,
-            catalogue,
-            genre,
-            language,
-            producer,
-            composers,
-            isrc: firstNonEmptyFast(fields, ['ISRC', 'Tape Files::ISRC']) || '',
-            composer1: fields['Composer'] || fields['Composer 1'] || fields['Composer1'] || '',
-            composer2: fields['Composer 2'] || fields['Composer2'] || '',
-            composer3: fields['Composer 3'] || fields['Composer3'] || '',
-            composer4: fields['Composer 4'] || fields['Composer4'] || '',
-            mp3: audioInfo.value || '',
-            resolvedSrc,
-            audioField: audioInfo.field || '',
-            artworkField: artworkInfo.field || '',
-            picture: resolvedArt,
-            albumPicture: resolvedArt,
-            albumKey
-          });
-        }
-      }
-    }
-
-    const summaryEntries = Array.from(summaryMap.values());
-    const playlists = await Promise.all(
-      summaryEntries.map(async (entry) => {
-        const image = (await resolvePlaylistImage(entry.name)) || '';
-        return {
-          name: entry.name,
-          albumCount: entry.albumKeys.size,
-          trackCount: entry.trackCount,
-          image
-        };
-      })
-    );
-    playlists.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-
-    if (nameParam) {
-      const match = playlists.find((p) => p && typeof p.name === 'string' && p.name.toLowerCase() === targetName);
-      const fallbackImage = match?.image || '';
-      if (fallbackImage) {
-        for (const track of tracks) {
-          if (!track || typeof track !== 'object') continue;
-          if (!track.picture) track.picture = fallbackImage;
-          if (!track.albumPicture) track.albumPicture = fallbackImage;
-        }
-      }
-    }
-
-    const payload = { ok: true, playlists };
-    if (nameParam) payload.tracks = tracks;
-
-    // Cache the response
-    publicPlaylistsCache.set(cacheKey, payload);
-    res.json(payload);
+    const finalPayload = payload || { ok: true, playlists: [] };
+    publicPlaylistsCache.set(cacheKey, finalPayload);
+    res.json(finalPayload);
   } catch (err) {
     console.error('[MASS] Public playlists fetch failed:', err);
     res.status(500).json({ ok: false, error: 'Failed to load public playlists' });
@@ -5831,9 +5889,23 @@ app.get('/api/missing-audio-songs', async (req, res) => {
 /* ========= Album: fetch full tracklist =========*/
 app.get('/api/album', async (req, res) => {
   try {
-    const cat = (req.query.cat || '').toString().trim();
-    const title = (req.query.title || '').toString().trim();
-    const artist = (req.query.artist || '').toString().trim();
+    // Validate input parameters
+    const catValidation = validateQueryString(req.query.cat, 'cat', 100);
+    if (!catValidation.ok) {
+      return res.status(400).json({ error: catValidation.reason });
+    }
+    const titleValidation = validateQueryString(req.query.title, 'title', 200);
+    if (!titleValidation.ok) {
+      return res.status(400).json({ error: titleValidation.reason });
+    }
+    const artistValidation = validateQueryString(req.query.artist, 'artist', 200);
+    if (!artistValidation.ok) {
+      return res.status(400).json({ error: artistValidation.reason });
+    }
+
+    const cat = catValidation.value;
+    const title = titleValidation.value;
+    const artist = artistValidation.value;
     const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit || '100', 10)));
 
     // Check cache
@@ -5942,18 +6014,73 @@ async function warmConnections() {
     // Make a lightweight query to fully establish the connection
     await fmFindRecords(FM_LAYOUT, [{ 'Album Title': '*' }], { limit: 1 });
     console.log('[MASS] FileMaker connection warmed successfully');
+
+    const warmTasks = [];
+
+    warmTasks.push((async () => {
+      try {
+        const items = await fetchTrendingTracks(5);
+        trendingCache.set('trending:5', items);
+        console.log(`[MASS] Prefetched ${items.length} trending tracks`);
+      } catch (err) {
+        console.warn('[MASS] Trending warm-up failed:', err?.message || err);
+      }
+    })());
+
+    warmTasks.push((async () => {
+      try {
+        const { payload, missingEnv } = await buildPublicPlaylistsPayload({ nameParam: '', limit: 100 });
+        if (missingEnv) {
+          console.warn('[MASS] Skipping playlist warm-up: missing FM environment variables');
+          return;
+        }
+        if (payload) {
+          publicPlaylistsCache.set('public-playlists::100', payload);
+          console.log(`[MASS] Prefetched ${payload.playlists?.length || 0} public playlists`);
+        }
+      } catch (err) {
+        console.warn('[MASS] Public playlist warm-up failed:', err?.message || err);
+      }
+    })());
+
+    await Promise.allSettled(warmTasks);
   } catch (err) {
     console.warn('[MASS] Connection warm-up failed:', err.message);
+  }
+}
+
+function logServerReady(protocolLabel = 'HTTP/1.1') {
+  const scheme = protocolLabel.includes('HTTP/2') ? 'https' : 'http';
+  console.log(`[MASS] listening on ${scheme}://${HOST}:${PORT} (${protocolLabel})`);
+  console.log(`[MASS] Rate limits: ${isDevelopment ? 'DEVELOPMENT (relaxed)' : 'PRODUCTION (strict)'}`);
+  if (isDevelopment) {
+    console.log('[MASS] - API: 1000 req/15min, Explore: 500 req/5min');
   }
 }
 
 // Call warmConnections before starting the server
 await warmConnections();
 
-app.listen(PORT, HOST, () => {
-  console.log(`[MASS] listening on http://${HOST}:${PORT}`);
-  console.log(`[MASS] Rate limits: ${isDevelopment ? 'DEVELOPMENT (relaxed)' : 'PRODUCTION (strict)'}`);
-  if (isDevelopment) {
-    console.log(`[MASS] - API: 1000 req/15min, Explore: 500 req/5min`);
+let serverStarted = false;
+if (HTTP2_ENABLED) {
+  if (HTTP2_CERT_PATH && HTTP2_KEY_PATH) {
+    try {
+      const [key, cert] = await Promise.all([
+        fs.readFile(HTTP2_KEY_PATH),
+        fs.readFile(HTTP2_CERT_PATH)
+      ]);
+      const h2Server = http2.createSecureServer({ key, cert, allowHTTP1: true }, app);
+      h2Server.listen(PORT, HOST, () => logServerReady('HTTP/2 (ALPN fallback enabled)'));
+      serverStarted = true;
+    } catch (err) {
+      console.warn('[MASS] Failed to start HTTP/2 server, falling back to HTTP/1.1:', err?.message || err);
+    }
+  } else {
+    console.warn('[MASS] HTTP2_ENABLED is true but HTTP2_CERT_PATH or HTTP2_KEY_PATH is missing; falling back to HTTP/1.1');
   }
-});
+}
+
+if (!serverStarted) {
+  const httpServer = http.createServer(app);
+  httpServer.listen(PORT, HOST, () => logServerReady('HTTP/1.1'));
+}

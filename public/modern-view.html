@@ -1579,8 +1579,8 @@
     // How many genre cards we want to show in the grid
     const GENRE_RESULT_LIMIT = 10;
 
-    // Over-fetch to ensure we have enough unique albums to display
-    const GENRE_FETCH_LIMIT = GENRE_RESULT_LIMIT * 10;
+    // Fetch just enough for quick display - reduced from 10x to 2.5x for speed
+    const GENRE_FETCH_LIMIT = GENRE_RESULT_LIMIT * 2.5;
     const TRENDING_RESULT_LIMIT = 5;
     const GENRE_TITLE = 'Discover by Genre';
     const GENRE_PREF_STORAGE_KEY = 'madmusic.genrePreferences';
@@ -1957,6 +1957,7 @@
         container.innerHTML = `
           <div class="loading">
             <div class="spinner"></div>
+            <p>Loading songs...</p>
           </div>
         `;
       }
@@ -1990,6 +1991,7 @@
 
         const displayedTracks = representativeTracks.slice(0, GENRE_RESULT_LIMIT);
 
+        // Render all at once - faster with reduced fetch size
         renderRandom(displayedTracks);
 
         if (displayedTracks.length) {
@@ -2243,6 +2245,19 @@
       if (typeof audio === 'string' && audio.trim() === '') return false;
 
       return true;
+    }
+
+    // Escape HTML to prevent XSS attacks
+    function escapeHtml(unsafe) {
+      if (typeof unsafe !== 'string') {
+        unsafe = String(unsafe ?? '');
+      }
+      return unsafe
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     }
 
     function getTitleField(fields) {
@@ -2548,17 +2563,17 @@
         <div class="featured-release">
           <div class="featured-artwork">
             ${artworkUrl
-              ? `<img src="${artworkUrl}" alt="${album}" onerror="this.parentElement.innerHTML='<div class=\\'artwork-placeholder\\'>♪</div>'" />`
+              ? `<img src="${escapeHtml(artworkUrl)}" alt="${escapeHtml(album)}" onerror="this.closest('.featured-release').style.display='none'" />`
               : '<div class="artwork-placeholder">♪</div>'
             }
           </div>
           <div class="featured-info">
             <div class="featured-label">Featured Release</div>
-            <h1 class="featured-title">${title}</h1>
-            <p class="featured-artist">${artist}</p>
-            <p class="featured-album">${album}</p>
+            <h1 class="featured-title">${escapeHtml(title)}</h1>
+            <p class="featured-artist">${escapeHtml(artist)}</p>
+            <p class="featured-album">${escapeHtml(album)}</p>
             <div class="featured-actions">
-              <button class="btn-play" onclick="playSong('${item.recordId}')">
+              <button class="btn-play" onclick="playSong('${escapeHtml(item.recordId)}')">
                 ▶ Play Now
               </button>
               <button class="btn-secondary">
@@ -2608,10 +2623,10 @@
         itemsStore.set(item.recordId, item);
 
         return `
-          <div class="highlight-card" onclick="playSong('${item.recordId}')">
+          <div class="highlight-card" onclick="playSong('${escapeHtml(item.recordId)}')">
             <div class="highlight-artwork">
               ${artworkUrl
-                ? `<img src="${artworkUrl}" alt="${album}" onerror="this.parentElement.innerHTML='<div class=\\'artwork-placeholder\\'>♪</div>'" />`
+                ? `<img src="${escapeHtml(artworkUrl)}" alt="${escapeHtml(album)}" onerror="this.closest('.highlight-card').style.display='none'" />`
                 : '<div class="artwork-placeholder">♪</div>'
               }
               <div class="play-overlay">
@@ -2619,9 +2634,9 @@
               </div>
             </div>
             <div class="highlight-info">
-              <div class="highlight-title">${title}</div>
-              <div class="highlight-artist">${artist}</div>
-              <div class="highlight-album">${album}</div>
+              <div class="highlight-title">${escapeHtml(title)}</div>
+              <div class="highlight-artist">${escapeHtml(artist)}</div>
+              <div class="highlight-album">${escapeHtml(album)}</div>
             </div>
           </div>
         `;
@@ -2669,9 +2684,9 @@
         return `
           <div class="trending-card">
             <div class="trending-rank">#${index + 1}</div>
-            <div class="trending-artwork" onclick="playSong('${item.recordId}')">
+            <div class="trending-artwork" onclick="playSong('${escapeHtml(item.recordId)}')">
               ${artworkUrl
-                ? `<img src="${artworkUrl}" alt="${title}" onerror="this.parentElement.innerHTML='<div class=\\'artwork-placeholder\\'>♪</div>'" />`
+                ? `<img src="${escapeHtml(artworkUrl)}" alt="${escapeHtml(title)}" onerror="this.closest('.trending-card').style.display='none'" />`
                 : '<div class="artwork-placeholder">♪</div>'
               }
               <div class="play-overlay">
@@ -2679,15 +2694,54 @@
               </div>
             </div>
             <div class="trending-info">
-              <div class="trending-title">${title}</div>
-              <div class="trending-artist">${artist}</div>
-              <div class="trending-meta">${meta || 'Now playing across MAD'}</div>
+              <div class="trending-title">${escapeHtml(title)}</div>
+              <div class="trending-artist">${escapeHtml(artist)}</div>
+              <div class="trending-meta">${escapeHtml(meta || 'Now playing across MAD')}</div>
             </div>
-            <button class="trending-play-btn" onclick="playSong('${item.recordId}')">▶</button>
-            <a href="${jukeboxUrl}" class="trending-album-btn" title="View album in Jukebox">💿</a>
+            <button class="trending-play-btn" onclick="playSong('${escapeHtml(item.recordId)}')">▶</button>
+            <a href="${escapeHtml(jukeboxUrl)}" class="trending-album-btn" title="View album in Jukebox">💿</a>
           </div>
         `;
       }).join('');
+    }
+
+    // Helper to create HTML for a single random card
+    function createRandomCardHtml(item) {
+      const fields = item.fields || {};
+      const artworkUrl = getArtworkUrl(fields);
+      const title = getTitleField(fields);
+      const artist = getArtistField(fields);
+      const album = getAlbumField(fields);
+
+      console.log('[Random] Item:', {recordId: item.recordId, title, artist, album, artworkUrl});
+
+      // Store item for later reference
+      itemsStore.set(item.recordId, item);
+
+      // Create URL for Jukebox view with album filter
+      const jukeboxUrl = `/classic?album=${encodeURIComponent(album)}&artist=${encodeURIComponent(artist)}`;
+
+      return `
+        <div class="random-card">
+          <div class="random-artwork" onclick="playSong('${escapeHtml(item.recordId)}')">
+            ${artworkUrl
+              ? `<img src="${escapeHtml(artworkUrl)}" alt="${escapeHtml(album)}" onerror="this.closest('.random-card').style.display='none'" />`
+              : '<div class="artwork-placeholder">♪</div>'
+            }
+            <div class="play-overlay">
+              <div class="play-icon">▶</div>
+            </div>
+          </div>
+          <div class="random-info">
+            <div class="random-title">${escapeHtml(title)}</div>
+            <div class="random-artist">${escapeHtml(artist)}</div>
+            <div class="random-album">${escapeHtml(album)}</div>
+          </div>
+          <div class="random-actions">
+            <a href="${escapeHtml(jukeboxUrl)}" class="random-album-btn" title="View album in Jukebox">💿 View Album</a>
+          </div>
+        </div>
+      `;
     }
 
     function renderRandom(items) {
@@ -2717,43 +2771,45 @@
         return;
       }
 
-      container.innerHTML = validItems.map(item => {
-        const fields = item.fields || {};
-        const artworkUrl = getArtworkUrl(fields);
-        const title = getTitleField(fields);
-        const artist = getArtistField(fields);
-        const album = getAlbumField(fields);
+      container.innerHTML = validItems.map(item => createRandomCardHtml(item)).join('');
+    }
 
-        console.log('[Random] Item:', {recordId: item.recordId, title, artist, album, artworkUrl});
+    // Progressive rendering - append items one at a time
+    async function renderRandomProgressive(items) {
+      const container = document.getElementById('randomContainer');
 
-        // Store item for later reference
-        itemsStore.set(item.recordId, item);
-
-        // Create URL for Jukebox view with album filter
-        const jukeboxUrl = `/classic?album=${encodeURIComponent(album)}&artist=${encodeURIComponent(artist)}`;
-
-        return `
-          <div class="random-card">
-            <div class="random-artwork" onclick="playSong('${item.recordId}')">
-              ${artworkUrl
-                ? `<img src="${artworkUrl}" alt="${album}" onerror="this.parentElement.innerHTML='<div class=\\'artwork-placeholder\\'>♪</div>'" />`
-                : '<div class="artwork-placeholder">♪</div>'
-              }
-              <div class="play-overlay">
-                <div class="play-icon">▶</div>
-              </div>
-            </div>
-            <div class="random-info">
-              <div class="random-title">${title}</div>
-              <div class="random-artist">${artist}</div>
-              <div class="random-album">${album}</div>
-            </div>
-            <div class="random-actions">
-              <a href="${jukeboxUrl}" class="random-album-btn" title="View album in Jukebox">💿 View Album</a>
-            </div>
+      if (!items || items.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🎵</div>
+            <p>No songs available</p>
           </div>
         `;
-      }).join('');
+        return;
+      }
+
+      // Filter items to only include those with valid audio
+      const validItems = items.filter(item => hasValidAudio(item));
+      console.log('[Random Progressive] Filtered', validItems.length, 'items with valid audio out of', items.length, 'total');
+
+      if (validItems.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🎵</div>
+            <p>No songs with audio available</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Clear container and start fresh
+      container.innerHTML = '';
+
+      // Render items progressively - append as fast as possible
+      for (const item of validItems) {
+        const cardHtml = createRandomCardHtml(item);
+        container.insertAdjacentHTML('beforeend', cardHtml);
+      }
     }
 
     // Render albums (grouped by album)
@@ -2787,9 +2843,9 @@
 
         return `
           <div class="random-card">
-            <div class="random-artwork" onclick="playSong('${firstTrackId}')">
+            <div class="random-artwork" onclick="playSong('${escapeHtml(firstTrackId)}')">
               ${artwork
-                ? `<img src="${artwork}" alt="${album}" onerror="this.parentElement.innerHTML='<div class=\\'artwork-placeholder\\'>♪</div>'" />`
+                ? `<img src="${escapeHtml(artwork)}" alt="${escapeHtml(album)}" onerror="this.closest('.random-card').style.display='none'" />`
                 : '<div class="artwork-placeholder">♪</div>'
               }
               <div class="play-overlay">
@@ -2797,12 +2853,12 @@
               </div>
             </div>
             <div class="random-info">
-              <div class="random-title">${album}</div>
-              <div class="random-artist">${artist}</div>
+              <div class="random-title">${escapeHtml(album)}</div>
+              <div class="random-artist">${escapeHtml(artist)}</div>
               <div class="random-album">${trackCount} track${trackCount !== 1 ? 's' : ''}</div>
             </div>
             <div class="random-actions">
-              <a href="${jukeboxUrl}" class="random-album-btn" title="View album in Jukebox">💿 View Album</a>
+              <a href="${escapeHtml(jukeboxUrl)}" class="random-album-btn" title="View album in Jukebox">💿 View Album</a>
             </div>
           </div>
         `;
