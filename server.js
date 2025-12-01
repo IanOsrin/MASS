@@ -4122,12 +4122,15 @@ app.get('/api/trending', async (req, res) => {
     const cacheKey = `trending:${limit}`;
     const cached = trendingCache.get(cacheKey);
     if (cached) {
+      console.log(`[TRENDING] Serving from 24-hour cache (limit=${limit})`);
       res.setHeader('X-Cache-Hit', 'true');
       return res.json({ items: cached });
     }
 
+    console.log(`[TRENDING] Cache miss - calculating fresh trending data (limit=${limit})`);
     const items = await fetchTrendingTracks(limit);
     trendingCache.set(cacheKey, items);
+    console.log(`[TRENDING] Cached ${items.length} trending tracks for 24 hours`);
     res.json({ items });
   } catch (err) {
     console.error('[TRENDING] Failed to load trending tracks:', err);
@@ -4831,9 +4834,10 @@ function getPersistedRandomSongs(count, returnAll = false) {
   }
 
   // Validate that cached items still have valid audio (container URLs might have expired)
+  // Note: We don't require artwork - frontend handles missing artwork with placeholders
   const validItems = randomSongPersistedCache.items.filter(item => {
     const fields = item?.fields || {};
-    return hasValidAudio(fields) && hasValidArtwork(fields);
+    return hasValidAudio(fields);
   });
 
   // If returnAll is true (for featured albums), return all items regardless of count
@@ -5212,10 +5216,10 @@ async function buildPlaylistSeedItems(count) {
     now - playlistSeedCache.updatedAt < PLAYLIST_SEED_CACHE_TTL_MS
   ) {
     // Validate cached playlist seed items still have valid audio
-    // TEMPORARILY DISABLED artwork filter - debugging
+    // Note: We don't require artwork - frontend handles missing artwork with placeholders
     const validItems = playlistSeedCache.items.filter(item => {
       const fields = item?.fields || {};
-      return hasValidAudio(fields) && hasValidArtwork(fields);
+      return hasValidAudio(fields);
     });
     if (validItems.length >= count) {
       return cloneRandomSongItems(validItems, count);
@@ -5336,11 +5340,8 @@ async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = nul
       .filter(record => recordIsVisible(record.fieldData || {}))
       .filter(record => hasValidAudio(record.fieldData || {}));
 
-      const beforeArtworkCount = filtered.length;
-      filtered = filtered.filter(record => hasValidArtwork(record.fieldData || {}));
-      if (beforeArtworkCount !== filtered.length) {
-        console.log(`[random-songs] Artwork filter (${mode}) ${beforeArtworkCount} → ${filtered.length} tracks`);
-      }
+      // Note: We don't filter by artwork here - frontend handles missing artwork with placeholders
+      // This ensures we have enough results for highlights/random songs even if artwork is missing
 
       return filtered;
     }
@@ -5465,8 +5466,8 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot, genreFilte
   let rawData = await runLegacyQuery(randomOffset);
   let visible = rawData
     .filter(record => recordIsVisible(record.fieldData || {}))
-    .filter(record => hasValidAudio(record.fieldData || {}))
-    .filter(record => hasValidArtwork(record.fieldData || {}));
+    .filter(record => hasValidAudio(record.fieldData || {}));
+    // Note: We don't filter by artwork here - frontend handles missing artwork with placeholders
 
   if (!visible.length) {
     console.warn(`[random-songs] Legacy fetch empty at offset ${randomOffset}, retrying from start`);
@@ -5475,8 +5476,7 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot, genreFilte
       rawData = retryJson;
       visible = rawData
         .filter(record => recordIsVisible(record.fieldData || {}))
-        .filter(record => hasValidAudio(record.fieldData || {}))
-        .filter(record => hasValidArtwork(record.fieldData || {}));
+        .filter(record => hasValidAudio(record.fieldData || {}));
     }
   }
 
@@ -5520,8 +5520,7 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot, genreFilte
     const additionalRawData = await runLegacyQuery(additionalOffset);
     let additionalVisible = additionalRawData
       .filter(record => recordIsVisible(record.fieldData || {}))
-      .filter(record => hasValidAudio(record.fieldData || {}))
-      .filter(record => hasValidArtwork(record.fieldData || {}));
+      .filter(record => hasValidAudio(record.fieldData || {}));
     const shuffledTracks = shuffleArray(additionalVisible.slice());
 
     for (const track of shuffledTracks) {
@@ -5657,10 +5656,10 @@ app.get('/api/random-songs', async (req, res) => {
     const isLoadMore = !!req.query._t;
 
     // Disable caching for random songs to ensure true randomness every time
-    // const cacheSlot = !isLoadMore ? Math.floor(Date.now() / 30000) : null;
-    // const cacheKey = !isLoadMore
-    //   ? `${computeCacheKey(count, cacheSlot)}:${genreCacheKey || 'all'}`
-    //   : null;
+    const cacheSlot = !isLoadMore ? Math.floor(Date.now() / 30000) : null;
+    const cacheKey = !isLoadMore
+      ? `${computeCacheKey(count, cacheSlot)}:${genreCacheKey || 'all'}`
+      : null;
     // if (!isLoadMore && cacheKey && !genreFilters.length) {
     //   const cached = searchCache.get(cacheKey);
     //   if (cached) {

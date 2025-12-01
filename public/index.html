@@ -2446,17 +2446,23 @@
 
     const playRandomTrack = async () => {
       const preferredGenres = readPreferredGenres();
+      console.log('[Jukebox] Feeling Lucky clicked - preferred genres:', preferredGenres);
 
       const attemptPlay = (allowAny = false) => {
         const btn = pickPlayableButton(allowAny ? [] : preferredGenres);
-        if (!btn) return false;
+        if (!btn) {
+          console.warn('[Jukebox] No playable button found (allowAny=' + allowAny + ')');
+          return false;
+        }
+        console.log('[Jukebox] Found playable button, starting playback');
         ensureNowPlayingVisible();
         btn.click();
         ensureShuffleAutoplay();
         return true;
       };
 
-      if (attemptPlay()) return;
+      // DON'T attempt to play existing songs - always load fresh songs first
+      // (Removed: if (attemptPlay()) return;)
 
       const loadFn = typeof window.loadRandomSongs === 'function' ? window.loadRandomSongs : null;
       if (!loadFn) {
@@ -2468,26 +2474,49 @@
       }
 
       const maxGenreAttempts = preferredGenres.length ? 3 : 1;
+      console.log('[Jukebox] Will attempt to load songs ' + maxGenreAttempts + ' time(s)');
 
+      // Show loading state before starting
       if (jukeboxWidget) jukeboxWidget.classList.add('loading');
+
       try {
+        // Load all songs first WITHOUT attempting to play during loading
         for (let attempt = 0; attempt < maxGenreAttempts; attempt += 1) {
           await loadFn({ genres: preferredGenres });
+          // Wait for DOM to update between loads
           await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-          if (attemptPlay()) return;
         }
-        if (!preferredGenres.length && !attemptPlay(true)) {
-          console.warn('[Jukebox] Unable to find playable track after genre-filtered loads');
-        } else if (preferredGenres.length) {
-          console.warn('[Jukebox] No tracks matched saved genres after multiple attempts');
+
+        // After ALL loading is complete, remove the loading state
+        if (jukeboxWidget) jukeboxWidget.classList.remove('loading');
+
+        // Count available play buttons for diagnostics
+        const allButtons = document.querySelectorAll('#albums .play-button, #albums .track button, #albums button[data-play-label]');
+        console.log('[Jukebox] Loading complete. Found ' + allButtons.length + ' total buttons in DOM');
+
+        // Add a small delay to ensure DOM is fully updated and rendered
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // NOW attempt to play a song (only once, after all loading is done)
+        if (!attemptPlay()) {
+          // If genre-filtered playback failed, try playing ANY song as fallback
+          console.warn('[Jukebox] No tracks matched preferred genres, trying any available song...');
+          if (!attemptPlay(true)) {
+            console.warn('[Jukebox] Unable to find any playable track after loading');
+            alert('No songs available to play. Please try searching for music first.');
+          }
         }
       } catch (err) {
         console.error('[Jukebox] Failed to load random songs', err);
-        if (!preferredGenres.length && !attemptPlay(true)) {
-          console.warn('[Jukebox] No fallback track available after error');
-        }
-      } finally {
+        // Remove loading state even on error
         if (jukeboxWidget) jukeboxWidget.classList.remove('loading');
+
+        // Try to play any available song as fallback after error
+        console.warn('[Jukebox] Error occurred, trying to play any available song...');
+        if (!attemptPlay(true)) {
+          console.warn('[Jukebox] No fallback track available after error');
+          alert('Failed to load songs. Please check your connection and try again.');
+        }
       }
     };
 

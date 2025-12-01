@@ -1472,6 +1472,10 @@
           hideTokenOverlay();
           console.log('[Access Token] Token validated successfully');
 
+          // Set a flag so that late-binding listeners can detect access is ready
+          window.massAccessReady = true;
+          window.massAccessToken = normalized;
+
           // Notify app that access is ready so it can do its initial load
           window.dispatchEvent(new CustomEvent('mass:access-ready', {
             detail: { token: normalized }
@@ -3024,6 +3028,19 @@
       }
     });
 
+    // Function to load all initial content
+    function loadInitialContent() {
+      console.log('[MADMusic] Loading initial content...');
+      // Update local currentAccessToken variable
+      currentAccessToken = window.massAccessToken || window.currentAccessToken || localStorage.getItem('mass_access_token');
+      console.log('[MADMusic] Updated currentAccessToken:', currentAccessToken ? 'YES' : 'NO');
+
+      loadFeatured();
+      loadHighlights();
+      loadTrending();
+      syncGenreFilters({ forceReloadRandom: true });
+    }
+
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
       // Don't load content yet - wait for access token to be ready
@@ -3071,19 +3088,20 @@
       }
 
       updateGenreRetryButton();
+
+      // Check if access token was already validated before DOMContentLoaded
+      // This prevents a race condition where the token validation completes
+      // before the event listener is set up
+      if (window.massAccessReady) {
+        console.log('[MADMusic] Access already ready (race condition avoided), loading content now...');
+        loadInitialContent();
+      }
     });
 
     // Load content when access token is ready
     window.addEventListener('mass:access-ready', (e) => {
-      console.log('[MADMusic] Access token ready, loading content...');
-      // Update local currentAccessToken variable
-      currentAccessToken = window.currentAccessToken || e.detail?.token || localStorage.getItem('mass_access_token');
-      console.log('[MADMusic] Updated currentAccessToken:', currentAccessToken ? 'YES' : 'NO');
-
-      loadFeatured();
-      loadHighlights();
-      loadTrending();
-      syncGenreFilters({ forceReloadRandom: true });
+      console.log('[MADMusic] Access token ready event received');
+      loadInitialContent();
     });
   </script>
 </body>

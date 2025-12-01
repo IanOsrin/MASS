@@ -32,7 +32,7 @@ export const publicPlaylistsCache = new LRUCache({
 
 export const trendingCache = new LRUCache({
   max: 50,
-  ttl: 1000 * 60 * 5, // refresh trending every 5 minutes
-  updateAgeOnGet: true,
-  updateAgeOnHas: true
+  ttl: 1000 * 60 * 60 * 24, // refresh trending once per day (24 hours)
+  updateAgeOnGet: false, // Don't reset TTL on access - we want it to refresh daily
+  updateAgeOnHas: false
 });
