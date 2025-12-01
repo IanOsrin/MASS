@@ -3,29 +3,29 @@ import { LRUCache } from 'lru-cache';
 
 // Global cache instances - Optimized for faster performance with bounded memory
 export const searchCache = new LRUCache({
-  max: 500,
-  ttl: 1000 * 60 * 5, // 5 minutes
-  updateAgeOnGet: true,
+  max: 2000, // Increased from 500 to cache more searches
+  ttl: 1000 * 60 * 60, // 1 hour (increased from 5 minutes for better performance)
+  updateAgeOnGet: true, // Reset TTL on access to keep popular searches cached
   updateAgeOnHas: true
 });
 
 export const exploreCache = new LRUCache({
-  max: 200,
-  ttl: 1000 * 60 * 10, // 10 minutes
+  max: 500, // Increased from 200
+  ttl: 1000 * 60 * 60, // 1 hour (increased from 10 minutes)
   updateAgeOnGet: true,
   updateAgeOnHas: true
 });
 
 export const albumCache = new LRUCache({
-  max: 300,
-  ttl: 1000 * 60 * 15, // 15 minutes
+  max: 1000, // Increased from 300
+  ttl: 1000 * 60 * 60, // 1 hour (increased from 15 minutes)
   updateAgeOnGet: true,
   updateAgeOnHas: true
 });
 
 export const publicPlaylistsCache = new LRUCache({
-  max: 100,
-  ttl: 1000 * 60 * 5, // 5 minutes
+  max: 200, // Increased from 100
+  ttl: 1000 * 60 * 30, // 30 minutes (increased from 5 minutes)
   updateAgeOnGet: true,
   updateAgeOnHas: true
 });

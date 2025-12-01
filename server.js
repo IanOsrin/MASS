@@ -3790,10 +3790,12 @@ app.get('/api/search', async (req, res) => {
     const cacheKey = `search:${SEARCH_CACHE_VERSION}:${q}:${artist}:${album}:${track}:${limit}:${uiOff0}:${genreCacheKey}`;
     const cached = searchCache.get(cacheKey);
     if (cached) {
-      console.log(`[CACHE HIT] search: ${cacheKey.slice(0, 50)}...`);
+      console.log(`[CACHE HIT] search (1-hour cache) - returning cached results instantly`);
       res.setHeader('X-Cache-Hit', 'true');
       return res.json(cached);
     }
+
+    console.log(`[CACHE MISS] search - querying FileMaker (will be cached for 1 hour)...`);
 
     const applyGenreFiltersToQueries = (queries, candidateFields = SEARCH_GENRE_FIELDS) => {
       if (!genreFilters.length) return queries;
