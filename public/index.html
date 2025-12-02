@@ -565,11 +565,11 @@
       pointer-events: none;
     }
 
-    /* Tonearm - starts OUT (resting position) */
+    /* Tonearm - at bottom, starts at outer edge (resting position) */
     .now-playing-thumb::after {
       content: '';
       position: absolute;
-      top: 10%;
+      bottom: 10%;
       right: -30%;
       width: 88%;
       height: 5px;
@@ -584,7 +584,7 @@
         transparent 100%);
       border-radius: 3px 0 0 3px;
       transform-origin: 96% center;
-      transform: rotate(var(--tonearm-angle, 30deg));
+      transform: rotate(var(--tonearm-angle, -35deg));
       box-shadow:
         0 3px 6px rgba(0, 0, 0, 0.7),
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
@@ -596,6 +596,7 @@
       border-top: 0.5px solid rgba(255, 255, 255, 0.05);
       border-bottom: 0.5px solid rgba(0, 0, 0, 0.5);
     }
+
 
     .cover-wrap img {
       position: absolute;
@@ -2090,6 +2091,8 @@
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(STORAGE_INFO_KEY);
       infoDiv.classList.add('hidden');
+      window.massAccessReady = false;
+      window.massAccessToken = null;
     }
 
     async function validateToken(token) {
@@ -2116,6 +2119,8 @@
           console.log('[Access Token] Token validated successfully');
 
           // Notify app that access is ready so it can do its initial load
+          window.massAccessReady = true;
+          window.massAccessToken = normalized;
           window.dispatchEvent(new CustomEvent('mass:access-ready', {
             detail: { token: normalized }
           }));
@@ -2213,6 +2218,7 @@
   </script>
   <script defer src="/app.min.js?v=57"></script>
   <script>
+  window.__jukeboxAdvancedSearch = null;
   // Override search to use separate fields
   window.addEventListener('DOMContentLoaded', () => {
     const searchArtistEl = document.getElementById('searchArtist');
@@ -2226,34 +2232,45 @@
     const hasUrlParams = window.__skipFeaturedLoad === true;
 
     function setupSearchOverride() {
-      // Store original doSearch if it exists
-      const originalDoSearch = window.doSearch;
+      const originalDoSearch = typeof window.doSearch === 'function' ? window.doSearch : null;
+      if (!originalDoSearch) {
+        console.warn('[Separate Search] Unable to override doSearch (missing original implementation)');
+        return;
+      }
 
-      // Override doSearch to use separate fields
-      window.doSearch = function(q) {
-        // Get values from separate fields
+      window.doSearch = function(q, options = {}) {
         const artist = searchArtistEl?.value?.trim() || '';
         const album = searchAlbumEl?.value?.trim() || '';
         const track = searchTrackEl?.value?.trim() || '';
+        const genreValue = typeof options.genre === 'string' ? options.genre.trim() : '';
+        const useAdvanced = Boolean(artist || album || track);
 
-        // If no separate fields are filled, return empty
-        if (!artist && !album && !track) {
-          return Promise.resolve({ items: [], total: 0 });
+        if (!useAdvanced) {
+          window.__jukeboxAdvancedSearch = null;
+          return originalDoSearch.call(this, q, options);
         }
 
-        // Build query with separate parameters
         const params = new URLSearchParams();
         if (artist) params.set('artist', artist);
         if (album) params.set('album', album);
         if (track) params.set('track', track);
-        params.set('offset', 0);
-        // Higher limit for artist-only searches to get all albums
+        if (genreValue) params.set('genre', genreValue);
         const searchLimit = (artist && !album && !track) ? 500 : 200;
         params.set('limit', searchLimit);
+        const requestedOffset = Number.isFinite(options.offset) ? Math.max(0, Number(options.offset)) : 0;
+        params.set('offset', requestedOffset);
 
-        console.log('[Separate Search] Artist:', artist, 'Album:', album, 'Track:', track);
+        window.__jukeboxAdvancedSearch = { artist, album, track, genre: genreValue, limit: searchLimit };
 
-        // Abort any in-flight requests
+        console.log('[Separate Search] Advanced search params:', {
+          artist,
+          album,
+          track,
+          genre: genreValue,
+          offset: requestedOffset,
+          limit: searchLimit
+        });
+
         if (window.inFlight) {
           try { window.inFlight.abort(); } catch {}
         }
@@ -2261,9 +2278,12 @@
         window.inFlight = ctrl;
 
         return fetch(`/api/search?${params}`, { signal: ctrl.signal })
-          .then(async r => {
+          .then(async (r) => {
             if (!r.ok) throw new Error(await r.text().catch(() => `HTTP ${r.status}`));
             return r.json();
+          })
+          .finally(() => {
+            if (window.inFlight === ctrl) window.inFlight = null;
           });
       };
 
@@ -2304,6 +2324,14 @@
           if (searchAlbumEl) searchAlbumEl.value = '';
           if (searchTrackEl) searchTrackEl.value = '';
           searchFieldsEl.hidden = true;
+          window.__jukeboxAdvancedSearch = null;
+          if (typeof originalClearHandler === 'function') {
+            try {
+              originalClearHandler.call(clearEl);
+            } catch (err) {
+              console.warn('[Separate Search] Original clear handler threw', err);
+            }
+          }
         });
       }
 
@@ -2486,7 +2514,8 @@
       try {
         // Load all songs first WITHOUT attempting to play during loading
         for (let attempt = 0; attempt < maxGenreAttempts; attempt += 1) {
-          await loadFn({ genres: preferredGenres });
+          // Only allow autoplay on first load, subsequent loads should append without triggering autoplay
+          await loadFn({ genres: preferredGenres, autoplayResume: attempt > 0 });
           // Wait for DOM to update between loads
           await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         }
@@ -2751,6 +2780,8 @@
 
               if (thumb) {
                 thumb.classList.add('playing');
+                // Move tonearm to starting position (outer edge of record)
+                thumb.style.setProperty('--tonearm-angle', '-8deg');
                 console.log('🎵 Record player arm engaged - vinyl spinning!');
               }
               toggleJukeboxGlow(true);
@@ -2766,12 +2797,17 @@
 
                 // Update tonearm position
                 if (thumb) {
-                  // Tonearm moves from outer circumference (8deg) to inner groove (-22deg)
-                  // 8deg positions needle precisely on outer edge of vinyl
-                  const startAngle = 8;      // outer circumference of record (precise landing)
-                  const endAngle = -22;      // inner groove
+                  // Tonearm at bottom: moves from outer edge upward/inward to center
+                  // At bottom: more negative = angled down, less negative = moved up toward center
+                  const startAngle = -8;     // outer circumference (starts at bottom edge)
+                  const endAngle = 20;       // inner groove (moved up/in toward center)
                   const currentAngle = startAngle + progress * (endAngle - startAngle);
                   thumb.style.setProperty('--tonearm-angle', `${currentAngle}deg`);
+
+                  // Only log every 5% to reduce console spam
+                  if (progress % 0.05 < 0.01) {
+                    console.log(`🎶 Tonearm tracking: ${currentAngle.toFixed(1)}deg (${(progress * 100).toFixed(1)}%)`);
+                  }
                 }
 
                 // Update progress bar
@@ -2799,11 +2835,11 @@
 
               if (thumb) {
                 thumb.classList.remove('playing');
-                // Reset tonearm to resting position (same as parked outer edge)
+                // Reset tonearm to resting position at bottom (parked position)
                 setTimeout(() => {
-                  thumb.style.setProperty('--tonearm-angle', '30deg');
+                  thumb.style.setProperty('--tonearm-angle', '-35deg');
                 }, 100);
-                console.log('⏹️ Record finished playing');
+                console.log('⏹️ Record finished playing - arm returning to rest');
               }
 
               // Reset progress bar

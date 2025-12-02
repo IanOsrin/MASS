@@ -1447,6 +1447,8 @@
       infoDiv.classList.add('hidden');
       // Update global variable for other scripts
       window.currentAccessToken = null;
+      window.massAccessReady = false;
+      window.massAccessToken = null;
     }
 
     async function validateToken(token) {
@@ -2209,13 +2211,17 @@
     }
 
     function getArtworkUrl(fields) {
-      const artworkFields = ['Artwork::Picture', 'Artwork Picture', 'Picture'];
+      const artworkFields = ['Artwork_S3_URL', 'Tape Files::Artwork_S3_URL', 'Artwork::Picture', 'Artwork Picture', 'Picture'];
       const artwork = getFieldValue(fields, artworkFields);
       if (!artwork) return null;
 
       // Handle FileMaker container URLs
       if (typeof artwork === 'string') {
         if (artwork.startsWith('http')) {
+          // Check if it's an S3 URL - return directly without proxying
+          if (/^https?:\/\/.*\.s3[.-]/.test(artwork) || /^https?:\/\/s3[.-]/.test(artwork)) {
+            return artwork;
+          }
           return `/api/container?u=${encodeURIComponent(artwork)}`;
         }
         return artwork;
@@ -2224,11 +2230,15 @@
     }
 
     function getAudioUrl(fields, recordId) {
-      const audioFields = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
+      const audioFields = ['S3_URL', 'mp3', 'MP3', 'Audio File', 'Audio::mp3'];
       const audio = getFieldValue(fields, audioFields);
       if (!audio) return null;
 
       if (typeof audio === 'string' && audio.startsWith('http')) {
+        // Check if it's an S3 URL - return directly without proxying
+        if (/^https?:\/\/.*\.s3[.-]/.test(audio) || /^https?:\/\/s3[.-]/.test(audio)) {
+          return audio;
+        }
         return `/api/container?u=${encodeURIComponent(audio)}`;
       }
       return `/api/track/${recordId}/container`;
@@ -2237,7 +2247,7 @@
     // Check if an item has valid audio
     function hasValidAudio(item) {
       if (!item || !item.fields) return false;
-      const audioFields = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
+      const audioFields = ['S3_URL', 'mp3', 'MP3', 'Audio File', 'Audio::mp3'];
       const audio = getFieldValue(item.fields, audioFields);
 
       // Check if audio field exists and is not empty
