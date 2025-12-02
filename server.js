@@ -711,9 +711,11 @@ function recordIsFeatured(fields = {}) {
   return false;
 }
 
-const DEFAULT_AUDIO_FIELDS = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
-const AUDIO_FIELD_CANDIDATES = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
+const DEFAULT_AUDIO_FIELDS = ['S3_URL', 'mp3', 'MP3', 'Audio File', 'Audio::mp3'];
+const AUDIO_FIELD_CANDIDATES = ['S3_URL', 'mp3', 'MP3', 'Audio File', 'Audio::mp3'];
 const ARTWORK_FIELD_CANDIDATES = [
+  'Artwork_S3_URL',
+  'Tape Files::Artwork_S3_URL',
   'Artwork::Picture',
   'Artwork Picture',
   'Picture',
@@ -4692,6 +4694,18 @@ function shuffleArray(arr) {
   return arr;
 }
 
+// Seeded random number generator using mulberry32 algorithm
+// Returns a function that generates random numbers between 0 and 1
+function createSeededRandom(seed) {
+  let state = seed;
+  return function() {
+    state = (state + 0x6D2B79F5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 function isAbortError(err) {
   if (!err) return false;
   if (err.name === 'AbortError') return true;
@@ -4781,7 +4795,14 @@ function bufferUniqueArtistCount() {
 
 function bufferTake(count) {
   if (!count || count <= 0) return [];
-  if (bufferUniqueArtistCount() < count) return null;
+
+  // Relaxed requirement: allow buffer usage if we have at least 50% of requested unique artists
+  // This prevents falling back to random fetch when we have most of what we need
+  const minRequiredArtists = Math.ceil(count / 2);
+  if (bufferUniqueArtistCount() < minRequiredArtists) {
+    console.log(`[bufferTake] Insufficient artists: have ${bufferUniqueArtistCount()}, need ${minRequiredArtists}, requested ${count}`);
+    return null;
+  }
 
   const artists = shuffleArray(Array.from(randomSongBuffer.recordIdsByArtist.keys()));
   const selected = [];
@@ -4802,9 +4823,14 @@ function bufferTake(count) {
     idsToConsume.push(recordId);
   }
 
-  if (selected.length < count) {
+  // Allow returning partial results if we have at least 50% of requested count
+  // This is better than falling back to a random fetch that might return even fewer
+  if (selected.length < minRequiredArtists) {
+    console.log(`[bufferTake] Selected ${selected.length} songs but need ${minRequiredArtists} minimum, falling back`);
     return null;
   }
+
+  console.log(`[bufferTake] Successfully served ${selected.length}/${count} songs from buffer (${bufferUniqueArtistCount()} unique artists remaining)`);
 
   for (const recordId of idsToConsume) {
     bufferRemoveRecordId(recordId);
@@ -5312,9 +5338,20 @@ async function buildPlaylistSeedItems(count) {
   return cloneRandomSongItems(finalItems, count);
 }
 
-async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = null, genreFilters = [] }) {
+async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = null, genreFilters = [], seed = null }) {
   const maxOffset = 5000;
-  const fetchLimit = Math.min(120, Math.max(count * 5, 30));
+  // Increased fetch limit to account for aggressive filtering (audio + artwork)
+  // Fetch 10x requested count (up to 300) to ensure enough valid records after filtering
+  const fetchLimit = Math.min(300, Math.max(count * 10, 50));
+
+  // OPTIMIZATION NOTE: Ideally, we would prefilter at the database level to avoid fetching
+  // records without audio/artwork. However, FileMaker container fields (mp3, Artwork::Picture)
+  // cannot be queried directly via the Data API. To implement true prefiltering, add these
+  // calculated fields to your FileMaker layout:
+  //   - HasAudio (calculation: not IsEmpty(mp3))
+  //   - HasArtwork (calculation: not IsEmpty(Artwork::Picture))
+  // Then modify baseQuery to include: { 'HasAudio': '1', 'HasArtwork': '1', 'Album Title': '*' }
+  // This would dramatically reduce the number of records fetched and filtered.
   const baseQuery = { 'Album Title': '*' };
   const normalizedGenres = Array.isArray(genreFilters)
     ? genreFilters.map((value) => value.trim()).filter(Boolean)
@@ -5324,12 +5361,33 @@ async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = nul
   let activeGenreFilters = normalizedGenres.slice(0, 5);
   let currentGenreField = activeGenreFilters.length ? genreFieldCandidates[activeGenreFieldIndex] || null : null;
 
-  let randomOffset;
-  if (mode === 'initial' && typeof cacheSlot === 'number') {
-    randomOffset = (cacheSlot % maxOffset) + 1;
+  // Use seeded random if seed is provided, otherwise use Math.random
+  const random = seed !== null ? createSeededRandom(seed) : Math.random.bind(Math);
+
+  // Generate multiple random offsets from different regions for better distribution
+  // This avoids hitting sparse regions of the database
+  const generateMultipleOffsets = () => {
+    const regionSize = Math.floor(maxOffset / 3); // Divide database into 3 regions
+    const offsets = [];
+    for (let i = 0; i < 3; i++) {
+      const regionStart = i * regionSize;
+      const offset = regionStart + Math.floor(random() * regionSize) + 1;
+      offsets.push(Math.min(offset, maxOffset));
+    }
+    return offsets;
+  };
+
+  let randomOffsets;
+  if (mode === 'initial' && typeof cacheSlot === 'number' && seed === null) {
+    // For initial requests without seed, use cache slot for first offset, then add two more
+    const primaryOffset = (cacheSlot % maxOffset) + 1;
+    randomOffsets = [primaryOffset, ...generateMultipleOffsets().slice(1)];
   } else {
-    randomOffset = Math.floor(Math.random() * maxOffset) + 1;
+    randomOffsets = generateMultipleOffsets();
   }
+
+  console.log(`[fetchRandomSongsBatch] Using multiple offsets for better distribution: ${randomOffsets.join(', ')}${seed !== null ? ` (seeded: ${seed})` : ''}`);
+  const randomOffset = randomOffsets[0]; // Keep for logging compatibility
 
   const state = {
     selected: [],
@@ -5407,18 +5465,39 @@ async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = nul
     }
   };
 
-  let dataWithVisibility = await runQuery(randomOffset);
+  // Fetch from multiple offsets for better distribution
+  // Use smaller fetch limits per offset since we're fetching from multiple locations
+  const perOffsetLimit = Math.ceil(fetchLimit / randomOffsets.length);
+  let allData = [];
 
-  if (!dataWithVisibility.length) {
-    console.warn(`[random-songs] Empty batch at offset ${randomOffset}, retrying from start`);
-    dataWithVisibility = await runQuery(1);
+  for (const offset of randomOffsets) {
+    try {
+      const data = await runQuery(offset);
+      console.log(`[fetchRandomSongsBatch] Offset ${offset}: fetched ${data.length} records`);
+      allData = allData.concat(data);
+
+      // Early exit if we already have plenty of data
+      if (allData.length >= fetchLimit) {
+        console.log(`[fetchRandomSongsBatch] Collected sufficient data (${allData.length} records), stopping early`);
+        break;
+      }
+    } catch (err) {
+      console.warn(`[fetchRandomSongsBatch] Failed to fetch from offset ${offset}:`, err.message);
+      // Continue with other offsets
+    }
   }
 
-  selectUniqueRecords(dataWithVisibility, count, state);
+  if (!allData.length) {
+    console.warn(`[random-songs] All offsets returned empty, retrying from start`);
+    allData = await runQuery(1);
+  }
+
+  console.log(`[fetchRandomSongsBatch] Total fetched from ${randomOffsets.length} offsets: ${allData.length} records`);
+  selectUniqueRecords(allData, count, state);
 
   if (state.selected.length < count) {
     console.log(`[random-songs] Only found ${state.selected.length}/${count} unique artists, fetching more (1 retry max)`);
-    const additionalOffset = Math.floor(Math.random() * maxOffset) + 1;
+    const additionalOffset = Math.floor(random() * maxOffset) + 1;
     let additionalData = await runQuery(additionalOffset);
     additionalData = additionalData.filter(record => !state.selectedIds.has(record.recordId));
     selectUniqueRecords(additionalData, count, state);
@@ -5444,16 +5523,26 @@ async function fetchRandomSongsBatch({ count, mode = 'loadMore', cacheSlot = nul
   };
 }
 
-async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot, genreFilters = [] }) {
+async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot, genreFilters = [], seed = null }) {
   const maxOffset = 5000;
+
+  // Use seeded random if seed is provided, otherwise use Math.random
+  const random = seed !== null ? createSeededRandom(seed) : Math.random.bind(Math);
+
   let randomOffset;
-  if (!isLoadMore && typeof cacheSlot === 'number') {
+  if (!isLoadMore && typeof cacheSlot === 'number' && seed === null) {
     randomOffset = (cacheSlot % maxOffset) + 1;
   } else {
-    randomOffset = Math.floor(Math.random() * maxOffset) + 1;
+    randomOffset = Math.floor(random() * maxOffset) + 1;
   }
 
-  const fetchLimit = Math.min(60, count * 4);
+  console.log(`[fetchRandomSongsLegacy] Using offset ${randomOffset}${seed !== null ? ` (seeded: ${seed})` : ''}`);
+
+  // Increased legacy fetch limit for better filtering coverage
+  const fetchLimit = Math.min(150, count * 8);
+
+  // OPTIMIZATION NOTE: See fetchRandomSongsBatch for database prefiltering recommendations.
+  // Adding HasAudio/HasArtwork calculated fields to FileMaker would reduce fetched records.
   const baseQuery = { 'Album Title': '*' };
   const normalizedGenres = Array.isArray(genreFilters)
     ? genreFilters.map((value) => value.trim()).filter(Boolean)
@@ -5529,6 +5618,8 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot, genreFilte
     .filter(record => hasValidAudio(record.fieldData || {}));
     // Note: We don't filter by artwork here - frontend handles missing artwork with placeholders
 
+  console.log(`[fetchRandomSongsLegacy] Offset ${randomOffset}: fetched ${rawData.length} records, ${visible.length} after visibility+audio filter`);
+
   if (!visible.length) {
     console.warn(`[random-songs] Legacy fetch empty at offset ${randomOffset}, retrying from start`);
     const retryJson = await runLegacyQuery(1);
@@ -5568,7 +5659,7 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot, genreFilte
     if (selected.length >= count) break;
     const tracks = artistMap.get(artist);
     if (!tracks || !tracks.length) continue;
-    const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
+    const randomTrack = tracks[Math.floor(random() * tracks.length)];
     selected.push(randomTrack);
   }
 
@@ -5576,7 +5667,7 @@ async function fetchRandomSongsLegacy({ count, isLoadMore, cacheSlot, genreFilte
     console.log(`[random-songs] Legacy fetch only found ${selected.length}/${count} unique artists, attempting secondary fetch`);
     const usedArtists = new Set(selected.map(record => resolveArtist(record.fieldData || {})));
     const selectedIds = new Set(selected.map(record => record.recordId));
-    const additionalOffset = Math.floor(Math.random() * maxOffset) + 1;
+    const additionalOffset = Math.floor(random() * maxOffset) + 1;
     const additionalRawData = await runLegacyQuery(additionalOffset);
     let additionalVisible = additionalRawData
       .filter(record => recordIsVisible(record.fieldData || {}))
@@ -5620,16 +5711,34 @@ function selectUniqueRecords(records, desiredCount, state) {
   const { selected, usedArtists, selectedIds, extrasMap } = state;
   const artistBuckets = new Map();
 
+  let filteredOutAudio = 0;
+  let filteredOutArtwork = 0;
+  let filteredOutDuplicate = 0;
+
   for (const record of records) {
-    if (!record || !record.recordId || selectedIds.has(record.recordId)) continue;
+    if (!record || !record.recordId) continue;
+    if (selectedIds.has(record.recordId)) {
+      filteredOutDuplicate++;
+      continue;
+    }
     const fields = record.fieldData || {};
-    if (!hasValidAudio(fields) || !hasValidArtwork(fields)) continue;
+    if (!hasValidAudio(fields)) {
+      filteredOutAudio++;
+      continue;
+    }
+    if (!hasValidArtwork(fields)) {
+      filteredOutArtwork++;
+      continue;
+    }
     const artist = resolveArtist(fields);
     if (!artistBuckets.has(artist)) {
       artistBuckets.set(artist, []);
     }
     artistBuckets.get(artist).push(record);
   }
+
+  const uniqueArtistCount = artistBuckets.size;
+  console.log(`[selectUniqueRecords] Processed ${records.length} records: ${uniqueArtistCount} unique artists, filtered out: ${filteredOutAudio} no-audio, ${filteredOutArtwork} no-artwork, ${filteredOutDuplicate} duplicates`);
 
   const artists = shuffleArray(Array.from(artistBuckets.keys()));
 
@@ -5664,6 +5773,8 @@ function selectUniqueRecords(records, desiredCount, state) {
     }
   }
 
+  console.log(`[selectUniqueRecords] Selected ${selected.length}/${desiredCount} songs from ${usedArtists.size} artists, ${extrasMap.size} extras buffered`);
+
   return state;
 }
 
@@ -5671,6 +5782,18 @@ function selectUniqueRecords(records, desiredCount, state) {
 app.get('/api/random-songs', async (req, res) => {
   try {
     const count = Math.max(1, Math.min(50, parseInt(req.query.count || '8', 10)));
+
+    // Optional seed parameter for reproducible randomization
+    // If provided, the same seed will always produce the same results (useful for debugging)
+    // Users can "re-roll" by changing the seed value
+    let seed = null;
+    if (req.query.seed !== undefined && req.query.seed !== null && req.query.seed !== '') {
+      const parsedSeed = parseInt(req.query.seed, 10);
+      if (!isNaN(parsedSeed)) {
+        seed = parsedSeed;
+        console.log(`[random-songs] Using seed: ${seed} for reproducible randomization`);
+      }
+    }
 
     const rawGenreInput = req.query.genre;
     const genreFragments = [];
@@ -5763,7 +5886,8 @@ app.get('/api/random-songs', async (req, res) => {
         count,
         mode: isLoadMore ? 'loadMore' : 'initial',
         cacheSlot,
-        genreFilters
+        genreFilters,
+        seed
       });
     } catch (err) {
       if (!isAbortError(err)) throw err;
@@ -5772,7 +5896,8 @@ app.get('/api/random-songs', async (req, res) => {
         count,
         isLoadMore,
         cacheSlot,
-        genreFilters
+        genreFilters,
+        seed
       });
     }
 
@@ -5782,7 +5907,8 @@ app.get('/api/random-songs', async (req, res) => {
         count,
         isLoadMore,
         cacheSlot,
-        genreFilters
+        genreFilters,
+        seed
       });
     }
 
