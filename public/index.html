@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <!-- Resource hints for better performance -->
   <link rel="dns-prefetch" href="/">
-  <link rel="preload" href="/app.min.js?v=57" as="script">
+  <link rel="preload" href="/app.min.js?v=81&t=1764877800" as="script">
   <title>MAD JUKEBOX - Bakelite Edition</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
@@ -79,33 +79,6 @@
       opacity: 0.8;
     }
 
-    /* Fixed decorative jukebox in the background */
-    .jukebox-backdrop {
-      position: fixed;
-      right: 3vw;
-      bottom: 0;
-      width: min(420px, 30vw);
-      opacity: 0.22;
-      pointer-events: none; /* purely visual */
-      filter:
-        drop-shadow(0 14px 40px rgba(0, 0, 0, 0.65))
-        saturate(1.2);
-      z-index: -1; /* behind the main app */
-    }
-
-    .jukebox-backdrop img {
-      display: block;
-      width: 100%;
-      height: auto;
-      border-radius: 28px;
-    }
-
-    /* Hide background jukebox on smaller screens to keep layout clean */
-    @media (max-width: 900px) {
-      .jukebox-backdrop {
-        display: none;
-      }
-    }
 
     /* Subtle aging animation */
     @keyframes bakeliteAging {
@@ -256,10 +229,10 @@
       .view-buttons{bottom:100px;right:10px;gap:8px;}
       .view-buttons a{padding:6px 12px;font-size:12px;}
     }
-    .albums{display:grid;grid-template-columns:repeat(4,240px);grid-template-rows:auto auto;gap:16px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
+    .albums{display:grid;grid-template-columns:repeat(4,196px);grid-template-rows:repeat(auto-fit,196px);gap:16px;scroll-margin-top:128px;justify-content:start;width:fit-content;}
     /* Featured albums mode: larger 2-column grid */
-    .albums[data-mode="featured"]{grid-template-columns:repeat(2,320px);gap:20px;}
-    .albums.single-album{display:flex;flex-direction:column;align-items:flex-start;gap:12px;max-width:380px;}
+    .albums[data-mode="featured"]{grid-template-columns:repeat(2,224px);grid-template-rows:repeat(auto-fit,224px);gap:20px;}
+    .albums.single-album{display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:190px;}
     .card {
       background: var(--card-solid);
       background-image:
@@ -271,14 +244,15 @@
         var(--card);
       border: 5px solid;
       border-image: var(--chrome) 1;
-      border-radius: 24px;
-      padding: 20px;
+      border-radius: 8px;
+      padding: 0;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 0;
       overflow: hidden;
       scroll-margin-top: 128px;
-      min-height: 380px;
+      width: 196px;
+      height: 196px;
       box-shadow:
         0 8px 24px rgba(0, 0, 0, 0.15),
         0 4px 12px rgba(0, 0, 0, 0.1),
@@ -320,7 +294,30 @@
       0% { filter: hue-rotate(0deg); }
       100% { filter: hue-rotate(360deg); }
     }
-    .card-buttons{margin-top:12px;display:flex;flex-direction:column;gap:10px;}
+    .card-buttons{
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      flex-direction: row;
+      gap: 0;
+      z-index: 2;
+    }
+    .card-buttons .btn {
+      flex: 1;
+      border-radius: 0;
+      padding: 8px;
+      font-size: 9px;
+      border: none;
+      border-top: 2px solid rgba(255, 255, 255, 0.1);
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(10px);
+    }
+    .card-buttons .btn:hover {
+      background: rgba(255, 51, 102, 0.3);
+      border-top-color: var(--neon-red);
+    }
     .card .play-button {
       border-radius: 50px;
       padding: 14px 20px;
@@ -385,216 +382,69 @@
     .subscription-toast-close{position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.1);border:none;color:#000;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;}
     .subscription-toast-close:hover{background:rgba(0,0,0,0.2);}
 
-    /* Interactive mini-jukebox widget */
-    .jukebox-widget {
-      position: fixed;
-      left: 16px;
-      bottom: 16px;
-      width: 150px;
-      border-radius: 24px;
-      overflow: hidden;
-      box-shadow:
-        0 10px 30px rgba(0, 0, 0, 0.7),
-        0 0 25px rgba(255, 234, 0, 0.4);
-      background: radial-gradient(circle at top, #402016 0%, #140807 60%);
-      cursor: pointer;
-      z-index: 40;
-      transform: translateZ(0);
-    }
-
-    .jukebox-widget-image {
-      display: block;
-      width: 100%;
-      height: auto;
-    }
-
-    .jukebox-widget-overlay {
-      position: absolute;
-      inset: auto 0 0 0;
-      padding: 8px 10px;
-      background: linear-gradient(
-        to top,
-        rgba(0, 0, 0, 0.9),
-        rgba(0, 0, 0, 0)
-      );
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      align-items: flex-start;
-    }
-
-    .jukebox-label {
-      font-size: 11px;
-      letter-spacing: 1px;
-      font-weight: 700;
-      color: var(--neon-yellow);
-      text-shadow:
-        0 0 6px rgba(255, 234, 0, 0.9),
-        0 0 14px rgba(255, 136, 0, 0.9);
-    }
-
-    .jukebox-widget-btn {
-      margin-top: 2px;
-      font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: none;
-      cursor: pointer;
-      font-weight: 700;
-      text-transform: uppercase;
-      background: linear-gradient(90deg, var(--btn-gradient-start), var(--btn-gradient-end));
-      color: var(--btn-text);
-      box-shadow:
-        0 0 10px rgba(255, 234, 0, 0.7),
-        0 0 16px rgba(255, 51, 102, 0.7);
-    }
-
-    .jukebox-widget.loading {
-      opacity: 0.8;
-      filter: saturate(0.6);
-    }
-
-    .jukebox-widget.loading .jukebox-widget-btn {
-      pointer-events: none;
-      opacity: 0.7;
-    }
-
-    /* Glow when music is playing */
-    .jukebox-widget.playing .jukebox-widget-image {
-      filter:
-        drop-shadow(0 0 18px rgba(255, 234, 0, 0.9))
-        saturate(1.3);
-    }
-
-    /* Hide the widget on very small screens */
-    @media (max-width: 680px) {
-      .jukebox-widget {
-        width: 120px;
-        left: 8px;
-        bottom: 8px;
-      }
-    }
-
     /* Missing Audio Mode - Secret feature for operators */
     body.missing-audio-mode .missing-mode-banner{display:block !important;}
     .missing-mode-banner{display:none;position:fixed;top:0;left:0;right:0;background:#ff4444;color:#fff;text-align:center;padding:12px;font-weight:700;z-index:9999;box-shadow:0 2px 8px rgba(255,68,68,0.5);}
 
-    /* Cover: Vinyl Record Style */
+    /* Cover: Square Vinyl Album Style */
     .cover-wrap {
       position: relative;
-      width: var(--cover-size);
-      height: var(--cover-size);
-      border-radius: 50%;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
-      border: 6px solid;
-      border-image: var(--chrome) 1;
-      background:
-        radial-gradient(circle at center, #1a1a1a 0%, #0a0a0a 30%, #000 100%);
-      margin: 0 auto;
+      background: #000;
       cursor: pointer;
       transition: all 0.3s ease;
-      box-shadow:
-        0 0 20px rgba(255, 51, 102, 0.5),
-        inset 0 0 30px rgba(0, 0, 0, 0.8),
-        inset 0 2px 4px rgba(255, 255, 255, 0.1);
     }
 
     .cover-wrap:hover {
-      transform: scale(1.08);
-      box-shadow:
-        0 0 40px rgba(255, 51, 102, 0.8),
-        0 0 60px rgba(255, 204, 0, 0.5),
-        inset 0 0 30px rgba(0, 0, 0, 0.8),
-        inset 0 2px 4px rgba(255, 255, 255, 0.2);
+      filter: brightness(1.1);
     }
 
-    /* Now Playing Turntable - with tonearm and spinning vinyl */
-    .now-playing-thumb {
+    /* Now Playing - video fills entire card when playing */
+    .now-playing {
       position: relative;
-      overflow: visible !important; /* Allow tonearm to show */
-      background: radial-gradient(circle, #1a1a1a 0%, #0d0d0d 100%);
-      box-shadow:
-        inset 0 0 20px rgba(0, 0, 0, 0.8),
-        0 4px 12px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+      margin-left: -15%;
     }
 
-    /* Turntable platter with vinyl grooves */
-    .now-playing-thumb img {
-      border-radius: 50%;
-      box-shadow:
-        0 0 0 2px #000,
-        0 0 0 3px #222,
-        0 4px 12px rgba(0, 0, 0, 0.6),
-        inset 0 0 15px rgba(0, 0, 0, 0.4);
+    .now-playing-video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      z-index: 0;
+      border-radius: 20px;
+    }
+
+    .now-playing.playing .now-playing-video {
+      opacity: 0.6;
+    }
+
+    .now-playing-header,
+    .now-playing-body,
+    .now-playing-controls,
+    .now-playing-progress {
       position: relative;
-      /* Add subtle groove texture */
-      filter: contrast(1.05);
+      z-index: 1;
     }
 
-    /* Spinning vinyl when playing */
-    .now-playing-thumb.playing img {
-      animation: vinylSpin 3s linear infinite;
+    /* White text with black shadow for readability over video */
+    .now-playing.playing,
+    .now-playing.playing * {
+      color: white !important;
+      text-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.8),
+        0 2px 4px rgba(0, 0, 0, 0.6),
+        0 0 8px rgba(0, 0, 0, 0.4);
     }
 
-    @keyframes vinylSpin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-
-    /* Center label on vinyl */
-    .now-playing-thumb::before {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 12px;
-      height: 12px;
-      transform: translate(-50%, -50%);
+    .now-playing-thumb-content img {
       border-radius: 50%;
-      background: radial-gradient(circle,
-        #f5f5f5 0%,
-        #e0e0e0 30%,
-        #c0c0c0 60%,
-        #909090 100%);
-      box-shadow:
-        0 0 0 1px rgba(0, 0, 0, 0.3),
-        0 2px 5px rgba(0, 0, 0, 0.4),
-        inset 0 0 10px rgba(255, 255, 255, 0.4),
-        inset 0 1px 2px rgba(255, 255, 255, 0.6);
-      z-index: 5;
-      pointer-events: none;
-    }
-
-    /* Tonearm - at bottom, starts at outer edge (resting position) */
-    .now-playing-thumb::after {
-      content: '';
-      position: absolute;
-      bottom: 10%;
-      right: -30%;
-      width: 88%;
-      height: 5px;
-      background: linear-gradient(to right,
-        #1a1a1a 0%,
-        #2d2d2d 8%,
-        #4a4a4a 15%,
-        #5d5d5d 25%,
-        #4a4a4a 50%,
-        #3a3a3a 70%,
-        #2a2a2a 85%,
-        transparent 100%);
-      border-radius: 3px 0 0 3px;
-      transform-origin: 96% center;
-      transform: rotate(var(--tonearm-angle, -35deg));
-      box-shadow:
-        0 3px 6px rgba(0, 0, 0, 0.7),
-        inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.4),
-        inset 2px 0 2px rgba(0, 0, 0, 0.3);
-      transition: transform 1s linear;
-      z-index: 10;
-      pointer-events: none;
-      border-top: 0.5px solid rgba(255, 255, 255, 0.05);
-      border-bottom: 0.5px solid rgba(0, 0, 0, 0.5);
     }
 
 
@@ -605,79 +455,124 @@
       height: 100%;
       object-fit: cover;
       display: block;
-      border-radius: 50%;
       z-index: 0;
-    }
-    /* Featured albums: larger vinyl covers */
-    .albums:not(.single-album) .card .cover-wrap {
-      width: 200px;
-      height: 200px;
-      border-radius: 50%;
-      border: 8px solid;
-      border-image: var(--chrome) 1;
-    }
-    .albums.single-album .cover-wrap {
-      width: 200px;
-      height: 200px;
-      margin: 0 auto 8px;
-      border-radius: 50%;
-      border: 8px solid;
-      border-image: var(--chrome) 1;
+      image-rendering: high-quality;
+      image-rendering: -webkit-optimize-contrast;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      transform: translateZ(0);
+      filter: none;
     }
 
     .heading {
+      position: absolute;
+      bottom: 27px;
+      left: 0;
+      right: 0;
       display: flex;
-      align-items: center;
-      gap: 8px;
       flex-direction: column;
-      justify-content: center;
+      gap: 2px;
+      padding: 8px;
+      background: none;
       text-align: center;
-      width: 100%;
+      z-index: 2;
     }
 
     .card h3 {
       margin: 0;
-      font-size: 20px;
-      line-height: 1.3;
+      font-size: 10px;
+      line-height: 1.2;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       width: 100%;
       font-weight: 900;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 0.5px;
       color: var(--neon-yellow);
       text-shadow:
+        -1px -1px 0 #000,
+        1px -1px 0 #000,
+        -1px 1px 0 #000,
+        1px 1px 0 #000,
         0 0 10px rgba(255, 234, 0, 0.8),
-        0 0 20px rgba(255, 234, 0, 0.5),
-        0 2px 4px rgba(0, 0, 0, 0.8);
+        0 0 20px rgba(255, 234, 0, 0.5);
       font-family: Impact, 'Arial Black', sans-serif;
     }
 
     .card-artist {
-      color: var(--accent);
-      font-size: 16px;
-      margin-top: 4px;
+      color: var(--neon-red);
+      font-size: 13px;
+      margin-top: 0;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       width: 100%;
-      font-weight: 700;
-      letter-spacing: 0.5px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      text-transform: uppercase;
       text-shadow:
-        0 0 8px rgba(255, 51, 102, 0.6),
-        0 1px 2px rgba(0, 0, 0, 0.8);
+        -2px -2px 0 #000,
+        2px -2px 0 #000,
+        -2px 2px 0 #000,
+        2px 2px 0 #000,
+        0 0 15px rgba(255, 51, 102, 1),
+        0 0 20px rgba(255, 51, 102, 0.8),
+        0 0 25px rgba(255, 51, 102, 0.6);
+      font-family: Impact, 'Arial Black', sans-serif;
     }
 
     .albums.single-album .card {
-      width: 100%;
-      max-width: 380px;
-      min-height: 280px;
-      padding: 16px;
+      width: 98px;
+      height: 98px;
+      border: 3px solid;
+      border-radius: 4px;
     }
     .albums.single-album .card h3 {
-      font-size: 24px;
-      letter-spacing: 1.5px;
+      font-size: 6px;
+      letter-spacing: 0.2px;
+    }
+    .albums.single-album .card-artist {
+      font-size: 5px;
+      letter-spacing: 0.1px;
+    }
+    .albums.single-album .heading {
+      bottom: 17px;
+      padding: 4px;
+      gap: 1px;
+    }
+    .albums.single-album .card-buttons .btn {
+      padding: 4px;
+      font-size: 5px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .card-expand-btn {
+      position: absolute;
+      bottom: 3px;
+      right: 3px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.8);
+      border: 2px solid var(--neon-yellow);
+      color: var(--neon-yellow);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 3;
+      padding: 0;
+      backdrop-filter: blur(10px);
+      transition: all 0.2s ease;
+      box-shadow: 0 0 10px rgba(255, 234, 0, 0.5);
+    }
+    .card-expand-btn:hover {
+      background: rgba(255, 51, 102, 0.9);
+      border-color: var(--neon-red);
+      color: #fff;
+      transform: scale(1.15);
+      box-shadow: 0 0 15px rgba(255, 51, 102, 0.8);
     }
     .muted{color:var(--muted);font-size:11px;text-align:center;line-height:1.2;}
     .albums.single-album .muted{font-size:13px;}
@@ -849,49 +744,71 @@
     .image-lightbox-close:hover{background:rgba(0,0,0,0.9);}
 
     /* ======= Modal (centered track window) ======= */
-    .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:transparent;z-index:100;}
-    .overlay.open{display:flex;}
+    .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:transparent;z-index:100;gap:40px;}
+    .overlay.open{display:flex;padding-right:30%;justify-content:space-evenly;}
+    body.no-scroll .albums{display:none !important;}
+    .modal-album-sleeve{
+      width:280px;
+      height:280px;
+      background:var(--card);
+      border:5px solid;
+      border-image:var(--chrome) 1;
+      border-radius:12px;
+      overflow:hidden;
+      box-shadow:0 8px 32px rgba(0,0,0,0.4);
+      background-size:cover;
+      background-position:center;
+      background-repeat:no-repeat;
+      flex-shrink:0;
+    }
     .modal {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 16px;
-      box-shadow: 0 10px 40px rgba(0,0,0,.35);
-      width: min(450px, 94vw);   /* was min(900px,94vw) – now ~half width */
-      max-height: 88vh;
+      border-radius: 8px;
+      box-shadow: 0 5px 20px rgba(0,0,0,.35);
+      width: min(300px, 94vw);
+      max-height: 70vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      margin-top: 15%;
     }
 
+    @media (max-width: 900px) {
+      .modal-album-sleeve {
+        display: none;
+      }
+    }
     @media (max-width: 700px) {
       .modal {
         width: 94vw;
       }
     }
-    .modal header{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border);background:#14161a;position:sticky;top:0;z-index:1;}
-    .modal .cover-wrap{width:56px;height:56px;margin:0;}
-    .modal .meta{display:flex;flex-direction:column;gap:2px;min-width:0;}
-    .modal h2{margin:0;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .modal .sub{color:var(--muted);font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+    .modal header{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);background:#14161a;position:sticky;top:0;z-index:1;}
+    .modal .cover-wrap{display:none;}
+    .modal .meta{display:flex;flex-direction:column;gap:1px;min-width:0;}
+    .modal h2{margin:0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .modal .sub{color:var(--muted);font-size:9px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;}
     .modal .spacer{flex:1;}
-    .modal .close{border-radius:10px;padding:8px 10px;cursor:pointer;}
-    .modal .content{padding:12px;overflow:auto;}
-    .album-actions{display:flex;justify-content:flex-end;gap:10px;margin:0 0 12px;}
-    .album-actions .btn{white-space:nowrap;}
-    .tracks{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;}
-    .track{background:#1f1f23;padding:8px 10px;border-radius:8px;display:flex;flex-direction:column;gap:6px;color:#f8f4eb;}
+    .modal .close{border-radius:5px;padding:5px 7px;cursor:pointer;font-size:9px;}
+    .modal .content{padding:8px;overflow-y:auto;overflow-x:hidden;}
+    .album-actions{display:flex;justify-content:flex-end;gap:6px;margin:0 0 8px;}
+    .album-actions .btn{white-space:nowrap;font-size:9px;padding:5px 7px;}
+    .tracks{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;}
+    .track{background:#1f1f23;padding:6px 8px;border-radius:6px;display:flex;flex-direction:column;gap:4px;color:#f8f4eb;}
     .track.loading{opacity:0.75;}
     .track.loading .btn.small{pointer-events:none;}
-    .track-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+    .track-top{display:flex;align-items:center;justify-content:space-between;gap:6px;}
     .track-title{display:flex;flex-direction:column;flex:1;min-width:0;}
-    .track .name{white-space:normal;word-break:break-word;overflow:visible;text-overflow:unset;line-height:1.35;color:#fef9ef;}
-    .track .artist{color:rgba(255,255,255,0.7);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .controls{display:flex;align-items:center;gap:6px;}
+    .track .name{white-space:normal;word-break:break-word;overflow:visible;text-overflow:unset;line-height:1.35;color:#fef9ef;font-size:10px;}
+    .track .artist{color:rgba(255,255,255,0.7);font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .controls{display:flex;align-items:center;gap:4px;}
+    .controls .btn{font-size:8px;padding:4px 6px;}
     .playing{outline:1px solid var(--accent); background:#202427;}
-    .progress{display:flex;align-items:center;gap:8px;margin-top:6px;}
-    .seek{appearance:none;width:240px;height:8px;background:linear-gradient(var(--accent),var(--accent)) 0/var(--fill,0%) 100% no-repeat,#1b2a21;border-radius:999px;outline:none;border:1px solid var(--accent);}
-    .seek::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);}
-    .time{font-size:12px;color:var(--muted);min-width:98px;text-align:right;}
+    .progress{display:flex;align-items:center;gap:6px;margin-top:4px;}
+    .seek{appearance:none;width:160px;height:5px;background:linear-gradient(var(--accent),var(--accent)) 0/var(--fill,0%) 100% no-repeat,#1b2a21;border-radius:999px;outline:none;border:1px solid var(--accent);}
+    .seek::-webkit-slider-thumb{appearance:none;width:8px;height:8px;border-radius:50%;background:var(--accent);}
+    .time{font-size:8px;color:var(--muted);min-width:65px;text-align:right;}
     .no-scroll{overflow:hidden;}
 
     .info-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:150;}
@@ -1229,9 +1146,6 @@
   </style>
 </head>
 <body>
-  <div class="jukebox-backdrop" aria-hidden="true">
-    <img src="/img/jukebox.png" alt="" loading="lazy" decoding="async">
-  </div>
 
   <!-- Access Token Entry Overlay -->
   <div class="access-token-overlay hidden" id="accessTokenOverlay">
@@ -1292,30 +1206,11 @@
           0 0 40px var(--neon-red),
           0 2px 4px rgba(0, 0, 0, 0.8);
         filter: drop-shadow(0 0 15px rgba(255, 234, 0, 0.8));
-        animation: jukeboxGlow 2s ease-in-out infinite alternate;
       ">MAD JUKEBOX</h1>
       <style>
-        @keyframes jukeboxGlow {
-          0% {
-            text-shadow:
-              0 0 10px var(--neon-yellow),
-              0 0 20px var(--neon-yellow),
-              0 0 30px var(--neon-red),
-              0 0 40px var(--neon-red),
-              0 2px 4px rgba(0, 0, 0, 0.8);
-          }
-          100% {
-            text-shadow:
-              0 0 20px var(--neon-yellow),
-              0 0 30px var(--neon-yellow),
-              0 0 40px var(--neon-red),
-              0 0 60px var(--neon-red),
-              0 2px 4px rgba(0, 0, 0, 0.8);
-          }
-        }
       </style>
       <div class="searchbar">
-        <div class="search-fields" id="searchFields" hidden>
+        <div class="search-fields" id="searchFields">
           <input id="searchArtist" type="search" placeholder="Artist" autocomplete="off" />
           <input id="searchAlbum" type="search" placeholder="Album" autocomplete="off" />
           <input id="searchTrack" type="search" placeholder="Track" autocomplete="off" />
@@ -1326,10 +1221,6 @@
         <span id="status" class="status" hidden aria-live="polite" role="status"><span class="pulse"></span><span id="statusText">Searching…</span></span>
       </div>
       <div class="header-actions">
-        <button id="shuffleBtn" class="btn btn-accent" hidden>Random Play</button>
-        <button id="shufflePlayBtn" class="btn btn-accent" hidden aria-pressed="false">Shuffle Play</button>
-        <button id="randomStopBtn" class="btn small" hidden type="button">⏹</button>
-        <button id="randomSkipBtn" class="btn small" hidden type="button">⏭</button>
         <div class="ai-search-panel" id="aiSearchPanel" data-collapsed="true">
           <button id="aiSearchToggle" type="button" class="ai-search-toggle" aria-expanded="false" aria-controls="aiSearchPanelBody" aria-label="Toggle AI natural language search panel">
             <strong>AI Search</strong>
@@ -1383,8 +1274,11 @@
 
   <main>
     <div class="layout-grid">
-      <aside id="playlistColumn" class="playlist-column" hidden>
+      <aside id="playlistColumn" class="playlist-column">
         <section id="nowPlayingCard" class="now-playing" hidden>
+          <video id="nowPlayingVideo" class="now-playing-video" loop muted>
+            <source src="/video/JB.mp4" type="video/mp4">
+          </video>
           <div class="now-playing-header">
             <span class="label">Now Playing</span>
             <div style="display: flex; gap: 6px;">
@@ -1392,7 +1286,9 @@
             </div>
           </div>
           <div class="now-playing-body">
-            <div id="nowPlayingThumb" class="now-playing-thumb">--</div>
+            <div id="nowPlayingThumb" class="now-playing-thumb">
+              <div class="now-playing-thumb-content">--</div>
+            </div>
             <div class="now-playing-meta">
               <div id="nowPlayingTitle" class="now-playing-title">Track</div>
               <div id="nowPlayingSubtitle" class="now-playing-sub">Artist</div>
@@ -1424,7 +1320,7 @@
             <div id="playlistsEmpty" class="playlist-empty" hidden>No playlists yet. Create one to start saving tracks.</div>
           </div>
         </section>
-        <section id="publicPlaylistsPanel" class="public-playlists" hidden>
+        <section id="publicPlaylistsPanel" class="public-playlists">
           <div class="playlists-header">
             <h2>Featured Playlists</h2>
           </div>
@@ -1504,6 +1400,7 @@
 
   <!-- Single centered modal (reused for all albums) -->
   <div id="overlay" class="overlay" aria-hidden="true">
+    <div id="modalAlbumSleeve" class="modal-album-sleeve"></div>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <header>
         <div id="modalCover" class="cover-wrap" aria-hidden="true"></div>
@@ -1605,15 +1502,6 @@
     <img id="imageLightboxImg" alt="Album artwork" loading="lazy" decoding="async" />
   </div>
 
-  <div class="jukebox-widget" id="jukeboxWidget">
-    <img src="/img/jukebox.png" alt="MAD Jukebox" class="jukebox-widget-image" loading="lazy" decoding="async">
-    <div class="jukebox-widget-overlay">
-      <span class="jukebox-label">MAD JUKEBOX</span>
-      <button type="button" class="jukebox-widget-btn" id="jukeboxShuffleButton">
-        Feeling Lucky
-      </button>
-    </div>
-  </div>
 
   <script>
     // Close featured playlist button handler
@@ -1889,6 +1777,12 @@
 
       // Preload featured playlists in the background - but only after access token is ready
       window.addEventListener('mass:access-ready', function() {
+        // Hide loading indicator once access is ready
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        if (loadingIndicator) {
+          loadingIndicator.setAttribute('hidden', '');
+        }
+
         setTimeout(() => {
           console.log('[Preload] Starting featured playlists preload');
           fetch('/api/public-playlists', { headers: { 'Accept': 'application/json' } })
@@ -2216,9 +2110,8 @@
     }
   })();
   </script>
-  <script defer src="/app.min.js?v=57"></script>
+  <script defer src="/app.min.js?v=81&t=1764877800"></script>
   <script>
-  window.__jukeboxAdvancedSearch = null;
   // Override search to use separate fields
   window.addEventListener('DOMContentLoaded', () => {
     const searchArtistEl = document.getElementById('searchArtist');
@@ -2246,7 +2139,6 @@
         const useAdvanced = Boolean(artist || album || track);
 
         if (!useAdvanced) {
-          window.__jukeboxAdvancedSearch = null;
           return originalDoSearch.call(this, q, options);
         }
 
@@ -2260,7 +2152,6 @@
         const requestedOffset = Number.isFinite(options.offset) ? Math.max(0, Number(options.offset)) : 0;
         params.set('offset', requestedOffset);
 
-        window.__jukeboxAdvancedSearch = { artist, album, track, genre: genreValue, limit: searchLimit };
 
         console.log('[Separate Search] Advanced search params:', {
           artist,
@@ -2324,7 +2215,6 @@
           if (searchAlbumEl) searchAlbumEl.value = '';
           if (searchTrackEl) searchTrackEl.value = '';
           searchFieldsEl.hidden = true;
-          window.__jukeboxAdvancedSearch = null;
           if (typeof originalClearHandler === 'function') {
             try {
               originalClearHandler.call(clearEl);
@@ -2381,190 +2271,6 @@
   });
   </script>
 
-  <script>
-  // Hook jukebox widget into random track controls
-  window.addEventListener('DOMContentLoaded', () => {
-    const jukeboxWidget = document.getElementById('jukeboxWidget');
-    const jukeboxShuffleButton = document.getElementById('jukeboxShuffleButton');
-    const GENRE_PREF_STORAGE_KEY = 'madmusic.genrePreferences';
-    const genreNote = document.getElementById('genrePreferenceNote');
-    const genreList = document.getElementById('genrePreferenceList');
-
-    const ensureNowPlayingVisible = () => {
-      const playlistColumn = document.getElementById('playlistColumn');
-      const nowPlayingCard = document.getElementById('nowPlayingCard');
-      if (playlistColumn) playlistColumn.hidden = false;
-      if (nowPlayingCard) {
-        nowPlayingCard.hidden = false;
-        nowPlayingCard.classList.remove('collapsed');
-      }
-    };
-
-    const readPreferredGenres = () => {
-      try {
-        const raw = localStorage.getItem(GENRE_PREF_STORAGE_KEY);
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return [];
-        return parsed
-          .map((value) => (typeof value === 'string' ? value.trim() : ''))
-          .filter(Boolean);
-      } catch (err) {
-        console.warn('[Jukebox] Failed to read genre preferences', err);
-        return [];
-      }
-    };
-
-    const updateGenreNote = () => {
-      if (!genreNote || !genreList) return;
-      const prefs = readPreferredGenres();
-      if (!prefs.length) {
-        genreNote.hidden = false;
-        genreList.textContent = 'None selected';
-        return;
-      }
-      genreNote.hidden = false;
-      genreList.textContent = prefs.join(', ');
-    };
-    updateGenreNote();
-
-    const ensureShuffleAutoplay = () => {
-      const shufflePlayBtn = document.getElementById('shufflePlayBtn');
-      if (!shufflePlayBtn) return;
-      const label = (shufflePlayBtn.textContent || '').toLowerCase();
-      const isActive = label.includes('stop shuffle');
-      const isLoading = label.includes('loading');
-      if (isActive || isLoading) return;
-      shufflePlayBtn.hidden = false;
-      shufflePlayBtn.click();
-    };
-
-    const pickPlayableButton = (preferredGenres = []) => {
-      const selectors = [
-        '#albums .play-button',
-        '#albums .track button',
-        '#albums button[data-play-label]'
-      ];
-      const buttons = Array.from(document.querySelectorAll(selectors.join(',')))
-        .filter((btn) => {
-          if (!(btn instanceof HTMLButtonElement)) return false;
-          if (btn.disabled || btn.offsetParent === null) return false;
-          return btn.classList.contains('play-button') || btn.dataset.playLabel;
-        });
-      if (!buttons.length) return null;
-
-      const normalizedPrefs = Array.isArray(preferredGenres)
-        ? preferredGenres.map((genre) => genre.toLowerCase()).filter(Boolean)
-        : [];
-
-      let candidateButtons = buttons;
-      if (normalizedPrefs.length) {
-        const genreMatches = buttons.filter((btn) => {
-          const card = btn.closest('.card');
-          if (!card || !card._meta) return false;
-          const cardGenre = (card._meta.genre || '').toString().toLowerCase();
-          if (!cardGenre) return false;
-          return normalizedPrefs.some((pref) => cardGenre.includes(pref));
-        });
-        if (genreMatches.length) {
-          candidateButtons = genreMatches;
-        }
-      }
-
-      if (!candidateButtons.length) return null;
-      const index = Math.floor(Math.random() * candidateButtons.length);
-      return candidateButtons[index];
-    };
-
-    const playRandomTrack = async () => {
-      const preferredGenres = readPreferredGenres();
-      console.log('[Jukebox] Feeling Lucky clicked - preferred genres:', preferredGenres);
-
-      const attemptPlay = (allowAny = false) => {
-        const btn = pickPlayableButton(allowAny ? [] : preferredGenres);
-        if (!btn) {
-          console.warn('[Jukebox] No playable button found (allowAny=' + allowAny + ')');
-          return false;
-        }
-        console.log('[Jukebox] Found playable button, starting playback');
-        ensureNowPlayingVisible();
-        btn.click();
-        ensureShuffleAutoplay();
-        return true;
-      };
-
-      // DON'T attempt to play existing songs - always load fresh songs first
-      // (Removed: if (attemptPlay()) return;)
-
-      const loadFn = typeof window.loadRandomSongs === 'function' ? window.loadRandomSongs : null;
-      if (!loadFn) {
-        console.warn('[Jukebox] loadRandomSongs() unavailable');
-        if (!preferredGenres.length && !attemptPlay(true)) {
-          console.warn('[Jukebox] Unable to find any playable track');
-        }
-        return;
-      }
-
-      const maxGenreAttempts = preferredGenres.length ? 3 : 1;
-      console.log('[Jukebox] Will attempt to load songs ' + maxGenreAttempts + ' time(s)');
-
-      // Show loading state before starting
-      if (jukeboxWidget) jukeboxWidget.classList.add('loading');
-
-      try {
-        // Load all songs first WITHOUT attempting to play during loading
-        for (let attempt = 0; attempt < maxGenreAttempts; attempt += 1) {
-          // Only allow autoplay on first load, subsequent loads should append without triggering autoplay
-          await loadFn({ genres: preferredGenres, autoplayResume: attempt > 0 });
-          // Wait for DOM to update between loads
-          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        }
-
-        // After ALL loading is complete, remove the loading state
-        if (jukeboxWidget) jukeboxWidget.classList.remove('loading');
-
-        // Count available play buttons for diagnostics
-        const allButtons = document.querySelectorAll('#albums .play-button, #albums .track button, #albums button[data-play-label]');
-        console.log('[Jukebox] Loading complete. Found ' + allButtons.length + ' total buttons in DOM');
-
-        // Add a small delay to ensure DOM is fully updated and rendered
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        // NOW attempt to play a song (only once, after all loading is done)
-        if (!attemptPlay()) {
-          // If genre-filtered playback failed, try playing ANY song as fallback
-          console.warn('[Jukebox] No tracks matched preferred genres, trying any available song...');
-          if (!attemptPlay(true)) {
-            console.warn('[Jukebox] Unable to find any playable track after loading');
-            alert('No songs available to play. Please try searching for music first.');
-          }
-        }
-      } catch (err) {
-        console.error('[Jukebox] Failed to load random songs', err);
-        // Remove loading state even on error
-        if (jukeboxWidget) jukeboxWidget.classList.remove('loading');
-
-        // Try to play any available song as fallback after error
-        console.warn('[Jukebox] Error occurred, trying to play any available song...');
-        if (!attemptPlay(true)) {
-          console.warn('[Jukebox] No fallback track available after error');
-          alert('Failed to load songs. Please check your connection and try again.');
-        }
-      }
-    };
-
-    if (jukeboxShuffleButton) {
-      jukeboxShuffleButton.addEventListener('click', (event) => {
-        event.stopPropagation();
-        playRandomTrack();
-      });
-    }
-
-    if (jukeboxWidget) {
-      jukeboxWidget.addEventListener('click', playRandomTrack);
-    }
-  });
-  </script>
   <script>
   // Secret keystroke: Ctrl+Shift+M to toggle/refresh Missing Audio Mode, Escape to exit
   document.addEventListener('keydown', async (e) => {
@@ -2738,10 +2444,6 @@
   <!-- View Switcher Buttons (Fixed Bottom Right) -->
   <div class="view-buttons">
     <a href="/">✨ MADMusic</a>
-    <div class="genre-note" id="genrePreferenceNote" hidden>
-      <strong>Your genres:</strong>
-      <span id="genrePreferenceList">None selected</span>
-    </div>
   </div>
 
   <script>
@@ -2767,9 +2469,6 @@
             audio.dataset.recordPlayerListenerAdded = 'true';
 
             const toggleJukeboxGlow = (isPlaying) => {
-              const jukeboxWidget = document.getElementById('jukeboxWidget');
-              if (jukeboxWidget) {
-                jukeboxWidget.classList.toggle('playing', isPlaying);
               }
             };
 
@@ -2777,38 +2476,29 @@
             audio.addEventListener('play', () => {
               currentAudio = audio;
               const thumb = document.querySelector('.now-playing-thumb');
+              const video = document.getElementById('nowPlayingVideo');
+
+              console.log('[VIDEO] Audio playing, thumb:', thumb, 'video:', video);
 
               if (thumb) {
                 thumb.classList.add('playing');
-                // Move tonearm to starting position (outer edge of record)
-                thumb.style.setProperty('--tonearm-angle', '-8deg');
-                console.log('🎵 Record player arm engaged - vinyl spinning!');
+                console.log('[VIDEO] Added playing class to thumb');
+              }
+              if (video) {
+                console.log('[VIDEO] Starting video playback');
+                video.play().catch(err => console.log('[VIDEO] Video autoplay prevented:', err));
+              } else {
+                console.warn('[VIDEO] Video element not found!');
               }
               toggleJukeboxGlow(true);
             });
 
-            // Track playback progress and move tonearm progressively
+            // Track playback progress
             audio.addEventListener('timeupdate', () => {
-              const thumb = document.querySelector('.now-playing-thumb');
               const progressFill = document.getElementById('nowPlayingProgressFill');
 
               if (audio.duration && !audio.paused) {
                 const progress = audio.currentTime / audio.duration;
-
-                // Update tonearm position
-                if (thumb) {
-                  // Tonearm at bottom: moves from outer edge upward/inward to center
-                  // At bottom: more negative = angled down, less negative = moved up toward center
-                  const startAngle = -8;     // outer circumference (starts at bottom edge)
-                  const endAngle = 20;       // inner groove (moved up/in toward center)
-                  const currentAngle = startAngle + progress * (endAngle - startAngle);
-                  thumb.style.setProperty('--tonearm-angle', `${currentAngle}deg`);
-
-                  // Only log every 5% to reduce console spam
-                  if (progress % 0.05 < 0.01) {
-                    console.log(`🎶 Tonearm tracking: ${currentAngle.toFixed(1)}deg (${(progress * 100).toFixed(1)}%)`);
-                  }
-                }
 
                 // Update progress bar
                 if (progressFill) {
@@ -2820,10 +2510,13 @@
             // When audio pauses
             audio.addEventListener('pause', () => {
               const thumb = document.querySelector('.now-playing-thumb');
+              const video = document.getElementById('nowPlayingVideo');
 
               if (thumb) {
                 thumb.classList.remove('playing');
-                console.log('⏸️ Record player arm lifted');
+              }
+              if (video) {
+                video.pause();
               }
               toggleJukeboxGlow(false);
             });
@@ -2831,15 +2524,15 @@
             // When audio ends
             audio.addEventListener('ended', () => {
               const thumb = document.querySelector('.now-playing-thumb');
+              const video = document.getElementById('nowPlayingVideo');
               const progressFill = document.getElementById('nowPlayingProgressFill');
 
               if (thumb) {
                 thumb.classList.remove('playing');
-                // Reset tonearm to resting position at bottom (parked position)
-                setTimeout(() => {
-                  thumb.style.setProperty('--tonearm-angle', '-35deg');
-                }, 100);
-                console.log('⏹️ Record finished playing - arm returning to rest');
+              }
+              if (video) {
+                video.pause();
+                video.currentTime = 0;
               }
 
               // Reset progress bar

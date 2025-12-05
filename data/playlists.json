@@ -722,5 +722,30 @@
     ],
     "createdAt": "2025-11-28T09:56:42.550Z",
     "updatedAt": "2025-11-28T09:56:42.611Z"
+  },
+  {
+    "id": "09938c92-3a7c-4691-b9ff-8a63ca4b6b6f",
+    "userId": "1",
+    "name": "Namibia",
+    "tracks": [
+      {
+        "id": "7483d932-1188-4cf9-b624-32c4d151d0aa",
+        "trackRecordId": "52075",
+        "name": "Nguva Yatakamirira",
+        "albumTitle": "Nguva Yatakamirira + Yarira Mucherechere",
+        "albumArtist": "J. Chataika And The Highway Stars",
+        "catalogue": "BZ 43",
+        "trackArtist": "J. Chataika and The Highway Stars",
+        "mp3": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/GMVD3971.mp3",
+        "resolvedSrc": "/api/container?u=https%3A%2F%2Fmass-music-audio-files.s3.eu-north-1.amazonaws.com%2FGMVD3971.mp3",
+        "seq": null,
+        "artwork": "",
+        "audioField": "S3_URL",
+        "artworkField": "Artwork::Picture",
+        "addedAt": "2025-12-04T19:42:16.252Z"
+      }
+    ],
+    "createdAt": "2025-12-04T19:42:15.211Z",
+    "updatedAt": "2025-12-04T19:42:16.252Z"
   }
 ]
