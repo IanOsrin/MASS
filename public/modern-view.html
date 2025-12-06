@@ -157,6 +157,42 @@
       background: rgba(74, 144, 226, 0.1);
     }
 
+    .genre-controls {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .genre-shuffle-btn {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      padding: 0.5rem 1.25rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .genre-shuffle-btn:hover:not([disabled]) {
+      background: #1d4ed8;
+      transform: translateY(-1px);
+    }
+
+    .genre-shuffle-btn.active {
+      background: #dc2626;
+    }
+
+    .genre-shuffle-btn.active:hover:not([disabled]) {
+      background: #b91c1c;
+    }
+
+    .genre-shuffle-btn[disabled] {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
     .genre-retry-btn {
       background: var(--accent);
       color: #fff;
@@ -667,6 +703,37 @@
       text-overflow: ellipsis;
     }
 
+    .highlight-actions {
+      padding: 0 1rem 1rem;
+      margin-left: auto;
+    }
+
+    .highlight-album-btn {
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    .highlight-album-btn:hover {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+    }
+
     /* Random Selection Grid */
     .random-grid {
       display: grid;
@@ -687,6 +754,18 @@
       border-color: var(--accent);
       transform: translateY(-6px);
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .random-card.now-playing {
+      border-color: #10b981;
+      border-width: 2px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.1) 100%);
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1), 0 8px 24px rgba(0, 0, 0, 0.12);
+      transform: translateY(-4px);
+    }
+
+    .random-card.now-playing .random-title {
+      color: #10b981;
     }
 
     .random-artwork {
@@ -735,6 +814,23 @@
       overflow: hidden;
       text-overflow: ellipsis;
       margin-top: 0.25rem;
+    }
+
+    .random-genre {
+      margin-top: 0.5rem;
+    }
+
+    .genre-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.25rem 0.6rem;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
     }
 
     .random-actions {
@@ -1260,7 +1356,10 @@
           <h2 class="section-title" id="randomTitle">Discover More</h2>
           <p class="section-subtitle" id="randomSubtitle">Fresh picks from your collection</p>
         </div>
-        <button type="button" id="genreRetryButton" class="genre-retry-btn" hidden>Get More Songs</button>
+        <div class="genre-controls">
+          <button type="button" id="genreShufflePlayBtn" class="genre-shuffle-btn" hidden>🔀 Shuffle Play</button>
+          <button type="button" id="genreRetryButton" class="genre-retry-btn" hidden>Get More Songs</button>
+        </div>
       </div>
       <div id="randomContainer" class="random-grid">
         <div class="loading">
@@ -1801,6 +1900,14 @@
       }
     }
 
+    function scrollToDiscoverSection() {
+      const titleEl = document.getElementById('randomTitle');
+      if (!titleEl) return;
+
+      // Scroll to the discover section with smooth animation
+      titleEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     function handleGenreSelection(rawValue) {
       const label = cleanGenreLabel(rawValue);
       if (!label) {
@@ -1835,6 +1942,9 @@
       setGenreFeedback('');
       updateGenreTags();
       resetGenreSelect();
+
+      // Scroll to discover section when genre is selected
+      scrollToDiscoverSection();
 
       if (isSearching) {
         clearSearch();
@@ -1876,13 +1986,18 @@
     function updateGenreRetryButton() {
       if (!genreRetryButton) return;
       const hasGenres = selectedGenres.length > 0;
+      const genreShufflePlayBtn = document.getElementById('genreShufflePlayBtn');
+
       if (!hasGenres) {
         genreRetryButton.hidden = true;
         genreRetryButton.disabled = false;
         genreRetryButton.textContent = 'Get More Songs';
+        if (genreShufflePlayBtn) genreShufflePlayBtn.hidden = true;
         return;
       }
       genreRetryButton.hidden = false;
+      if (genreShufflePlayBtn) genreShufflePlayBtn.hidden = false;
+
       const loading = Boolean(genreFetchController);
       genreRetryButton.disabled = loading;
       genreRetryButton.textContent = loading ? 'Searching…' : 'Get More Songs';
@@ -2040,6 +2155,11 @@
     let currentAudio = null;
     let currentTrackInfo = null;
     let isPlaying = false;
+
+    // Shuffle play queue
+    let shuffleQueue = [];
+    let shuffleQueueIndex = 0;
+    let isShuffleActive = false;
 
     // Stream Event Tracking
     const STREAM_EVENTS_ENDPOINT = '/api/stream-events';
@@ -2285,6 +2405,11 @@
       return getFieldValue(fields, albumFields) || 'Unknown Album';
     }
 
+    function getGenreField(fields) {
+      const genreFields = ['Local Genre', 'Tape Files::Local Genre', 'Genre'];
+      return getFieldValue(fields, genreFields) || '';
+    }
+
     function formatRelativeTime(value) {
       if (!value) return '';
       const date = value instanceof Date ? value : new Date(value);
@@ -2359,6 +2484,29 @@
       miniPlayer.classList.remove('active');
     }
 
+    // Update visual state to highlight currently playing card
+    function updateNowPlayingCard(recordId) {
+      // Remove now-playing class from all cards
+      document.querySelectorAll('.random-card.now-playing').forEach(card => {
+        card.classList.remove('now-playing');
+      });
+
+      // Add now-playing class to current card
+      const currentCard = document.querySelector(`.random-card[data-record-id="${recordId}"]`);
+      if (currentCard) {
+        currentCard.classList.add('now-playing');
+
+        // Scroll to the card with smooth animation
+        setTimeout(() => {
+          currentCard.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest'
+          });
+        }, 100);
+      }
+    }
+
     // Play function with actual audio playback
     function playSong(recordId) {
       console.log('[PlaySong] Called with recordId:', recordId);
@@ -2391,6 +2539,9 @@
       // Store current track info with recordId for stream tracking
       currentTrackInfo = { title, artist, album, artworkUrl, recordId: item.recordId };
 
+      // Update visual state - highlight currently playing card
+      updateNowPlayingCard(recordId);
+
       // Stop current audio if playing
       if (currentAudio) {
         console.log('[PlaySong] Stopping previous audio');
@@ -2420,6 +2571,11 @@
         sendStreamEvent('END', finalPosition, duration, delta);
         stopProgressTracking();
         updateMiniPlayer(title, artist, artworkUrl);
+
+        // Auto-play next track in shuffle queue
+        if (isShuffleActive) {
+          setTimeout(() => playNextInQueue(), 500);
+        }
       });
 
       currentAudio.addEventListener('error', (e) => {
@@ -2569,6 +2725,9 @@
       // Store item for later reference
       itemsStore.set(item.recordId, item);
 
+      // Create URL for Jukebox view with album filter
+      const jukeboxUrl = `/classic?album=${encodeURIComponent(album)}&artist=${encodeURIComponent(artist)}`;
+
       container.innerHTML = `
         <div class="featured-release">
           <div class="featured-artwork">
@@ -2586,9 +2745,9 @@
               <button class="btn-play" onclick="playSong('${escapeHtml(item.recordId)}')">
                 ▶ Play Now
               </button>
-              <button class="btn-secondary">
-                ♡ Add to Library
-              </button>
+              <a href="${escapeHtml(jukeboxUrl)}" class="btn-secondary" style="text-decoration: none;">
+                💿 View Album
+              </a>
             </div>
           </div>
         </div>
@@ -2632,9 +2791,12 @@
         // Store item for later reference
         itemsStore.set(item.recordId, item);
 
+        // Create URL for Jukebox view with album filter
+        const jukeboxUrl = `/classic?album=${encodeURIComponent(album)}&artist=${encodeURIComponent(artist)}`;
+
         return `
-          <div class="highlight-card" onclick="playSong('${escapeHtml(item.recordId)}')">
-            <div class="highlight-artwork">
+          <div class="highlight-card">
+            <div class="highlight-artwork" onclick="playSong('${escapeHtml(item.recordId)}')">
               ${artworkUrl
                 ? `<img src="${escapeHtml(artworkUrl)}" alt="${escapeHtml(album)}" onerror="this.closest('.highlight-card').style.display='none'" />`
                 : '<div class="artwork-placeholder">♪</div>'
@@ -2647,6 +2809,9 @@
               <div class="highlight-title">${escapeHtml(title)}</div>
               <div class="highlight-artist">${escapeHtml(artist)}</div>
               <div class="highlight-album">${escapeHtml(album)}</div>
+            </div>
+            <div class="highlight-actions">
+              <a href="${escapeHtml(jukeboxUrl)}" class="highlight-album-btn" title="View album in Jukebox">💿 View Album</a>
             </div>
           </div>
         `;
@@ -2722,8 +2887,9 @@
       const title = getTitleField(fields);
       const artist = getArtistField(fields);
       const album = getAlbumField(fields);
+      const genre = getGenreField(fields);
 
-      console.log('[Random] Item:', {recordId: item.recordId, title, artist, album, artworkUrl});
+      console.log('[Random] Item:', {recordId: item.recordId, title, artist, album, genre, artworkUrl});
 
       // Store item for later reference
       itemsStore.set(item.recordId, item);
@@ -2732,7 +2898,7 @@
       const jukeboxUrl = `/classic?album=${encodeURIComponent(album)}&artist=${encodeURIComponent(artist)}`;
 
       return `
-        <div class="random-card">
+        <div class="random-card" data-record-id="${escapeHtml(item.recordId)}">
           <div class="random-artwork" onclick="playSong('${escapeHtml(item.recordId)}')">
             ${artworkUrl
               ? `<img src="${escapeHtml(artworkUrl)}" alt="${escapeHtml(album)}" onerror="this.closest('.random-card').style.display='none'" />`
@@ -2746,6 +2912,7 @@
             <div class="random-title">${escapeHtml(title)}</div>
             <div class="random-artist">${escapeHtml(artist)}</div>
             <div class="random-album">${escapeHtml(album)}</div>
+            ${genre ? `<div class="random-genre"><span class="genre-badge">${escapeHtml(genre)}</span></div>` : ''}
           </div>
           <div class="random-actions">
             <a href="${escapeHtml(jukeboxUrl)}" class="random-album-btn" title="View album in Jukebox">💿 View Album</a>
@@ -2782,6 +2949,99 @@
       }
 
       container.innerHTML = validItems.map(item => createRandomCardHtml(item)).join('');
+    }
+
+    // Shuffle array utility
+    function shuffleArray(array) {
+      const shuffled = [...array];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    }
+
+    // Start or stop shuffle play
+    function toggleShufflePl() {
+      if (isShuffleActive) {
+        // Stop shuffle
+        stopShufflePlay();
+      } else {
+        // Start shuffle
+        startShufflePlay();
+      }
+    }
+
+    function startShufflePlay() {
+      // Get all currently displayed track record IDs
+      const displayedTracks = Array.from(itemsStore.values())
+        .filter(item => {
+          const container = document.getElementById('randomContainer');
+          return container && container.innerHTML.includes(item.recordId);
+        })
+        .filter(item => hasValidAudio(item));
+
+      if (displayedTracks.length === 0) {
+        alert('No tracks available to shuffle');
+        return;
+      }
+
+      // Shuffle and create queue
+      shuffleQueue = shuffleArray(displayedTracks.map(item => item.recordId));
+      shuffleQueueIndex = 0;
+      isShuffleActive = true;
+
+      console.log('[Shuffle] Started with', shuffleQueue.length, 'tracks');
+
+      // Update button state
+      updateShuffleButton();
+
+      // Play first track
+      if (shuffleQueue.length > 0) {
+        playSong(shuffleQueue[0]);
+      }
+    }
+
+    function stopShufflePlay() {
+      isShuffleActive = false;
+      shuffleQueue = [];
+      shuffleQueueIndex = 0;
+
+      console.log('[Shuffle] Stopped');
+
+      // Update button state
+      updateShuffleButton();
+    }
+
+    function playNextInQueue() {
+      if (!isShuffleActive || shuffleQueue.length === 0) {
+        return;
+      }
+
+      shuffleQueueIndex++;
+
+      if (shuffleQueueIndex >= shuffleQueue.length) {
+        console.log('[Shuffle] Queue finished');
+        stopShufflePlay();
+        return;
+      }
+
+      const nextRecordId = shuffleQueue[shuffleQueueIndex];
+      console.log('[Shuffle] Playing track', shuffleQueueIndex + 1, 'of', shuffleQueue.length);
+      playSong(nextRecordId);
+    }
+
+    function updateShuffleButton() {
+      const btn = document.getElementById('genreShufflePlayBtn');
+      if (!btn) return;
+
+      if (isShuffleActive) {
+        btn.textContent = '⏹️ Stop Shuffle';
+        btn.classList.add('active');
+      } else {
+        btn.textContent = '🔀 Shuffle Play';
+        btn.classList.remove('active');
+      }
     }
 
     // Progressive rendering - append items one at a time
@@ -3150,6 +3410,13 @@
             return;
           }
           loadGenreResults();
+        });
+      }
+
+      const genreShufflePlayBtn = document.getElementById('genreShufflePlayBtn');
+      if (genreShufflePlayBtn) {
+        genreShufflePlayBtn.addEventListener('click', () => {
+          toggleShufflePl();
         });
       }
 
