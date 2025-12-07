@@ -747,5 +747,78 @@
     ],
     "createdAt": "2025-12-04T19:42:15.211Z",
     "updatedAt": "2025-12-04T19:42:16.252Z"
+  },
+  {
+    "id": "68ea8002-794f-4689-aad3-5b632b19516e",
+    "userId": "26",
+    "name": "Gallo Party1",
+    "tracks": [
+      {
+        "id": "eff5b798-8d2e-4086-a47b-92cde411b583",
+        "trackRecordId": "87541",
+        "name": "Mind Games",
+        "albumTitle": "Fire, Passion, Ecstacy",
+        "albumArtist": "Stimela",
+        "catalogue": "HUL 513",
+        "trackArtist": "Stimela",
+        "mp3": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/mp3/GMVF45237.mp3",
+        "resolvedSrc": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/mp3/GMVF45237.mp3",
+        "seq": 1,
+        "artwork": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/artwork/GMVi6571.jpg",
+        "audioField": "S3_URL",
+        "artworkField": "Tape Files::Artwork_S3_URL",
+        "addedAt": "2025-12-07T14:19:19.989Z"
+      },
+      {
+        "id": "70543516-03b2-41b4-afa2-04c911e616b7",
+        "trackRecordId": "22164",
+        "name": "Palazo, Pt. 2",
+        "albumTitle": "Get Down",
+        "albumArtist": "Kgotso Rabanye",
+        "catalogue": "TIGLP 422",
+        "trackArtist": "Kgotso Rabanye",
+        "mp3": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/mp3/GMVF00772.mp3",
+        "resolvedSrc": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/mp3/GMVF00772.mp3",
+        "seq": 5,
+        "artwork": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/artwork/GMVi4498.jpg",
+        "audioField": "S3_URL",
+        "artworkField": "Tape Files::Artwork_S3_URL",
+        "addedAt": "2025-12-07T14:19:54.857Z"
+      },
+      {
+        "id": "fbb4179e-6faa-4e27-9d64-8207115bc80a",
+        "trackRecordId": "27205",
+        "name": "Salitsatsa Ngenhlonipho",
+        "albumTitle": "Usobhuza Walitsatsa Ngenhlonipho",
+        "albumArtist": "Kakai",
+        "catalogue": "BL 359",
+        "trackArtist": "Kakai",
+        "mp3": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/mp3/GMVF03593.mp3",
+        "resolvedSrc": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/mp3/GMVF03593.mp3",
+        "seq": 1,
+        "artwork": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/artwork/GMVi5054.jpg",
+        "audioField": "S3_URL",
+        "artworkField": "Tape Files::Artwork_S3_URL",
+        "addedAt": "2025-12-07T14:22:12.608Z"
+      },
+      {
+        "id": "7b316e3a-552c-4045-bac6-22b2e92c1789",
+        "trackRecordId": "70529",
+        "name": "Gravel Road",
+        "albumTitle": "single",
+        "albumArtist": "The Wild Things",
+        "catalogue": "MABC 33253-54",
+        "trackArtist": "The Wild Things",
+        "mp3": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/mp3/GMVF24957.mp3",
+        "resolvedSrc": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/mp3/GMVF24957.mp3",
+        "seq": 1,
+        "artwork": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/artwork/.jpg",
+        "audioField": "S3_URL",
+        "artworkField": "Tape Files::Artwork_S3_URL",
+        "addedAt": "2025-12-07T14:26:36.220Z"
+      }
+    ],
+    "createdAt": "2025-12-07T14:19:04.720Z",
+    "updatedAt": "2025-12-07T14:26:36.220Z"
   }
 ]

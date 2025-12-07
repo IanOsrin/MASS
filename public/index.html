@@ -24,10 +24,10 @@
       --accent-glow: #ffcc00;
       --chrome: linear-gradient(180deg, #e8e8e8 0%, #b8b8b8 45%, #9a9a9a 50%, #c8c8c8 55%, #f0f0f0 100%);
       --border: #c8b89a;
-      --neon-red: #ff0844;
+      --neon-red: #8b0000;
       --neon-yellow: #ffea00;
-      --neon-blue: #00d4ff;
-      --neon-green: #39ff14;
+      --neon-blue: #4a90e2;
+      --neon-green: #4a90e2;
       --overlay: rgba(245, 241, 232, 0.95);
       --cover-size: 180px;
       --btn-gradient-start: #ff3366;
@@ -131,12 +131,11 @@
     }
 
     .searchbar input:focus {
-      border-color: var(--neon-yellow);
+      border-color: var(--neon-blue);
       box-shadow:
-        0 0 20px var(--neon-yellow),
-        0 0 40px rgba(255, 234, 0, 0.3),
+        0 0 5px rgba(74, 144, 226, 0.3),
         inset 0 2px 8px rgba(0, 0, 0, 0.6);
-      color: var(--neon-yellow);
+      color: #333;
     }
     .searchbar button{border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0;}
     .searchbar{position:relative;}
@@ -486,18 +485,16 @@
       overflow: hidden;
       text-overflow: ellipsis;
       width: 100%;
-      font-weight: 900;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      color: var(--neon-yellow);
+      color: #ffa500;
       text-shadow:
-        -1px -1px 0 #000,
-        1px -1px 0 #000,
-        -1px 1px 0 #000,
-        1px 1px 0 #000,
-        0 0 10px rgba(255, 234, 0, 0.8),
-        0 0 20px rgba(255, 234, 0, 0.5);
-      font-family: Impact, 'Arial Black', sans-serif;
+        0 0 3px rgba(0, 0, 0, 0.8),
+        0 0 5px rgba(0, 0, 0, 0.6),
+        1px 1px 2px rgba(0, 0, 0, 0.9),
+        -1px -1px 2px rgba(0, 0, 0, 0.9);
+      font-family: 'Arial', sans-serif;
     }
 
     .card-artist {
@@ -508,18 +505,33 @@
       overflow: hidden;
       text-overflow: ellipsis;
       width: 100%;
-      font-weight: 900;
-      letter-spacing: 1px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
       text-transform: uppercase;
       text-shadow:
-        -2px -2px 0 #000,
-        2px -2px 0 #000,
-        -2px 2px 0 #000,
-        2px 2px 0 #000,
-        0 0 15px rgba(255, 51, 102, 1),
-        0 0 20px rgba(255, 51, 102, 0.8),
-        0 0 25px rgba(255, 51, 102, 0.6);
-      font-family: Impact, 'Arial Black', sans-serif;
+        0 0 3px white,
+        0 0 5px white,
+        1px 1px 2px white,
+        -1px -1px 2px white;
+      font-family: 'Arial', sans-serif;
+    }
+
+    .card-catalogue {
+      color: #333;
+      font-size: 9px;
+      font-weight: 700;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      text-shadow: none;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 2px 4px;
+      border-radius: 2px;
+      display: inline-block;
     }
 
     .albums.single-album .card {
@@ -535,6 +547,11 @@
     .albums.single-album .card-artist {
       font-size: 5px;
       letter-spacing: 0.1px;
+    }
+    .albums.single-album .card-catalogue {
+      font-size: 5px;
+      letter-spacing: 0.1px;
+      padding: 1px 2px;
     }
     .albums.single-album .heading {
       bottom: 17px;
@@ -1193,19 +1210,14 @@
       <img src="/img/MAD_Logo.png" alt="MAD Logo" class="header-logo" loading="lazy" decoding="async">
       <h1 style="
         font-size: 36px;
-        font-weight: 900;
-        font-family: Impact, 'Arial Black', sans-serif;
-        color: var(--neon-yellow);
+        font-weight: 700;
+        font-family: 'Arial', sans-serif;
+        color: #333;
         margin: 0 16px;
         text-transform: uppercase;
         letter-spacing: 3px;
-        text-shadow:
-          0 0 10px var(--neon-yellow),
-          0 0 20px var(--neon-yellow),
-          0 0 30px var(--neon-red),
-          0 0 40px var(--neon-red),
-          0 2px 4px rgba(0, 0, 0, 0.8);
-        filter: drop-shadow(0 0 15px rgba(255, 234, 0, 0.8));
+        text-shadow: none;
+        filter: none;
       ">MAD JUKEBOX</h1>
       <style>
       </style>
@@ -2246,24 +2258,44 @@
             searchAlbumEl.value = albumParam;
           }
 
-          // Trigger search immediately
-          console.log('[MASS] Triggering immediate search from URL parameters');
-          if (typeof window.run === 'function') {
-            window.run(' ');
-          }
+          // Return true to indicate we should trigger search after setup
+          return true;
         }
       }
+      return false;
+    }
+
+    // Function to trigger automatic search after setup
+    function triggerAutoSearch() {
+      console.log('[MASS] Triggering automatic search after setup complete');
+      // Use requestAnimationFrame to ensure DOM is fully updated
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (typeof window.run === 'function') {
+            console.log('[MASS] Executing automatic search with window.run()');
+            window.run(' ');
+          } else {
+            console.warn('[MASS] window.run not available for automatic search');
+          }
+        }, 100);
+      });
     }
 
     // If window.run is already available (deferred script loaded), setup immediately
     // Otherwise poll for it (should be very quick with defer)
     if (typeof window.run === 'function') {
-      setupSearchOverride();
+      const shouldAutoSearch = setupSearchOverride();
+      if (shouldAutoSearch) {
+        triggerAutoSearch();
+      }
     } else {
       const checkInterval = setInterval(() => {
         if (typeof window.run === 'function') {
           clearInterval(checkInterval);
-          setupSearchOverride();
+          const shouldAutoSearch = setupSearchOverride();
+          if (shouldAutoSearch) {
+            triggerAutoSearch();
+          }
         }
       }, 10);
       // Fallback timeout

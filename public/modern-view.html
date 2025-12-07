@@ -1678,7 +1678,7 @@
 
     const MAX_GENRE_SELECTION = 5;
     // How many genre cards we want to show in the grid
-    const GENRE_RESULT_LIMIT = 10;
+    const GENRE_RESULT_LIMIT = 12;
 
     // Fetch just enough for quick display - reduced from 10x to 2.5x for speed
     const GENRE_FETCH_LIMIT = GENRE_RESULT_LIMIT * 2.5;
@@ -2081,9 +2081,16 @@
 
       const params = new URLSearchParams();
 
-      // Over-fetch so we can ensure 10 distinct albums after dedupe
+      // Use random offset for variety when offset is 0 (initial load or after clearing genres)
+      let effectiveOffset = genreResultOffset;
+      if (effectiveOffset === 0) {
+        // Random offset between 0 and 100 to get different results each time
+        effectiveOffset = Math.floor(Math.random() * 100);
+      }
+
+      // Over-fetch so we can ensure 12 distinct albums after dedupe
       params.set('limit', String(GENRE_FETCH_LIMIT));
-      params.set('offset', String(Math.max(0, genreResultOffset)));
+      params.set('offset', String(Math.max(0, effectiveOffset)));
       selectedGenres.forEach((genre) => {
         params.append('genre', genre);
       });
@@ -2106,7 +2113,9 @@
           .map((album) => album.tracks[0])
           .filter(Boolean);
 
-        const displayedTracks = representativeTracks.slice(0, GENRE_RESULT_LIMIT);
+        // Shuffle for additional randomness
+        const shuffledTracks = shuffleArray(representativeTracks);
+        const displayedTracks = shuffledTracks.slice(0, GENRE_RESULT_LIMIT);
 
         // Render all at once - faster with reduced fetch size
         renderRandom(displayedTracks);
@@ -2507,10 +2516,29 @@
       }
     }
 
+    // Check if a card is currently displayed in the discover section
+    function isCardDisplayed(recordId) {
+      const container = document.getElementById('randomContainer');
+      if (!container) return false;
+
+      const card = container.querySelector(`.random-card[data-record-id="${recordId}"]`);
+      return card !== null;
+    }
+
     // Play function with actual audio playback
     function playSong(recordId) {
       console.log('[PlaySong] Called with recordId:', recordId);
       console.log('[PlaySong] Items in store:', itemsStore.size);
+
+      // Check if this card is currently displayed
+      if (!isCardDisplayed(recordId)) {
+        console.warn('[PlaySong] Card not displayed, skipping:', recordId);
+        // If shuffle is active, try playing the next track instead
+        if (isShuffleActive) {
+          playNextInQueue();
+        }
+        return;
+      }
 
       const item = itemsStore.get(recordId);
       if (!item) {
@@ -2973,25 +3001,33 @@
     }
 
     function startShufflePlay() {
-      // Get all currently displayed track record IDs
-      const displayedTracks = Array.from(itemsStore.values())
-        .filter(item => {
-          const container = document.getElementById('randomContainer');
-          return container && container.innerHTML.includes(item.recordId);
-        })
-        .filter(item => hasValidAudio(item));
+      // Get all currently displayed cards from the DOM
+      const container = document.getElementById('randomContainer');
+      if (!container) {
+        alert('No tracks available to shuffle');
+        return;
+      }
 
-      if (displayedTracks.length === 0) {
+      // Get record IDs directly from displayed cards
+      const displayedCards = container.querySelectorAll('.random-card[data-record-id]');
+      const recordIds = Array.from(displayedCards)
+        .map(card => card.getAttribute('data-record-id'))
+        .filter(id => {
+          const item = itemsStore.get(id);
+          return item && hasValidAudio(item);
+        });
+
+      if (recordIds.length === 0) {
         alert('No tracks available to shuffle');
         return;
       }
 
       // Shuffle and create queue
-      shuffleQueue = shuffleArray(displayedTracks.map(item => item.recordId));
+      shuffleQueue = shuffleArray(recordIds);
       shuffleQueueIndex = 0;
       isShuffleActive = true;
 
-      console.log('[Shuffle] Started with', shuffleQueue.length, 'tracks');
+      console.log('[Shuffle] Started with', shuffleQueue.length, 'tracks from displayed cards');
 
       // Update button state
       updateShuffleButton();

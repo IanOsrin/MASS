@@ -487,13 +487,7 @@ const AUTH_COOKIE_NAME = 'mass_session';
 const AUTH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 const AUTH_COOKIE_SECURE = process.env.AUTH_COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production';
 const PUBLIC_PLAYLIST_FIELDS = [
-  'PublicPlaylist',
-  'Public Playlist',
-  'Tape Files::PublicPlaylist',
-  'Tape Files::Public Playlist',
-  'Public_Playlist',
-  'Playlist Name',
-  'Playlist::Public'
+  'PublicPlaylist'
 ];
 
 // Cache for discovered field names (performance optimization)
