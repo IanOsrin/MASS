@@ -1674,7 +1674,7 @@
     // API endpoints
     const API = {
       featured: '/api/featured-albums?limit=1',
-      highlights: '/api/featured-songs?count=2',
+      highlights: '/api/random-songs?count=2&_t=' + Date.now(),
       random: '/api/random-songs?count=20&_t=' + Date.now(), // Increased to 20, added timestamp for fresh results
       trending: '/api/trending',
       search: '/api/search',
