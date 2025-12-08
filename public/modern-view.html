@@ -1357,7 +1357,7 @@
           <p class="section-subtitle" id="randomSubtitle">Fresh picks from your collection</p>
         </div>
         <div class="genre-controls">
-          <button type="button" id="genreShufflePlayBtn" class="genre-shuffle-btn" hidden>🔀 Shuffle Play</button>
+          <button type="button" id="genreShufflePlayBtn" class="genre-shuffle-btn">🔀 Shuffle Play</button>
           <button type="button" id="genreRetryButton" class="genre-retry-btn" hidden>Get More Songs</button>
         </div>
       </div>
@@ -1994,15 +1994,16 @@
       const hasGenres = selectedGenres.length > 0;
       const genreShufflePlayBtn = document.getElementById('genreShufflePlayBtn');
 
+      // Always show shuffle play button
+      if (genreShufflePlayBtn) genreShufflePlayBtn.hidden = false;
+
       if (!hasGenres) {
         genreRetryButton.hidden = true;
         genreRetryButton.disabled = false;
         genreRetryButton.textContent = 'Get More Songs';
-        if (genreShufflePlayBtn) genreShufflePlayBtn.hidden = true;
         return;
       }
       genreRetryButton.hidden = false;
-      if (genreShufflePlayBtn) genreShufflePlayBtn.hidden = false;
 
       const loading = Boolean(genreFetchController);
       genreRetryButton.disabled = loading;
