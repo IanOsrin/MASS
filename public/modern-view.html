@@ -1683,6 +1683,7 @@
     // Fetch just enough for quick display - reduced from 10x to 2.5x for speed
     const GENRE_FETCH_LIMIT = GENRE_RESULT_LIMIT * 2.5;
     const TRENDING_RESULT_LIMIT = 5;
+    const TRENDING_FETCH_LIMIT = 25; // Fetch more to ensure 5 valid after filtering
     const GENRE_TITLE = 'Discover by Genre';
     const GENRE_PREF_STORAGE_KEY = 'madmusic.genrePreferences';
     let selectedGenres = loadStoredGenrePreferences();
@@ -3220,7 +3221,7 @@
       if (!container) return;
       try {
         console.log('[Trending] Fetching...');
-        const response = await apiFetch(`${API.trending}?limit=${TRENDING_RESULT_LIMIT}&_t=${Date.now()}`);
+        const response = await apiFetch(`${API.trending}?limit=${TRENDING_FETCH_LIMIT}&_t=${Date.now()}`);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }

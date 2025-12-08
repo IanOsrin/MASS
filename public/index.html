@@ -2126,7 +2126,7 @@
   <script defer src="/app.min.js?v=84&t=1733401000"></script>
   <script>
   // Override search to use separate fields
-  window.addEventListener('DOMContentLoaded', () => {
+  window.addEventListener('load', () => {
     const searchArtistEl = document.getElementById('searchArtist');
     const searchAlbumEl = document.getElementById('searchAlbum');
     const searchTrackEl = document.getElementById('searchTrack');
@@ -2268,38 +2268,66 @@
     // Function to trigger automatic search after setup
     function triggerAutoSearch() {
       console.log('[MASS] Triggering automatic search after setup complete');
-      // Use requestAnimationFrame to ensure DOM is fully updated
+      // Use multiple RAF to ensure all handlers and DOM updates are complete
       requestAnimationFrame(() => {
-        setTimeout(() => {
-          if (typeof window.run === 'function') {
-            console.log('[MASS] Executing automatic search with window.run()');
-            window.run(' ');
-          } else {
-            console.warn('[MASS] window.run not available for automatic search');
-          }
-        }, 100);
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            // Verify fields are filled
+            const artist = searchArtistEl?.value?.trim() || '';
+            const album = searchAlbumEl?.value?.trim() || '';
+            const track = searchTrackEl?.value?.trim() || '';
+
+            console.log('[MASS] Auto-search with values:', { artist, album, track });
+
+            if (!artist && !album && !track) {
+              console.warn('[MASS] No search values found, aborting auto-search');
+              return;
+            }
+
+            // Call doSearch directly instead of window.run
+            if (typeof window.doSearch === 'function' && typeof window.run === 'function') {
+              console.log('[MASS] Executing doSearch and applying results');
+              // Call run with a non-empty query to trigger the search flow
+              // The doSearch override will use the field values
+              window.run('auto-search-trigger');
+            } else {
+              console.warn('[MASS] Search functions not ready');
+            }
+          }, 300);
+        });
       });
     }
 
     // If window.run is already available (deferred script loaded), setup immediately
     // Otherwise poll for it (should be very quick with defer)
     if (typeof window.run === 'function') {
+      console.log('[MASS] window.run already available, setting up immediately');
       const shouldAutoSearch = setupSearchOverride();
       if (shouldAutoSearch) {
-        triggerAutoSearch();
+        // Wait even longer to ensure everything is ready
+        setTimeout(() => {
+          console.log('[MASS] Delayed auto-search trigger');
+          triggerAutoSearch();
+        }, 500);
       }
     } else {
+      console.log('[MASS] Polling for window.run...');
       const checkInterval = setInterval(() => {
         if (typeof window.run === 'function') {
           clearInterval(checkInterval);
+          console.log('[MASS] window.run detected, setting up');
           const shouldAutoSearch = setupSearchOverride();
           if (shouldAutoSearch) {
-            triggerAutoSearch();
+            // Wait even longer to ensure everything is ready
+            setTimeout(() => {
+              console.log('[MASS] Delayed auto-search trigger after polling');
+              triggerAutoSearch();
+            }, 500);
           }
         }
       }, 10);
       // Fallback timeout
-      setTimeout(() => clearInterval(checkInterval), 1000);
+      setTimeout(() => clearInterval(checkInterval), 2000);
     }
   });
   </script>
