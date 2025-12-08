@@ -1974,6 +1974,11 @@
 
       statusDiv.textContent = statusText;
       infoDiv.classList.remove('hidden');
+
+      // Auto-hide notification after 10 seconds
+      setTimeout(() => {
+        infoDiv.classList.add('hidden');
+      }, 10000);
     }
 
     function saveAccessToken(token, info) {
