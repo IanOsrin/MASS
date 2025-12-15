@@ -646,6 +646,20 @@
 </head>
 <body>
 
+  <!-- Mobile Device Detection & Redirect -->
+  <script>
+    (function() {
+      // Check if user is on mobile device
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isSmallScreen = window.innerWidth <= 768;
+
+      // Redirect mobile users to /mobile unless they explicitly want desktop view
+      if ((isMobile || isSmallScreen) && !sessionStorage.getItem('forceDesktopView')) {
+        window.location.href = '/mobile';
+      }
+    })();
+  </script>
+
   <!-- Access Token Entry Overlay -->
   <div class="access-token-overlay hidden" id="accessTokenOverlay">
     <div class="access-token-box">
