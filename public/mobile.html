@@ -978,33 +978,40 @@
 
     // ===== Initialize =====
     async function init() {
-      // Check access token (non-blocking)
+      // Step 1: Check and require access token first
       const accessToken = localStorage.getItem('mass_access_token');
       if (!accessToken) {
-        // Show a dismissible message instead of blocking
-        showToast('Access token not set. Some features may be limited.', 'error');
-        // Don't return - allow the app to continue loading
+        // Prompt immediately - this is required
+        const token = prompt('Welcome! Please enter your access token to continue:');
+        if (token) {
+          localStorage.setItem('mass_access_token', token);
+          showToast('Access token saved! Now please login with your email.', 'success');
+          // Switch to profile tab to encourage login
+          switchTab('profile');
+        } else {
+          // User cancelled - show friendly message
+          elements.discoverContent.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">🔑</div>
+              <p style="margin-bottom: 8px;"><strong>Access Token Required</strong></p>
+              <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 16px;">You need an access token to use MASS Mobile</p>
+              <button class="btn btn-primary" onclick="setAccessToken()">Enter Access Token</button>
+            </div>
+          `;
+          return;
+        }
       }
 
-      // Check auth
+      // Step 2: Check if user is logged in
       const user = await checkAuth();
       if (user) {
         state.currentUser = user;
         updateAuthUI();
-      }
-
-      // Load initial content (will work if access token is set)
-      if (accessToken) {
         loadDiscover();
       } else {
-        // Show message to get access token or login
-        elements.discoverContent.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-icon">🔑</div>
-            <p>Please set your access token first</p>
-            <button class="btn btn-primary" onclick="setAccessToken()" style="margin-top: 16px;">Set Access Token</button>
-          </div>
-        `;
+        // Has token but not logged in - guide to login
+        loadDiscover(); // Load content anyway
+        showToast('Please login to access playlists', 'error');
       }
     }
 
@@ -1013,9 +1020,8 @@
       const token = prompt('Please enter your access token:');
       if (token) {
         localStorage.setItem('mass_access_token', token);
-        showToast('Access token saved!', 'success');
-        // Reload the page
-        window.location.reload();
+        showToast('Access token saved! Reloading...', 'success');
+        setTimeout(() => window.location.reload(), 1000);
       }
     }
 
