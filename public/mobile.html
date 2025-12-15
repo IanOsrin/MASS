@@ -639,6 +639,31 @@
       margin-bottom: var(--spacing-md);
     }
 
+    /* ===== Genre Buttons ===== */
+    .genre-btn {
+      padding: var(--spacing-md);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: var(--font-size-sm);
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-height: var(--touch-target-min);
+    }
+
+    .genre-btn.active {
+      background: var(--accent);
+      color: var(--bg-primary);
+      border-color: var(--accent);
+    }
+
+    .genre-btn:active {
+      transform: scale(0.98);
+    }
+
     /* ===== Hidden ===== */
     .hidden {
       display: none !important;
@@ -678,6 +703,16 @@
         <input type="text" class="form-input" id="search-input" placeholder="Search tracks, artists, albums...">
       </div>
       <div id="search-results"></div>
+    </div>
+
+    <!-- Genres Tab -->
+    <div class="tab-content" id="genres-tab">
+      <div class="section-header">
+        <h2 class="section-title">Genres</h2>
+      </div>
+      <div id="genres-content" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px;">
+        <!-- Genre buttons will be added here -->
+      </div>
     </div>
 
     <!-- Playlists Tab -->
@@ -729,6 +764,10 @@
     <button class="tab-button" data-tab="search">
       <div class="tab-icon">🔍</div>
       <div>Search</div>
+    </button>
+    <button class="tab-button" data-tab="genres">
+      <div class="tab-icon">🎸</div>
+      <div>Genres</div>
     </button>
     <button class="tab-button" data-tab="playlists">
       <div class="tab-icon">📋</div>
@@ -818,10 +857,52 @@
       };
     })();
 
+    // ===== Genre List =====
+    const GENRES = [
+      "All",
+      "60's",
+      "70's",
+      "80's",
+      "90's",
+      "Adult Contemporary",
+      "African",
+      "African Jazz",
+      "Amapiano",
+      "Afro Beat",
+      "Afro Fusion",
+      "Afro House",
+      "Afro Jazz",
+      "Afro Pop",
+      "Afro Soul",
+      "Blues",
+      "Classical",
+      "Country",
+      "Dance",
+      "Disco",
+      "Electronic",
+      "Folk",
+      "Funk",
+      "Gospel",
+      "Gqom",
+      "Hip Hop",
+      "Jazz",
+      "Kwaito",
+      "Latin",
+      "Maskandi",
+      "Pop",
+      "R & B/Soul",
+      "Reggae",
+      "RnB",
+      "Rock",
+      "Soul",
+      "World"
+    ];
+
     // ===== Global State =====
     const state = {
       currentUser: null,
       currentTab: 'discover',
+      selectedGenre: 'All',
       playlists: [],
       featuredPlaylists: [],
       trendingTracks: [],
@@ -897,11 +978,44 @@
       });
 
       // Load data if needed
-      if (tabName === 'discover' && state.trendingTracks.length === 0) {
+      if (tabName === 'discover' && state.randomTracks.length === 0) {
         loadDiscover();
+      } else if (tabName === 'genres') {
+        renderGenres();
       } else if (tabName === 'playlists' && state.currentUser && state.playlists.length === 0) {
         loadPlaylists();
       }
+    }
+
+    // ===== Genres =====
+    function renderGenres() {
+      const container = document.getElementById('genres-content');
+      container.innerHTML = '';
+
+      GENRES.forEach(genre => {
+        const btn = document.createElement('button');
+        btn.className = 'genre-btn';
+        btn.textContent = genre;
+        if (state.selectedGenre === genre) {
+          btn.classList.add('active');
+        }
+        btn.addEventListener('click', () => selectGenre(genre));
+        container.appendChild(btn);
+      });
+    }
+
+    function selectGenre(genre) {
+      state.selectedGenre = genre;
+      renderGenres();
+
+      // Switch to discover tab and filter
+      switchTab('discover');
+      loadDiscover();
+    }
+
+    function getGenreField(fields) {
+      const genreFields = ['Local Genre', 'Genre', 'Style'];
+      return getFieldValue(fields, genreFields) || '';
     }
 
     // ===== Authentication =====
@@ -1059,7 +1173,9 @@
     // ===== Discovery =====
     async function loadDiscover() {
       try {
-        const response = await fetch('/api/random-songs?count=20');
+        // Load more tracks if genre is selected (to have enough after filtering)
+        const count = state.selectedGenre === 'All' ? 20 : 50;
+        const response = await fetch(`/api/random-songs?count=${count}`);
         const data = await response.json();
         state.randomTracks = data.items || [];
         renderDiscoverTracks();
@@ -1072,15 +1188,38 @@
     function renderDiscoverTracks() {
       elements.discoverContent.innerHTML = '';
 
-      // Filter to only show tracks with valid audio
-      const validTracks = state.randomTracks.filter(track => hasValidAudio(track));
+      // Show genre indicator if filtered
+      if (state.selectedGenre !== 'All') {
+        const indicator = document.createElement('div');
+        indicator.style.cssText = 'padding: 8px 16px; background: var(--bg-card); border-radius: 8px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;';
+        indicator.innerHTML = `
+          <span style="font-size: 14px; color: var(--text-secondary);">Filtered by: <strong style="color: var(--accent);">${state.selectedGenre}</strong></span>
+          <button onclick="selectGenre('All')" style="padding: 4px 12px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 12px; cursor: pointer;">Clear</button>
+        `;
+        elements.discoverContent.appendChild(indicator);
+      }
 
-      if (validTracks.length === 0) {
-        elements.discoverContent.innerHTML = '<div class="empty-state"><div class="empty-icon">🎵</div><p>No tracks with audio available</p></div>';
+      // Filter by valid audio and genre
+      let filteredTracks = state.randomTracks.filter(track => hasValidAudio(track));
+
+      if (state.selectedGenre !== 'All') {
+        filteredTracks = filteredTracks.filter(track => {
+          const genre = getGenreField(track.fields || {});
+          return genre.toLowerCase().includes(state.selectedGenre.toLowerCase()) ||
+                 state.selectedGenre.toLowerCase().includes(genre.toLowerCase());
+        });
+      }
+
+      if (filteredTracks.length === 0) {
+        const message = state.selectedGenre === 'All'
+          ? 'No tracks with audio available'
+          : `No ${state.selectedGenre} tracks found`;
+        elements.discoverContent.innerHTML += `<div class="empty-state"><div class="empty-icon">🎵</div><p>${message}</p></div>`;
         return;
       }
 
-      validTracks.forEach(track => {
+      // Limit to 20 tracks for display
+      filteredTracks.slice(0, 20).forEach(track => {
         const card = createTrackCard(track);
         elements.discoverContent.appendChild(card);
       });
