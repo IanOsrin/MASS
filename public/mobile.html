@@ -1173,10 +1173,20 @@
     // ===== Discovery =====
     async function loadDiscover() {
       try {
-        // Load more tracks if genre is selected (to have enough after filtering)
-        const count = state.selectedGenre === 'All' ? 20 : 50;
-        const response = await fetch(`/api/random-songs?count=${count}`);
-        const data = await response.json();
+        let response, data;
+
+        if (state.selectedGenre !== 'All') {
+          // Fetch tracks by genre using search API
+          console.log('[Load Discover] Fetching genre:', state.selectedGenre);
+          response = await fetch(`/api/search?genre=${encodeURIComponent(state.selectedGenre)}&limit=100`);
+          data = await response.json();
+          console.log('[Load Discover] Genre results:', data.total, 'total tracks');
+        } else {
+          // Fetch random tracks
+          response = await fetch('/api/random-songs?count=20');
+          data = await response.json();
+        }
+
         state.randomTracks = data.items || [];
         renderDiscoverTracks();
       } catch (err) {
@@ -1199,49 +1209,10 @@
         elements.discoverContent.appendChild(indicator);
       }
 
-      // Filter by valid audio and genre
-      let filteredTracks = state.randomTracks.filter(track => hasValidAudio(track));
+      // Filter by valid audio only (genre filtering already done by API)
+      const filteredTracks = state.randomTracks.filter(track => hasValidAudio(track));
 
-      if (state.selectedGenre !== 'All') {
-        console.log('[Genre Filter] Selected genre:', state.selectedGenre);
-        console.log('[Genre Filter] Total tracks with audio:', filteredTracks.length);
-
-        // Collect all unique genre values for debugging
-        const genreValues = new Set();
-        filteredTracks.forEach(track => {
-          const genre = getGenreField(track.fields || {});
-          if (genre && genre.trim() !== '') {
-            genreValues.add(genre.trim());
-          }
-        });
-        console.log('[Genre Filter] Unique genres in data:', Array.from(genreValues).sort());
-
-        filteredTracks = filteredTracks.filter(track => {
-          const genre = getGenreField(track.fields || {});
-
-          // Skip tracks with empty genre
-          if (!genre || genre.trim() === '') {
-            return false;
-          }
-
-          // Match if genre contains selected genre or vice versa
-          const trackGenreLower = genre.toLowerCase().trim();
-          const selectedGenreLower = state.selectedGenre.toLowerCase().trim();
-
-          const matches = trackGenreLower.includes(selectedGenreLower) ||
-                         selectedGenreLower.includes(trackGenreLower);
-
-          if (matches) {
-            console.log('[Genre Filter] Match found:', {
-              trackGenre: genre,
-              selectedGenre: state.selectedGenre,
-              title: getTitleField(track.fields || {})
-            });
-          }
-          return matches;
-        });
-        console.log('[Genre Filter] Filtered tracks:', filteredTracks.length, 'out of', state.randomTracks.length);
-      }
+      console.log('[Render Discover] Tracks with valid audio:', filteredTracks.length, 'out of', state.randomTracks.length);
 
       if (filteredTracks.length === 0) {
         const message = state.selectedGenre === 'All'
@@ -1251,11 +1222,13 @@
         return;
       }
 
-      // Limit to 20 tracks for display
-      filteredTracks.slice(0, 20).forEach(track => {
+      // Display tracks (limit to 50 for performance)
+      filteredTracks.slice(0, 50).forEach(track => {
         const card = createTrackCard(track);
         elements.discoverContent.appendChild(card);
       });
+
+      console.log('[Render Discover] Rendered', Math.min(50, filteredTracks.length), 'track cards');
     }
 
     // Helper functions for field extraction
