@@ -1206,8 +1206,19 @@
         console.log('[Genre Filter] Selected genre:', state.selectedGenre);
         filteredTracks = filteredTracks.filter(track => {
           const genre = getGenreField(track.fields || {});
-          const matches = genre.toLowerCase().includes(state.selectedGenre.toLowerCase()) ||
-                 state.selectedGenre.toLowerCase().includes(genre.toLowerCase());
+
+          // Skip tracks with empty genre
+          if (!genre || genre.trim() === '') {
+            return false;
+          }
+
+          // Match if genre contains selected genre or vice versa
+          const trackGenreLower = genre.toLowerCase().trim();
+          const selectedGenreLower = state.selectedGenre.toLowerCase().trim();
+
+          const matches = trackGenreLower.includes(selectedGenreLower) ||
+                         selectedGenreLower.includes(trackGenreLower);
+
           if (matches) {
             console.log('[Genre Filter] Match found:', {
               trackGenre: genre,
