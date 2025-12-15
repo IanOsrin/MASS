@@ -1203,11 +1203,21 @@
       let filteredTracks = state.randomTracks.filter(track => hasValidAudio(track));
 
       if (state.selectedGenre !== 'All') {
+        console.log('[Genre Filter] Selected genre:', state.selectedGenre);
         filteredTracks = filteredTracks.filter(track => {
           const genre = getGenreField(track.fields || {});
-          return genre.toLowerCase().includes(state.selectedGenre.toLowerCase()) ||
+          const matches = genre.toLowerCase().includes(state.selectedGenre.toLowerCase()) ||
                  state.selectedGenre.toLowerCase().includes(genre.toLowerCase());
+          if (matches) {
+            console.log('[Genre Filter] Match found:', {
+              trackGenre: genre,
+              selectedGenre: state.selectedGenre,
+              title: getTitleField(track.fields || {})
+            });
+          }
+          return matches;
         });
+        console.log('[Genre Filter] Filtered tracks:', filteredTracks.length, 'out of', state.randomTracks.length);
       }
 
       if (filteredTracks.length === 0) {
