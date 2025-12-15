@@ -3552,6 +3552,9 @@ app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'modern-view.html
 // Classic jukebox view available at /jukebox and /classic
 app.get('/jukebox', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 app.get('/classic', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
+// Mobile-optimized view
+app.get('/mobile', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'mobile.html')));
+app.get('/m', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'mobile.html')));
 
 /* ========= Search ========= */
 const SEARCH_FIELDS_BASE = ['Album Artist', 'Album Title', 'Track Name'];

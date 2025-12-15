@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>MASS Mobile</title>
+  <style>
+    /* ===== CSS Variables ===== */
+    :root {
+      /* Colors - Dark Theme */
+      --bg-primary: #0f0f12;
+      --bg-secondary: #17181c;
+      --bg-card: #1d1f24;
+      --text-primary: #f5f6f7;
+      --text-secondary: #a7abb3;
+      --text-muted: #6b7280;
+      --accent: #62f5a9;
+      --accent-hover: #4fd88a;
+      --border: #24262c;
+      --shadow: rgba(0, 0, 0, 0.3);
+      --error: #ef4444;
+      --success: #10b981;
+
+      /* Spacing */
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
+
+      /* Typography */
+      --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-size-xs: 12px;
+      --font-size-sm: 14px;
+      --font-size-base: 16px;
+      --font-size-lg: 18px;
+      --font-size-xl: 24px;
+
+      /* Layout */
+      --header-height: 60px;
+      --tab-bar-height: 64px;
+      --content-padding: 16px;
+
+      /* Touch Targets */
+      --touch-target-min: 44px;
+    }
+
+    /* ===== Reset & Base Styles ===== */
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-family);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
+      font-size: var(--font-size-base);
+      line-height: 1.5;
+    }
+
+    button {
+      font-family: inherit;
+    }
+
+    input, textarea {
+      font-family: inherit;
+      font-size: inherit;
+    }
+
+    /* ===== Header ===== */
+    header {
+      position: sticky;
+      top: 0;
+      height: var(--header-height);
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 var(--content-padding);
+      z-index: 100;
+    }
+
+    .logo {
+      font-size: var(--font-size-lg);
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .user-badge {
+      font-size: var(--font-size-sm);
+      color: var(--text-secondary);
+      padding: var(--spacing-xs) var(--spacing-md);
+      background: var(--bg-card);
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+
+    /* ===== Main Content ===== */
+    main {
+      padding-bottom: calc(var(--tab-bar-height) + 80px);
+      min-height: calc(100vh - var(--header-height) - var(--tab-bar-height));
+    }
+
+    /* ===== Tab Content Sections ===== */
+    .tab-content {
+      display: none;
+      padding: var(--content-padding);
+      animation: fadeIn 0.2s ease;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    /* ===== Bottom Tab Bar ===== */
+    nav.bottom-tabs {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: var(--tab-bar-height);
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      z-index: 99;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .tab-button {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      font-size: var(--font-size-xs);
+      min-width: var(--touch-target-min);
+      min-height: var(--touch-target-min);
+      cursor: pointer;
+      transition: color 0.2s, transform 0.1s;
+    }
+
+    .tab-button.active {
+      color: var(--accent);
+    }
+
+    .tab-button:active {
+      transform: scale(0.95);
+    }
+
+    .tab-icon {
+      font-size: 24px;
+    }
+
+    /* ===== Section Headers ===== */
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--spacing-md);
+    }
+
+    .section-title {
+      font-size: var(--font-size-lg);
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .section-subtitle {
+      font-size: var(--font-size-sm);
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    /* ===== Track Cards ===== */
+    .track-card {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-md);
+      padding: var(--spacing-sm);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: var(--spacing-sm);
+      transition: transform 0.1s;
+    }
+
+    .track-card:active {
+      transform: scale(0.98);
+    }
+
+    .track-artwork {
+      width: 56px;
+      height: 56px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: var(--bg-secondary);
+      flex-shrink: 0;
+    }
+
+    .track-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .track-title {
+      font-size: var(--font-size-base);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+
+    .track-artist {
+      font-size: var(--font-size-sm);
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .track-actions {
+      display: flex;
+      gap: var(--spacing-sm);
+      flex-shrink: 0;
+    }
+
+    /* ===== Buttons ===== */
+    .btn {
+      padding: var(--spacing-sm) var(--spacing-md);
+      border-radius: 8px;
+      border: none;
+      font-size: var(--font-size-base);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-height: var(--touch-target-min);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
+    .btn-primary:active {
+      background: var(--accent-hover);
+      transform: scale(0.98);
+    }
+
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:active {
+      background: var(--bg-secondary);
+      transform: scale(0.98);
+    }
+
+    .btn-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-icon:active {
+      transform: scale(0.95);
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    /* ===== Forms ===== */
+    .form-group {
+      margin-bottom: var(--spacing-md);
+    }
+
+    .form-label {
+      display: block;
+      font-size: var(--font-size-sm);
+      color: var(--text-secondary);
+      margin-bottom: var(--spacing-xs);
+    }
+
+    .form-input {
+      width: 100%;
+      padding: var(--spacing-md);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: var(--font-size-base);
+      min-height: var(--touch-target-min);
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* ===== Floating Player ===== */
+    #floating-player {
+      position: fixed;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: var(--bg-card);
+      border: 2px solid var(--border);
+      box-shadow: 0 4px 12px var(--shadow);
+      z-index: 1000;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      overflow: hidden;
+      display: none;
+      bottom: calc(var(--tab-bar-height) + 20px + env(safe-area-inset-bottom));
+      right: 20px;
+    }
+
+    #floating-player.visible {
+      display: block;
+    }
+
+    #floating-player.playing {
+      border-color: var(--accent);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(98, 245, 169, 0.7); }
+      50% { box-shadow: 0 0 0 10px rgba(98, 245, 169, 0); }
+    }
+
+    #floating-player img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* ===== Player Modal ===== */
+    #player-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 2000;
+      display: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #player-modal.show {
+      display: flex;
+      opacity: 1;
+    }
+
+    .player-modal-content {
+      width: 100%;
+      max-width: 100%;
+      padding: var(--spacing-xl);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--spacing-lg);
+      overflow-y: auto;
+      padding-top: calc(var(--spacing-xl) + env(safe-area-inset-top));
+    }
+
+    .player-close {
+      position: absolute;
+      top: calc(var(--spacing-md) + env(safe-area-inset-top));
+      right: var(--spacing-md);
+      width: var(--touch-target-min);
+      height: var(--touch-target-min);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: var(--text-primary);
+      font-size: 24px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .player-artwork-large {
+      width: 70vw;
+      max-width: 300px;
+      aspect-ratio: 1;
+      border-radius: 16px;
+      object-fit: cover;
+      box-shadow: 0 8px 24px var(--shadow);
+    }
+
+    .player-track-info {
+      text-align: center;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .player-track-title {
+      font-size: var(--font-size-xl);
+      font-weight: 700;
+      margin-bottom: var(--spacing-xs);
+    }
+
+    .player-track-artist {
+      font-size: var(--font-size-lg);
+      color: var(--text-secondary);
+      margin-bottom: var(--spacing-xs);
+    }
+
+    .player-track-album {
+      font-size: var(--font-size-sm);
+      color: var(--text-muted);
+    }
+
+    .player-progress {
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 4px;
+      background: var(--bg-secondary);
+      border-radius: 2px;
+      position: relative;
+      cursor: pointer;
+      margin: var(--spacing-md) 0;
+    }
+
+    .progress-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.1s linear;
+    }
+
+    .progress-time {
+      display: flex;
+      justify-content: space-between;
+      font-size: var(--font-size-xs);
+      color: var(--text-muted);
+    }
+
+    .player-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--spacing-lg);
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .player-control-btn {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-primary);
+      font-size: 20px;
+    }
+
+    .player-control-btn.play-pause {
+      width: 64px;
+      height: 64px;
+      background: var(--accent);
+      color: var(--bg-primary);
+      font-size: 24px;
+    }
+
+    /* ===== Loading Skeleton ===== */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-card) 50%, var(--bg-secondary) 75%);
+      background-size: 200% 100%;
+      animation: skeleton-loading 1.5s infinite;
+      border-radius: 8px;
+    }
+
+    @keyframes skeleton-loading {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    .skeleton-card {
+      height: 72px;
+      margin-bottom: var(--spacing-sm);
+    }
+
+    /* ===== Toast Notifications ===== */
+    #toast-container {
+      position: fixed;
+      bottom: calc(var(--tab-bar-height) + 20px + env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 3000;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      padding: var(--spacing-md) var(--spacing-lg);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 12px var(--shadow);
+      margin-bottom: var(--spacing-sm);
+      opacity: 0;
+      transform: translateY(20px);
+      animation: toastIn 0.3s forwards, toastOut 0.3s 2.7s forwards;
+    }
+
+    .toast.success {
+      border-color: var(--success);
+    }
+
+    .toast.error {
+      border-color: var(--error);
+    }
+
+    @keyframes toastIn {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes toastOut {
+      to {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+    }
+
+    /* ===== Modals & Bottom Sheets ===== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 1500;
+      display: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .modal-overlay.show {
+      display: flex;
+      opacity: 1;
+    }
+
+    .bottom-sheet {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary);
+      border-top-left-radius: 20px;
+      border-top-right-radius: 20px;
+      padding: var(--spacing-lg);
+      padding-bottom: calc(var(--spacing-lg) + env(safe-area-inset-bottom));
+      max-height: 70vh;
+      overflow-y: auto;
+      transform: translateY(100%);
+      transition: transform 0.3s ease;
+    }
+
+    .modal-overlay.show .bottom-sheet {
+      transform: translateY(0);
+    }
+
+    .bottom-sheet-header {
+      font-size: var(--font-size-lg);
+      font-weight: 700;
+      margin-bottom: var(--spacing-lg);
+      text-align: center;
+    }
+
+    .bottom-sheet-option {
+      width: 100%;
+      padding: var(--spacing-md);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: var(--font-size-base);
+      text-align: left;
+      margin-bottom: var(--spacing-sm);
+      cursor: pointer;
+    }
+
+    .bottom-sheet-option:active {
+      background: var(--bg-primary);
+    }
+
+    /* ===== Empty State ===== */
+    .empty-state {
+      text-align: center;
+      padding: var(--spacing-xl);
+      color: var(--text-muted);
+    }
+
+    .empty-icon {
+      font-size: 48px;
+      margin-bottom: var(--spacing-md);
+    }
+
+    /* ===== Hidden ===== */
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="logo">MASS</div>
+    <div class="user-badge" id="user-badge">Guest</div>
+  </header>
+
+  <!-- Main Content -->
+  <main>
+    <!-- Discover Tab -->
+    <div class="tab-content active" id="discover-tab">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Discover</h2>
+          <p class="section-subtitle">Fresh picks for you</p>
+        </div>
+      </div>
+      <div id="discover-content">
+        <div class="skeleton-card skeleton"></div>
+        <div class="skeleton-card skeleton"></div>
+        <div class="skeleton-card skeleton"></div>
+      </div>
+    </div>
+
+    <!-- Search Tab -->
+    <div class="tab-content" id="search-tab">
+      <div class="section-header">
+        <h2 class="section-title">Search</h2>
+      </div>
+      <div class="form-group">
+        <input type="text" class="form-input" id="search-input" placeholder="Search tracks, artists, albums...">
+      </div>
+      <div id="search-results"></div>
+    </div>
+
+    <!-- Playlists Tab -->
+    <div class="tab-content" id="playlists-tab">
+      <div class="section-header">
+        <h2 class="section-title">Playlists</h2>
+        <button class="btn btn-primary" id="create-playlist-btn">+ Create</button>
+      </div>
+      <div id="playlists-content">
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <p>No playlists yet. Create one!</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile Tab -->
+    <div class="tab-content" id="profile-tab">
+      <div class="section-header">
+        <h2 class="section-title">Profile</h2>
+      </div>
+      <div id="profile-content">
+        <div id="login-form">
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-input" id="login-email" placeholder="your@email.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-input" id="login-password" placeholder="Password">
+          </div>
+          <button class="btn btn-primary" style="width: 100%; margin-bottom: 8px;" id="login-btn">Login</button>
+          <button class="btn btn-secondary" style="width: 100%;" id="register-btn">Register</button>
+        </div>
+        <div id="profile-info" class="hidden">
+          <p>Logged in as: <strong id="profile-email"></strong></p>
+          <button class="btn btn-secondary" style="width: 100%;" id="logout-btn">Logout</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Bottom Tab Navigation -->
+  <nav class="bottom-tabs">
+    <button class="tab-button active" data-tab="discover">
+      <div class="tab-icon">🎵</div>
+      <div>Discover</div>
+    </button>
+    <button class="tab-button" data-tab="search">
+      <div class="tab-icon">🔍</div>
+      <div>Search</div>
+    </button>
+    <button class="tab-button" data-tab="playlists">
+      <div class="tab-icon">📋</div>
+      <div>Playlists</div>
+    </button>
+    <button class="tab-button" data-tab="profile">
+      <div class="tab-icon">👤</div>
+      <div>Profile</div>
+    </button>
+  </nav>
+
+  <!-- Floating Player -->
+  <div id="floating-player">
+    <img id="floating-artwork" src="/img/placeholder.png" alt="Now Playing">
+  </div>
+
+  <!-- Player Modal -->
+  <div id="player-modal">
+    <div class="player-modal-content">
+      <button class="player-close" id="player-close">×</button>
+      <img class="player-artwork-large" id="player-artwork" src="/img/placeholder.png" alt="Album Art">
+      <div class="player-track-info">
+        <div class="player-track-title" id="player-title">Track Title</div>
+        <div class="player-track-artist" id="player-artist">Artist</div>
+        <div class="player-track-album" id="player-album">Album</div>
+      </div>
+      <div class="player-progress">
+        <div class="progress-bar" id="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-time">
+          <span id="current-time">0:00</span>
+          <span id="total-time">0:00</span>
+        </div>
+      </div>
+      <div class="player-controls">
+        <button class="player-control-btn" id="prev-btn">⏮</button>
+        <button class="player-control-btn play-pause" id="play-pause-btn">▶</button>
+        <button class="player-control-btn" id="next-btn">⏭</button>
+      </div>
+      <button class="btn btn-secondary" style="width: 100%; max-width: 320px;" id="add-to-playlist-btn">+ Add to Playlist</button>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Modal Overlay (for bottom sheets) -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="bottom-sheet" id="bottom-sheet">
+      <!-- Dynamic content -->
+    </div>
+  </div>
+
+  <!-- Audio Element -->
+  <audio id="audio" preload="metadata"></audio>
+
+  <script>
+    // ===== Global State =====
+    const state = {
+      currentUser: null,
+      currentTab: 'discover',
+      playlists: [],
+      featuredPlaylists: [],
+      trendingTracks: [],
+      randomTracks: [],
+      searchResults: [],
+      currentTrack: null,
+      playlistContext: null,
+      streamSessionId: null,
+      lastProgressUpdate: 0,
+      playerBubble: {
+        visible: false,
+        position: { x: 0, y: 0 }
+      },
+      playerModal: {
+        visible: false
+      }
+    };
+
+    // ===== DOM Elements =====
+    const elements = {
+      audio: document.getElementById('audio'),
+      floatingPlayer: document.getElementById('floating-player'),
+      playerModal: document.getElementById('player-modal'),
+      userBadge: document.getElementById('user-badge'),
+      discoverContent: document.getElementById('discover-content'),
+      searchInput: document.getElementById('search-input'),
+      searchResults: document.getElementById('search-results'),
+      playlistsContent: document.getElementById('playlists-content'),
+      modalOverlay: document.getElementById('modal-overlay'),
+      bottomSheet: document.getElementById('bottom-sheet'),
+      toastContainer: document.getElementById('toast-container')
+    };
+
+    // ===== Utility Functions =====
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      elements.toastContainer.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    function formatTime(seconds) {
+      if (!seconds || isNaN(seconds)) return '0:00';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    function generateSessionId() {
+      return crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    // ===== Tab Navigation =====
+    document.querySelectorAll('.tab-button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        switchTab(tab);
+      });
+    });
+
+    function switchTab(tabName) {
+      state.currentTab = tabName;
+
+      // Update tab buttons
+      document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+      });
+
+      // Update tab content
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === `${tabName}-tab`);
+      });
+
+      // Load data if needed
+      if (tabName === 'discover' && state.trendingTracks.length === 0) {
+        loadDiscover();
+      } else if (tabName === 'playlists' && state.currentUser && state.playlists.length === 0) {
+        loadPlaylists();
+      }
+    }
+
+    // ===== Authentication =====
+    async function checkAuth() {
+      const accessToken = localStorage.getItem('mass_access_token');
+      if (!accessToken) {
+        return null;
+      }
+
+      try {
+        const response = await fetch('/api/auth/me');
+        if (response.ok) {
+          const data = await response.json();
+          return data.user;
+        }
+      } catch (err) {
+        console.error('Auth check failed', err);
+      }
+      return null;
+    }
+
+    async function login(email, password) {
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          state.currentUser = data.user;
+          updateAuthUI();
+          loadPlaylists();
+          showToast('Logged in successfully!');
+          switchTab('discover');
+        } else {
+          const error = await response.json();
+          showToast(error.error || 'Login failed', 'error');
+        }
+      } catch (err) {
+        showToast('Login failed', 'error');
+      }
+    }
+
+    async function register(email, password) {
+      try {
+        const response = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+
+        if (response.ok) {
+          showToast('Registered successfully! Please log in.');
+        } else {
+          const error = await response.json();
+          showToast(error.error || 'Registration failed', 'error');
+        }
+      } catch (err) {
+        showToast('Registration failed', 'error');
+      }
+    }
+
+    function logout() {
+      fetch('/api/auth/logout', { method: 'POST' })
+        .then(() => {
+          state.currentUser = null;
+          state.playlists = [];
+          updateAuthUI();
+          showToast('Logged out');
+        });
+    }
+
+    function updateAuthUI() {
+      const loginForm = document.getElementById('login-form');
+      const profileInfo = document.getElementById('profile-info');
+
+      if (state.currentUser) {
+        loginForm.classList.add('hidden');
+        profileInfo.classList.remove('hidden');
+        document.getElementById('profile-email').textContent = state.currentUser.email;
+        elements.userBadge.textContent = state.currentUser.email.split('@')[0];
+      } else {
+        loginForm.classList.remove('hidden');
+        profileInfo.classList.add('hidden');
+        elements.userBadge.textContent = 'Guest';
+      }
+    }
+
+    // Auth event listeners
+    document.getElementById('login-btn').addEventListener('click', () => {
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+      login(email, password);
+    });
+
+    document.getElementById('register-btn').addEventListener('click', () => {
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+      register(email, password);
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', logout);
+
+    // ===== Initialize =====
+    async function init() {
+      // Check access token
+      const accessToken = localStorage.getItem('mass_access_token');
+      if (!accessToken) {
+        const token = prompt('Please enter your access token:');
+        if (token) {
+          localStorage.setItem('mass_access_token', token);
+        } else {
+          showToast('Access token required', 'error');
+          return;
+        }
+      }
+
+      // Check auth
+      const user = await checkAuth();
+      if (user) {
+        state.currentUser = user;
+        updateAuthUI();
+      }
+
+      // Load initial content
+      loadDiscover();
+    }
+
+    // ===== Discovery =====
+    async function loadDiscover() {
+      try {
+        const response = await fetch('/api/random-songs?count=20');
+        const data = await response.json();
+        state.randomTracks = data.items || [];
+        renderDiscoverTracks();
+      } catch (err) {
+        console.error('Failed to load discover', err);
+        elements.discoverContent.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Failed to load tracks</p></div>';
+      }
+    }
+
+    function renderDiscoverTracks() {
+      elements.discoverContent.innerHTML = '';
+
+      state.randomTracks.forEach(track => {
+        const card = createTrackCard(track);
+        elements.discoverContent.appendChild(card);
+      });
+    }
+
+    function createTrackCard(track) {
+      const card = document.createElement('div');
+      card.className = 'track-card';
+
+      const fields = track.fields || {};
+      const artwork = fields['Artwork::Picture'] || fields.Artwork || '/img/placeholder.png';
+      const title = fields['Track Name'] || fields.Title || 'Unknown Track';
+      const artist = fields['Album Artist'] || fields.Artist || 'Unknown Artist';
+
+      card.innerHTML = `
+        <img class="track-artwork" src="${artwork}" alt="${title}" loading="lazy">
+        <div class="track-info">
+          <div class="track-title">${title}</div>
+          <div class="track-artist">${artist}</div>
+        </div>
+        <div class="track-actions">
+          <button class="btn-icon play-btn">▶</button>
+          <button class="btn-icon add-btn">+</button>
+        </div>
+      `;
+
+      card.querySelector('.play-btn').addEventListener('click', () => playTrack(track));
+      card.querySelector('.add-btn').addEventListener('click', () => showAddToPlaylistModal(track));
+
+      return card;
+    }
+
+    // ===== Search =====
+    let searchTimeout;
+    elements.searchInput.addEventListener('input', (e) => {
+      const query = e.target.value.trim();
+      if (!query) {
+        elements.searchResults.innerHTML = '';
+        return;
+      }
+
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => search(query), 500);
+    });
+
+    async function search(query) {
+      try {
+        elements.searchResults.innerHTML = '<div class="skeleton-card skeleton"></div><div class="skeleton-card skeleton"></div>';
+
+        const response = await fetch(`/api/search?song=${encodeURIComponent(query)}&limit=50`);
+        const data = await response.json();
+        state.searchResults = data.items || [];
+        renderSearchResults();
+      } catch (err) {
+        console.error('Search failed', err);
+        elements.searchResults.innerHTML = '<div class="empty-state"><p>Search failed</p></div>';
+      }
+    }
+
+    function renderSearchResults() {
+      elements.searchResults.innerHTML = '';
+
+      if (state.searchResults.length === 0) {
+        elements.searchResults.innerHTML = '<div class="empty-state"><p>No results found</p></div>';
+        return;
+      }
+
+      state.searchResults.forEach(track => {
+        const card = createTrackCard(track);
+        elements.searchResults.appendChild(card);
+      });
+    }
+
+    // ===== Playlists =====
+    async function loadPlaylists() {
+      if (!state.currentUser) return;
+
+      try {
+        const response = await fetch('/api/playlists');
+        const data = await response.json();
+        state.playlists = data.playlists || [];
+        renderPlaylists();
+      } catch (err) {
+        console.error('Failed to load playlists', err);
+      }
+    }
+
+    function renderPlaylists() {
+      if (!state.currentUser) {
+        elements.playlistsContent.innerHTML = '<div class="empty-state"><div class="empty-icon">🔒</div><p>Please log in to view playlists</p></div>';
+        return;
+      }
+
+      if (state.playlists.length === 0) {
+        elements.playlistsContent.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>No playlists yet. Create one!</p></div>';
+        return;
+      }
+
+      elements.playlistsContent.innerHTML = '';
+      state.playlists.forEach(playlist => {
+        const card = document.createElement('div');
+        card.className = 'track-card';
+        card.innerHTML = `
+          <div class="track-info">
+            <div class="track-title">${playlist.name}</div>
+            <div class="track-artist">${playlist.tracks?.length || 0} tracks</div>
+          </div>
+          <button class="btn-icon">▶</button>
+        `;
+        elements.playlistsContent.appendChild(card);
+      });
+    }
+
+    document.getElementById('create-playlist-btn').addEventListener('click', () => {
+      if (!state.currentUser) {
+        showToast('Please log in to create playlists', 'error');
+        switchTab('profile');
+        return;
+      }
+
+      const name = prompt('Playlist name:');
+      if (name) {
+        createPlaylist(name);
+      }
+    });
+
+    async function createPlaylist(name) {
+      try {
+        const response = await fetch('/api/playlists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+
+        if (response.ok) {
+          showToast('Playlist created!');
+          loadPlaylists();
+        } else {
+          showToast('Failed to create playlist', 'error');
+        }
+      } catch (err) {
+        showToast('Failed to create playlist', 'error');
+      }
+    }
+
+    function showAddToPlaylistModal(track) {
+      if (!state.currentUser) {
+        showToast('Please log in to add to playlists', 'error');
+        switchTab('profile');
+        return;
+      }
+
+      if (state.playlists.length === 0) {
+        showToast('Create a playlist first', 'error');
+        switchTab('playlists');
+        return;
+      }
+
+      elements.bottomSheet.innerHTML = `
+        <div class="bottom-sheet-header">Add to Playlist</div>
+        ${state.playlists.map(playlist => `
+          <button class="bottom-sheet-option" data-playlist-id="${playlist.id}">
+            ${playlist.name}
+          </button>
+        `).join('')}
+        <button class="btn btn-secondary" style="width: 100%; margin-top: 16px;" onclick="closeModal()">Cancel</button>
+      `;
+
+      elements.modalOverlay.classList.add('show');
+
+      elements.bottomSheet.querySelectorAll('[data-playlist-id]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          addTrackToPlaylist(btn.dataset.playlistId, track);
+          closeModal();
+        });
+      });
+    }
+
+    async function addTrackToPlaylist(playlistId, track) {
+      try {
+        const response = await fetch(`/api/playlists/${playlistId}/tracks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ track })
+        });
+
+        if (response.ok) {
+          showToast('Added to playlist!');
+          loadPlaylists();
+        } else {
+          showToast('Failed to add track', 'error');
+        }
+      } catch (err) {
+        showToast('Failed to add track', 'error');
+      }
+    }
+
+    function closeModal() {
+      elements.modalOverlay.classList.remove('show');
+    }
+
+    elements.modalOverlay.addEventListener('click', (e) => {
+      if (e.target === elements.modalOverlay) {
+        closeModal();
+      }
+    });
+
+    // ===== Audio Playback =====
+    async function playTrack(track) {
+      state.currentTrack = track;
+      const fields = track.fields || {};
+
+      // Get audio URL
+      let audioUrl = null;
+      const mp3Field = fields.mp3 || fields.MP3 || fields['Audio File'] || fields['Audio::mp3'];
+
+      if (mp3Field && mp3Field.startsWith('http')) {
+        audioUrl = `/api/container?u=${encodeURIComponent(mp3Field)}`;
+      } else {
+        try {
+          const response = await fetch(`/api/track/${track.recordId}/container`);
+          const data = await response.json();
+          if (data.url) {
+            audioUrl = `/api/container?u=${encodeURIComponent(data.url)}`;
+          }
+        } catch (err) {
+          console.error('Failed to get audio URL', err);
+        }
+      }
+
+      if (!audioUrl) {
+        showToast('Audio not available', 'error');
+        return;
+      }
+
+      // Play audio
+      elements.audio.src = audioUrl;
+      elements.audio.play();
+
+      // Update UI
+      updateFloatingPlayer();
+      state.playerBubble.visible = true;
+      elements.floatingPlayer.classList.add('visible', 'playing');
+
+      // Stream event
+      state.streamSessionId = generateSessionId();
+      sendStreamEvent('PLAY');
+    }
+
+    function updateFloatingPlayer() {
+      if (!state.currentTrack) return;
+
+      const fields = state.currentTrack.fields || {};
+      const artwork = fields['Artwork::Picture'] || fields.Artwork || '/img/placeholder.png';
+      document.getElementById('floating-artwork').src = artwork;
+    }
+
+    function updatePlayerModal() {
+      if (!state.currentTrack) return;
+
+      const fields = state.currentTrack.fields || {};
+      const artwork = fields['Artwork::Picture'] || fields.Artwork || '/img/placeholder.png';
+      const title = fields['Track Name'] || fields.Title || 'Unknown Track';
+      const artist = fields['Album Artist'] || fields.Artist || 'Unknown Artist';
+      const album = fields['Album Title'] || fields.Album || 'Unknown Album';
+
+      document.getElementById('player-artwork').src = artwork;
+      document.getElementById('player-title').textContent = title;
+      document.getElementById('player-artist').textContent = artist;
+      document.getElementById('player-album').textContent = album;
+    }
+
+    // Floating player drag functionality
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let dragStartTime = 0;
+
+    elements.floatingPlayer.addEventListener('touchstart', (e) => {
+      isDragging = false;
+      const touch = e.touches[0];
+      dragStartX = touch.clientX;
+      dragStartY = touch.clientY;
+      dragStartTime = Date.now();
+      elements.floatingPlayer.style.transition = 'none';
+    });
+
+    elements.floatingPlayer.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const deltaX = Math.abs(touch.clientX - dragStartX);
+      const deltaY = Math.abs(touch.clientY - dragStartY);
+
+      // If moved more than 10px, it's a drag
+      if (deltaX > 10 || deltaY > 10) {
+        isDragging = true;
+      }
+
+      if (isDragging) {
+        const newX = touch.clientX - 30; // Center of bubble
+        const newY = touch.clientY - 30;
+
+        // Constrain to viewport
+        const maxX = window.innerWidth - 60;
+        const maxY = window.innerHeight - 60 - 64; // Minus tab bar
+
+        const constrainedX = Math.max(0, Math.min(newX, maxX));
+        const constrainedY = Math.max(0, Math.min(newY, maxY));
+
+        elements.floatingPlayer.style.left = `${constrainedX}px`;
+        elements.floatingPlayer.style.top = `${constrainedY}px`;
+        elements.floatingPlayer.style.right = 'auto';
+        elements.floatingPlayer.style.bottom = 'auto';
+      }
+    });
+
+    elements.floatingPlayer.addEventListener('touchend', (e) => {
+      const touch = e.changedTouches[0];
+      const deltaTime = Date.now() - dragStartTime;
+
+      elements.floatingPlayer.style.transition = 'all 0.3s ease';
+
+      if (isDragging) {
+        // Snap to nearest corner
+        const centerX = window.innerWidth / 2;
+        const centerY = (window.innerHeight - 64) / 2;
+
+        const currentLeft = parseInt(elements.floatingPlayer.style.left || 0);
+        const currentTop = parseInt(elements.floatingPlayer.style.top || 0);
+
+        const snapLeft = currentLeft < centerX ? '20px' : 'auto';
+        const snapRight = currentLeft >= centerX ? '20px' : 'auto';
+        const snapTop = currentTop < centerY ? '20px' : 'auto';
+        const snapBottom = currentTop >= centerY ? `calc(${64}px + 20px + env(safe-area-inset-bottom))` : 'auto';
+
+        elements.floatingPlayer.style.left = snapLeft;
+        elements.floatingPlayer.style.right = snapRight;
+        elements.floatingPlayer.style.top = snapTop;
+        elements.floatingPlayer.style.bottom = snapBottom;
+      } else {
+        // It's a tap, expand player
+        if (deltaTime < 300) {
+          state.playerModal.visible = true;
+          elements.playerModal.classList.add('show');
+          updatePlayerModal();
+        }
+      }
+
+      isDragging = false;
+    });
+
+    // Close player modal
+    document.getElementById('player-close').addEventListener('click', () => {
+      state.playerModal.visible = false;
+      elements.playerModal.classList.remove('show');
+    });
+
+    // Play/pause
+    document.getElementById('play-pause-btn').addEventListener('click', () => {
+      if (elements.audio.paused) {
+        elements.audio.play();
+      } else {
+        elements.audio.pause();
+      }
+    });
+
+    // Audio events
+    elements.audio.addEventListener('play', () => {
+      document.getElementById('play-pause-btn').textContent = '⏸';
+      elements.floatingPlayer.classList.add('playing');
+      sendStreamEvent('PLAY');
+    });
+
+    elements.audio.addEventListener('pause', () => {
+      document.getElementById('play-pause-btn').textContent = '▶';
+      elements.floatingPlayer.classList.remove('playing');
+      sendStreamEvent('PAUSE');
+    });
+
+    elements.audio.addEventListener('timeupdate', () => {
+      updateProgress();
+
+      const now = Date.now();
+      if (now - state.lastProgressUpdate > 30000) {
+        sendStreamEvent('PROGRESS');
+        state.lastProgressUpdate = now;
+      }
+    });
+
+    elements.audio.addEventListener('ended', () => {
+      sendStreamEvent('END');
+    });
+
+    elements.audio.addEventListener('error', () => {
+      sendStreamEvent('ERROR');
+      showToast('Playback error', 'error');
+    });
+
+    function updateProgress() {
+      const current = elements.audio.currentTime || 0;
+      const total = elements.audio.duration || 0;
+
+      if (total > 0) {
+        const percent = (current / total) * 100;
+        document.getElementById('progress-fill').style.width = `${percent}%`;
+      }
+
+      document.getElementById('current-time').textContent = formatTime(current);
+      document.getElementById('total-time').textContent = formatTime(total);
+    }
+
+    // Progress bar seek
+    document.getElementById('progress-bar').addEventListener('click', (e) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const percent = x / rect.width;
+      elements.audio.currentTime = elements.audio.duration * percent;
+    });
+
+    // Stream events
+    async function sendStreamEvent(eventType) {
+      if (!state.currentTrack || !state.streamSessionId) return;
+
+      try {
+        await fetch('/api/stream-events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: state.streamSessionId,
+            trackRecordId: state.currentTrack.recordId,
+            eventType,
+            position: Math.floor(elements.audio.currentTime || 0),
+            timestamp: new Date().toISOString()
+          })
+        });
+      } catch (err) {
+        console.warn('Stream event failed', err);
+      }
+    }
+
+    // Add to playlist from player
+    document.getElementById('add-to-playlist-btn').addEventListener('click', () => {
+      if (state.currentTrack) {
+        showAddToPlaylistModal(state.currentTrack);
+      }
+    });
+
+    // Start app
+    init();
+  </script>
+</body>
+</html>
