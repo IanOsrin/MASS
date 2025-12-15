@@ -1321,19 +1321,33 @@
 
     async function addTrackToPlaylist(playlistId, track) {
       try {
+        const fields = track.fields || {};
+
+        // Transform FileMaker track to playlist format
+        const playlistTrack = {
+          recordId: track.recordId || '',
+          name: getTitleField(fields),
+          albumTitle: getAlbumField(fields),
+          albumArtist: getArtistField(fields),
+          artwork: getArtworkUrl(fields),
+          mp3: getAudioUrl(fields) || ''
+        };
+
         const response = await fetch(`/api/playlists/${playlistId}/tracks`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ track })
+          body: JSON.stringify({ track: playlistTrack })
         });
 
         if (response.ok) {
           showToast('Added to playlist!');
           loadPlaylists();
         } else {
-          showToast('Failed to add track', 'error');
+          const error = await response.json();
+          showToast(error.error || 'Failed to add track', 'error');
         }
       } catch (err) {
+        console.error('Add to playlist error:', err);
         showToast('Failed to add track', 'error');
       }
     }
