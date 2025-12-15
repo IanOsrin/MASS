@@ -2523,13 +2523,11 @@
       }
     }
 
-    // Check if a card is currently displayed in the discover section
+    // Check if a card is currently displayed in any section
     function isCardDisplayed(recordId) {
-      const container = document.getElementById('randomContainer');
-      if (!container) return false;
-
-      const card = container.querySelector(`.random-card[data-record-id="${recordId}"]`);
-      return card !== null;
+      // Check if the record exists in the itemsStore
+      // Items from featured, highlights, trending, and random sections are all stored there
+      return itemsStore.has(recordId);
     }
 
     // Play function with actual audio playback
