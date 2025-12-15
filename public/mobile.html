@@ -978,16 +978,12 @@
 
     // ===== Initialize =====
     async function init() {
-      // Check access token
+      // Check access token (non-blocking)
       const accessToken = localStorage.getItem('mass_access_token');
       if (!accessToken) {
-        const token = prompt('Please enter your access token:');
-        if (token) {
-          localStorage.setItem('mass_access_token', token);
-        } else {
-          showToast('Access token required', 'error');
-          return;
-        }
+        // Show a dismissible message instead of blocking
+        showToast('Access token not set. Some features may be limited.', 'error');
+        // Don't return - allow the app to continue loading
       }
 
       // Check auth
@@ -997,8 +993,30 @@
         updateAuthUI();
       }
 
-      // Load initial content
-      loadDiscover();
+      // Load initial content (will work if access token is set)
+      if (accessToken) {
+        loadDiscover();
+      } else {
+        // Show message to get access token or login
+        elements.discoverContent.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🔑</div>
+            <p>Please set your access token first</p>
+            <button class="btn btn-primary" onclick="setAccessToken()" style="margin-top: 16px;">Set Access Token</button>
+          </div>
+        `;
+      }
+    }
+
+    // Function to set access token
+    function setAccessToken() {
+      const token = prompt('Please enter your access token:');
+      if (token) {
+        localStorage.setItem('mass_access_token', token);
+        showToast('Access token saved!', 'success');
+        // Reload the page
+        window.location.reload();
+      }
     }
 
     // ===== Discovery =====
