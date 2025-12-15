@@ -1204,6 +1204,18 @@
 
       if (state.selectedGenre !== 'All') {
         console.log('[Genre Filter] Selected genre:', state.selectedGenre);
+        console.log('[Genre Filter] Total tracks with audio:', filteredTracks.length);
+
+        // Collect all unique genre values for debugging
+        const genreValues = new Set();
+        filteredTracks.forEach(track => {
+          const genre = getGenreField(track.fields || {});
+          if (genre && genre.trim() !== '') {
+            genreValues.add(genre.trim());
+          }
+        });
+        console.log('[Genre Filter] Unique genres in data:', Array.from(genreValues).sort());
+
         filteredTracks = filteredTracks.filter(track => {
           const genre = getGenreField(track.fields || {});
 
