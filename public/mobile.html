@@ -965,6 +965,7 @@
     });
 
     function switchTab(tabName) {
+      const wasAlreadyActive = state.currentTab === tabName;
       state.currentTab = tabName;
 
       // Update tab buttons
@@ -978,8 +979,11 @@
       });
 
       // Load data if needed
-      if (tabName === 'discover' && state.randomTracks.length === 0) {
-        loadDiscover();
+      if (tabName === 'discover') {
+        // Refresh if tapping active tab, genre is selected, or first load
+        if (wasAlreadyActive || state.selectedGenre !== 'All' || state.randomTracks.length === 0) {
+          loadDiscover();
+        }
       } else if (tabName === 'genres') {
         renderGenres();
       } else if (tabName === 'playlists' && state.currentUser && state.playlists.length === 0) {
@@ -1172,22 +1176,33 @@
 
     // ===== Discovery =====
     async function loadDiscover() {
+      // Show loading indicator
+      elements.discoverContent.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><p>Loading tracks...</p></div>';
+
       try {
         let response, data;
 
         if (state.selectedGenre !== 'All') {
-          // Fetch tracks by genre using search API
+          // Fetch tracks by genre using search API - get more results
           console.log('[Load Discover] Fetching genre:', state.selectedGenre);
-          response = await fetch(`/api/search?genre=${encodeURIComponent(state.selectedGenre)}&limit=100`);
+          response = await fetch(`/api/search?genre=${encodeURIComponent(state.selectedGenre)}&limit=200`);
           data = await response.json();
           console.log('[Load Discover] Genre results:', data.total, 'total tracks');
+
+          // Shuffle results to show different tracks on refresh
+          const items = data.items || [];
+          for (let i = items.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [items[i], items[j]] = [items[j], items[i]];
+          }
+          state.randomTracks = items;
         } else {
           // Fetch random tracks
-          response = await fetch('/api/random-songs?count=20');
+          response = await fetch('/api/random-songs?count=50');
           data = await response.json();
+          state.randomTracks = data.items || [];
         }
 
-        state.randomTracks = data.items || [];
         renderDiscoverTracks();
       } catch (err) {
         console.error('Failed to load discover', err);
@@ -1222,13 +1237,14 @@
         return;
       }
 
-      // Display tracks (limit to 50 for performance)
-      filteredTracks.slice(0, 50).forEach(track => {
+      // Display tracks (limit to 100)
+      const displayLimit = state.selectedGenre !== 'All' ? 100 : 50;
+      filteredTracks.slice(0, displayLimit).forEach(track => {
         const card = createTrackCard(track);
         elements.discoverContent.appendChild(card);
       });
 
-      console.log('[Render Discover] Rendered', Math.min(50, filteredTracks.length), 'track cards');
+      console.log('[Render Discover] Rendered', Math.min(displayLimit, filteredTracks.length), 'track cards');
     }
 
     // Helper functions for field extraction
