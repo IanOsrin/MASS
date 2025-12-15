@@ -1017,7 +1017,15 @@
     function renderDiscoverTracks() {
       elements.discoverContent.innerHTML = '';
 
-      state.randomTracks.forEach(track => {
+      // Filter to only show tracks with valid audio
+      const validTracks = state.randomTracks.filter(track => hasValidAudio(track));
+
+      if (validTracks.length === 0) {
+        elements.discoverContent.innerHTML = '<div class="empty-state"><div class="empty-icon">🎵</div><p>No tracks with audio available</p></div>';
+        return;
+      }
+
+      validTracks.forEach(track => {
         const card = createTrackCard(track);
         elements.discoverContent.appendChild(card);
       });
@@ -1059,8 +1067,21 @@
     }
 
     function getAudioUrl(fields) {
-      const audioFields = ['mp3', 'MP3', 'Audio File', 'Audio::mp3'];
+      const audioFields = ['S3_URL', 'mp3', 'MP3', 'Audio File', 'Audio::mp3'];
       return getFieldValue(fields, audioFields);
+    }
+
+    // Check if an item has valid audio
+    function hasValidAudio(item) {
+      if (!item || !item.fields) return false;
+      const audioFields = ['S3_URL', 'mp3', 'MP3', 'Audio File', 'Audio::mp3'];
+      const audio = getFieldValue(item.fields, audioFields);
+
+      // Check if audio field exists and is not empty
+      if (!audio) return false;
+      if (typeof audio === 'string' && audio.trim() === '') return false;
+
+      return true;
     }
 
     function createTrackCard(track) {
@@ -1120,12 +1141,19 @@
     function renderSearchResults() {
       elements.searchResults.innerHTML = '';
 
-      if (state.searchResults.length === 0) {
-        elements.searchResults.innerHTML = '<div class="empty-state"><p>No results found</p></div>';
+      // Filter to only show tracks with valid audio
+      const validResults = state.searchResults.filter(track => hasValidAudio(track));
+
+      if (validResults.length === 0) {
+        if (state.searchResults.length > 0) {
+          elements.searchResults.innerHTML = '<div class="empty-state"><p>No results with audio available</p></div>';
+        } else {
+          elements.searchResults.innerHTML = '<div class="empty-state"><p>No results found</p></div>';
+        }
         return;
       }
 
-      state.searchResults.forEach(track => {
+      validResults.forEach(track => {
         const card = createTrackCard(track);
         elements.searchResults.appendChild(card);
       });
