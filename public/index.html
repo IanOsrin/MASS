@@ -2382,5 +2382,48 @@
   })();
   </script>
 
+  <script>
+  // Fix play button arrow disappearing after playback
+  (function() {
+    const playSymbol = '▶';
+
+    const fixPlayButtons = () => {
+      // Find all buttons in album cards
+      const buttons = document.querySelectorAll('.card button, .albums button');
+
+      buttons.forEach(btn => {
+        const text = btn.textContent.trim();
+        // If button text is empty or doesn't contain play symbol, restore it
+        if (text === '' || (text.length < 2 && !text.includes(playSymbol))) {
+          btn.textContent = playSymbol;
+        }
+      });
+    };
+
+    // Run on DOM load
+    document.addEventListener('DOMContentLoaded', () => {
+      fixPlayButtons();
+
+      // Monitor for changes to buttons
+      const observer = new MutationObserver(() => {
+        fixPlayButtons();
+      });
+
+      // Observe the albums container
+      const albumsContainer = document.querySelector('.albums');
+      if (albumsContainer) {
+        observer.observe(albumsContainer, {
+          childList: true,
+          subtree: true,
+          characterData: true
+        });
+      }
+
+      // Also run periodically as a fallback
+      setInterval(fixPlayButtons, 2000);
+    });
+  })();
+  </script>
+
 </body>
 </html>
