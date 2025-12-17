@@ -1248,15 +1248,15 @@
         elements.discoverContent.appendChild(indicator);
       }
 
-      // Filter by valid audio only (genre filtering already done by API)
-      const filteredTracks = state.randomTracks.filter(track => hasValidAudio(track));
+      // Filter by valid audio AND valid artwork (genre filtering already done by API)
+      const filteredTracks = state.randomTracks.filter(track => hasValidAudio(track) && hasValidArtwork(track));
 
-      console.log('[Render Discover] Tracks with valid audio:', filteredTracks.length, 'out of', state.randomTracks.length);
+      console.log('[Render Discover] Tracks with valid audio and artwork:', filteredTracks.length, 'out of', state.randomTracks.length);
 
       if (filteredTracks.length === 0) {
         const message = state.selectedGenre === 'All'
-          ? 'No tracks with audio available'
-          : `No ${state.selectedGenre} tracks found`;
+          ? 'No tracks with audio and artwork available'
+          : `No ${state.selectedGenre} tracks with artwork found`;
         elements.discoverContent.innerHTML += `<div class="empty-state"><div class="empty-icon">🎵</div><p>${message}</p></div>`;
         return;
       }
@@ -1320,6 +1320,19 @@
       // Check if audio field exists and is not empty
       if (!audio) return false;
       if (typeof audio === 'string' && audio.trim() === '') return false;
+
+      return true;
+    }
+
+    // Check if an item has valid artwork
+    function hasValidArtwork(item) {
+      if (!item || !item.fields) return false;
+      const artworkFields = ['Artwork_S3_URL', 'Tape Files::Artwork_S3_URL', 'Artwork::Picture', 'Artwork Picture', 'Picture'];
+      const artwork = getFieldValue(item.fields, artworkFields);
+
+      // Check if artwork field exists and is not empty
+      if (!artwork) return false;
+      if (typeof artwork === 'string' && artwork.trim() === '') return false;
 
       return true;
     }
@@ -1392,12 +1405,12 @@
     function renderSearchResults() {
       elements.searchResults.innerHTML = '';
 
-      // Filter to only show tracks with valid audio
-      const validResults = state.searchResults.filter(track => hasValidAudio(track));
+      // Filter to only show tracks with valid audio AND valid artwork
+      const validResults = state.searchResults.filter(track => hasValidAudio(track) && hasValidArtwork(track));
 
       if (validResults.length === 0) {
         if (state.searchResults.length > 0) {
-          elements.searchResults.innerHTML = '<div class="empty-state"><p>No results with audio available</p></div>';
+          elements.searchResults.innerHTML = '<div class="empty-state"><p>No results with audio and artwork available</p></div>';
         } else {
           elements.searchResults.innerHTML = '<div class="empty-state"><p>No results found</p></div>';
         }
