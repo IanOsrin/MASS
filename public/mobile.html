@@ -1468,11 +1468,9 @@
       try {
         elements.searchResults.innerHTML = '<div class="skeleton-card skeleton"></div><div class="skeleton-card skeleton"></div>';
 
-        // Search across song, artist, and album fields
+        // Use 'q' parameter for general search across all fields
         const params = new URLSearchParams({
-          song: query,
-          artist: query,
-          album: query,
+          q: query,
           limit: 100
         });
 
