@@ -1261,14 +1261,18 @@
         return;
       }
 
-      // Display tracks (limit to 100)
-      const displayLimit = state.selectedGenre !== 'All' ? 100 : 50;
-      filteredTracks.slice(0, displayLimit).forEach(track => {
-        const card = createTrackCard(track);
+      // Group tracks by album
+      const albums = groupTracksByAlbum(filteredTracks);
+      console.log('[Render Discover] Grouped into', albums.length, 'albums');
+
+      // Display albums (limit to 50)
+      const displayLimit = 50;
+      albums.slice(0, displayLimit).forEach(album => {
+        const card = createAlbumCard(album);
         elements.discoverContent.appendChild(card);
       });
 
-      console.log('[Render Discover] Rendered', Math.min(displayLimit, filteredTracks.length), 'track cards');
+      console.log('[Render Discover] Rendered', Math.min(displayLimit, albums.length), 'album cards');
     }
 
     // Helper functions for field extraction
@@ -1335,6 +1339,89 @@
       if (typeof artwork === 'string' && artwork.trim() === '') return false;
 
       return true;
+    }
+
+    // Group tracks by album
+    function groupTracksByAlbum(tracks) {
+      const albums = new Map();
+
+      tracks.forEach(track => {
+        const fields = track.fields || {};
+        const albumTitle = getAlbumField(fields);
+        const albumArtist = getArtistField(fields);
+        const albumKey = `${albumTitle}|||${albumArtist}`.toLowerCase();
+
+        if (!albums.has(albumKey)) {
+          albums.set(albumKey, {
+            title: albumTitle,
+            artist: albumArtist,
+            artwork: getArtworkUrl(fields),
+            tracks: []
+          });
+        }
+
+        albums.get(albumKey).tracks.push(track);
+      });
+
+      // Convert to array and sort by track count (most tracks first)
+      return Array.from(albums.values()).sort((a, b) => b.tracks.length - a.tracks.length);
+    }
+
+    function createAlbumCard(album) {
+      const card = document.createElement('div');
+      card.className = 'track-card';
+
+      const trackCount = album.tracks.length;
+      const trackLabel = trackCount === 1 ? 'track' : 'tracks';
+
+      card.innerHTML = `
+        <img class="track-artwork" src="${album.artwork}" alt="${album.title}" loading="lazy" onerror="this.src='/img/placeholder.png'">
+        <div class="track-info">
+          <div class="track-title">${album.title}</div>
+          <div class="track-artist">${album.artist} • ${trackCount} ${trackLabel}</div>
+        </div>
+        <div class="track-actions">
+          <button class="btn-icon view-btn">📋</button>
+          <button class="btn-icon play-btn">▶</button>
+        </div>
+      `;
+
+      card.querySelector('.play-btn').addEventListener('click', () => {
+        if (album.tracks.length > 0) {
+          playTrack(album.tracks[0]);
+        }
+      });
+
+      card.querySelector('.view-btn').addEventListener('click', () => showAlbumTracksModal(album));
+
+      return card;
+    }
+
+    function showAlbumTracksModal(album) {
+      elements.bottomSheet.innerHTML = `
+        <div class="bottom-sheet-header">${album.title}</div>
+        <p style="text-align: center; color: var(--text-secondary); margin-bottom: 16px;">${album.artist}</p>
+        ${album.tracks.map((track, index) => {
+          const fields = track.fields || {};
+          const trackTitle = getTitleField(fields);
+          return `
+            <button class="bottom-sheet-option" data-track-index="${index}">
+              ${trackTitle}
+            </button>
+          `;
+        }).join('')}
+        <button class="btn btn-secondary" style="width: 100%; margin-top: 16px;" onclick="closeModal()">Close</button>
+      `;
+
+      elements.modalOverlay.classList.add('show');
+
+      elements.bottomSheet.querySelectorAll('[data-track-index]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const trackIndex = parseInt(btn.dataset.trackIndex);
+          playTrack(album.tracks[trackIndex]);
+          closeModal();
+        });
+      });
     }
 
     function createTrackCard(track) {
@@ -1417,8 +1504,11 @@
         return;
       }
 
-      validResults.forEach(track => {
-        const card = createTrackCard(track);
+      // Group search results by album
+      const albums = groupTracksByAlbum(validResults);
+
+      albums.forEach(album => {
+        const card = createAlbumCard(album);
         elements.searchResults.appendChild(card);
       });
     }
