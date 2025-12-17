@@ -2239,8 +2239,33 @@
               currentAudio = audio;
               const thumb = document.querySelector('.now-playing-thumb');
               const video = document.getElementById('nowPlayingVideo');
+              const nowPlayingCard = document.getElementById('nowPlayingCard');
+              const modalAlbumSleeve = document.getElementById('modalAlbumSleeve');
 
               console.log('[VIDEO] Audio playing, thumb:', thumb, 'video:', video);
+
+              // Show now playing card
+              if (nowPlayingCard) {
+                nowPlayingCard.hidden = false;
+                console.log('[NOW PLAYING] Card shown');
+              }
+
+              // Show and populate album sleeve in modal if overlay is open
+              if (modalAlbumSleeve) {
+                const overlay = document.getElementById('overlay');
+                if (overlay && overlay.classList.contains('open')) {
+                  modalAlbumSleeve.classList.add('show');
+
+                  // Get artwork from audio element's data attributes or find it
+                  const trackData = audio.dataset;
+                  const artworkUrl = trackData.artwork || trackData.artworkUrl;
+
+                  if (artworkUrl) {
+                    modalAlbumSleeve.innerHTML = `<img src="${artworkUrl}" alt="Album artwork">`;
+                    console.log('[ALBUM SLEEVE] Showing artwork:', artworkUrl);
+                  }
+                }
+              }
 
               if (thumb) {
                 thumb.classList.add('playing');
