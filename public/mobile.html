@@ -1878,20 +1878,28 @@
     async function sendStreamEvent(eventType) {
       if (!state.currentTrack || !state.streamSessionId) return;
 
+      const currentTime = Math.floor(elements.audio.currentTime || 0);
+      const duration = Math.floor(elements.audio.duration || 0);
+
       try {
         await fetch('/api/stream-events', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Session-ID': state.streamSessionId
+          },
           body: JSON.stringify({
-            sessionId: state.streamSessionId,
+            eventType: eventType,
             trackRecordId: state.currentTrack.recordId,
-            eventType,
-            position: Math.floor(elements.audio.currentTime || 0),
-            timestamp: new Date().toISOString()
+            trackISRC: '',
+            positionSec: currentTime,
+            durationSec: duration,
+            deltaSec: 0
           })
         });
+        console.log('[Stream Event]', eventType, 'at', currentTime, 'sec');
       } catch (err) {
-        console.warn('Stream event failed', err);
+        console.warn('[Stream Event] Failed:', err);
       }
     }
 
