@@ -2355,5 +2355,32 @@
   })();
   </script>
 
+  <script>
+  // Change "Pause" to "Stop" on now playing button
+  (function() {
+    const updateButtonText = () => {
+      const btn = document.getElementById('nowPlayingToggle');
+      if (btn && btn.textContent.trim() === 'Pause') {
+        btn.textContent = 'Stop';
+      }
+    };
+
+    // Monitor button text changes
+    const observer = new MutationObserver(updateButtonText);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('nowPlayingToggle');
+      if (btn) {
+        observer.observe(btn, {
+          childList: true,
+          characterData: true,
+          subtree: true
+        });
+        updateButtonText(); // Initial check
+      }
+    });
+  })();
+  </script>
+
 </body>
 </html>
