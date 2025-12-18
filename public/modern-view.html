@@ -2550,6 +2550,13 @@
       console.log('[PlaySong] Called with recordId:', recordId);
       console.log('[PlaySong] Items in store:', itemsStore.size);
 
+      // If clicking on the currently playing card, stop playback instead
+      if (currentTrackInfo && currentTrackInfo.recordId === recordId && currentAudio && !currentAudio.paused) {
+        console.log('[PlaySong] Stopping currently playing track');
+        stopPlayback();
+        return;
+      }
+
       // Check if this card is currently displayed
       if (!isCardDisplayed(recordId)) {
         console.warn('[PlaySong] Card not displayed, skipping:', recordId);
@@ -2730,6 +2737,12 @@
       isPlaying = false;
       hasReportedPlay = false;
       hideMiniPlayer();
+
+      // Remove now-playing class from all cards
+      document.querySelectorAll('.random-card.now-playing').forEach(card => {
+        card.classList.remove('now-playing');
+      });
+
       currentTrackInfo = null;
     }
 
