@@ -2517,15 +2517,34 @@
 
     // Update visual state to highlight currently playing card
     function updateNowPlayingCard(recordId) {
-      // Remove now-playing class from all cards
+      // Remove now-playing class from all cards and reset play icons
       document.querySelectorAll('.random-card.now-playing').forEach(card => {
         card.classList.remove('now-playing');
+        const playIcon = card.querySelector('.play-icon');
+        if (playIcon) {
+          playIcon.textContent = '▶';
+        }
       });
 
-      // Add now-playing class to current card
+      // Reset play icons in other sections (featured, highlights, trending)
+      document.querySelectorAll('.play-icon').forEach(icon => {
+        icon.textContent = '▶';
+      });
+      document.querySelectorAll('.btn-play').forEach(btn => {
+        btn.innerHTML = '▶ Play Now';
+      });
+      document.querySelectorAll('.trending-play-btn').forEach(btn => {
+        btn.textContent = '▶';
+      });
+
+      // Add now-playing class to current card and update icon to stop
       const currentCard = document.querySelector(`.random-card[data-record-id="${recordId}"]`);
       if (currentCard) {
         currentCard.classList.add('now-playing');
+        const playIcon = currentCard.querySelector('.play-icon');
+        if (playIcon) {
+          playIcon.textContent = '■';
+        }
 
         // Scroll to the card with smooth animation
         setTimeout(() => {
@@ -2536,6 +2555,43 @@
           });
         }, 100);
       }
+
+      // Update featured button if playing from featured
+      const featuredBtn = document.querySelector('.featured-release .btn-play');
+      if (featuredBtn) {
+        const featuredRecordId = featuredBtn.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+        if (featuredRecordId === recordId) {
+          featuredBtn.innerHTML = '■ Stop';
+        }
+      }
+
+      // Update highlight play icons
+      document.querySelectorAll('.highlight-card').forEach(card => {
+        const artworkDiv = card.querySelector('.highlight-artwork');
+        if (artworkDiv) {
+          const onclickAttr = artworkDiv.getAttribute('onclick');
+          const cardRecordId = onclickAttr?.match(/'([^']+)'/)?.[1];
+          if (cardRecordId === recordId) {
+            const playIcon = card.querySelector('.play-icon');
+            if (playIcon) playIcon.textContent = '■';
+          }
+        }
+      });
+
+      // Update trending play icons
+      document.querySelectorAll('.trending-card').forEach(card => {
+        const artworkDiv = card.querySelector('.trending-artwork');
+        if (artworkDiv) {
+          const onclickAttr = artworkDiv.getAttribute('onclick');
+          const cardRecordId = onclickAttr?.match(/'([^']+)'/)?.[1];
+          if (cardRecordId === recordId) {
+            const playIcon = card.querySelector('.play-icon');
+            if (playIcon) playIcon.textContent = '■';
+            const playBtn = card.querySelector('.trending-play-btn');
+            if (playBtn) playBtn.textContent = '■';
+          }
+        }
+      });
     }
 
     // Check if a card is currently displayed in any section
@@ -2738,9 +2794,20 @@
       hasReportedPlay = false;
       hideMiniPlayer();
 
-      // Remove now-playing class from all cards
+      // Remove now-playing class from all cards and reset all play icons
       document.querySelectorAll('.random-card.now-playing').forEach(card => {
         card.classList.remove('now-playing');
+      });
+
+      // Reset all play icons back to play button
+      document.querySelectorAll('.play-icon').forEach(icon => {
+        icon.textContent = '▶';
+      });
+      document.querySelectorAll('.btn-play').forEach(btn => {
+        btn.innerHTML = '▶ Play Now';
+      });
+      document.querySelectorAll('.trending-play-btn').forEach(btn => {
+        btn.textContent = '▶';
       });
 
       currentTrackInfo = null;
