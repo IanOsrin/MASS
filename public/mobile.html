@@ -1944,72 +1944,43 @@
       const decadeDropdown = document.getElementById('mobile-search-decade');
       if (!decadeDropdown) return;
 
-      let selectedDecade = '';
+      async function loadDecade(startYear) {
+        try {
+          const searchResults = document.getElementById('search-results');
+          searchResults.innerHTML = '<div class="skeleton-card skeleton"></div><div class="skeleton-card skeleton"></div>';
 
-      function getDecadeFromYear(year) {
-        if (!year) return null;
-        const yearNum = parseInt(year, 10);
-        if (isNaN(yearNum) || yearNum < 1900 || yearNum > 2099) return null;
-        const decadeStart = Math.floor(yearNum / 10) * 10;
-        return decadeStart + 's';
-      }
-
-      function filterByDecade() {
-        selectedDecade = decadeDropdown.value;
-        const discoverContent = document.getElementById('discover-content');
-        const searchResults = document.getElementById('search-results');
-
-        [discoverContent, searchResults].forEach(container => {
-          if (!container) return;
-          const cards = container.querySelectorAll('.card, .album-card');
-
-          cards.forEach(card => {
-            if (!selectedDecade) {
-              // Show all if no decade selected
-              card.style.display = '';
-              return;
-            }
-
-            // Try to find year in card data attributes or text content
-            let year = card.dataset.year || '';
-
-            // If no data-year attribute, try to extract from any visible year text
-            if (!year) {
-              const text = card.textContent;
-              const yearMatch = text.match(/\b(19\d{2}|20\d{2})\b/);
-              if (yearMatch) {
-                year = yearMatch[1];
-              }
-            }
-
-            const cardDecade = getDecadeFromYear(year);
-            if (cardDecade === selectedDecade) {
-              card.style.display = '';
-            } else {
-              card.style.display = 'none';
-            }
+          const params = new URLSearchParams({
+            start: startYear,
+            end: startYear + 9,
+            limit: 300
           });
-        });
+
+          console.log('[Decade] Loading:', startYear + 's');
+          const response = await fetch(`/api/explore?${params}`);
+          const data = await response.json();
+          console.log('[Decade] Results:', data.total || 0, 'tracks found');
+
+          state.searchResults = data.items || [];
+          renderSearchResults();
+        } catch (err) {
+          console.error('[Decade] Failed:', err);
+          const searchResults = document.getElementById('search-results');
+          searchResults.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Failed to load decade</p></div>';
+        }
       }
 
-      decadeDropdown.addEventListener('change', filterByDecade);
+      decadeDropdown.addEventListener('change', function() {
+        const selectedValue = decadeDropdown.value;
+        if (!selectedValue) {
+          return;
+        }
 
-      // Watch for new content being added and apply filter
-      const discoverContent = document.getElementById('discover-content');
-      const searchResults = document.getElementById('search-results');
-
-      [discoverContent, searchResults].forEach(container => {
-        if (!container) return;
-        const observer = new MutationObserver(() => {
-          if (selectedDecade) {
-            filterByDecade();
-          }
-        });
-
-        observer.observe(container, {
-          childList: true,
-          subtree: false
-        });
+        // Convert "1970s" to 1970
+        const match = selectedValue.match(/^(\d{4})s$/);
+        if (match) {
+          const startYear = parseInt(match[1], 10);
+          loadDecade(startYear);
+        }
       });
     })();
   </script>
