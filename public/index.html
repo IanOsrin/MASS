@@ -161,14 +161,25 @@
     .auth-switch button:disabled{opacity:.6;cursor:not-allowed;}
     #authError{margin-top:12px;}
 
-    .playlists-panel{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:flex;flex-direction:column;gap:10px;}
+    .playlists-panel{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:flex;flex-direction:column;gap:10px;transition:gap 0.3s ease;}
+    .playlists-panel.collapsed{gap:0;}
     .playlists-panel[hidden]{display:none;}
-    .playlists-header{display:flex;align-items:center;gap:12px;justify-content:space-between;}
+    .playlists-header{display:flex;align-items:center;gap:12px;justify-content:space-between;cursor:pointer;user-select:none;padding:4px 8px;margin:-4px -8px;border-radius:8px;transition:background 0.2s ease;pointer-events:auto;}
+    .playlists-header *{pointer-events:none;}
+    .playlists-header:hover{background:rgba(255,255,255,0.05);}
     .playlists-header h2{margin:0;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);}
+    .playlists-header .main-accordion-toggle{margin-left:8px;transition:transform 0.3s ease;color:var(--muted);font-size:18px;}
+    .playlists-panel.collapsed .playlists-header .main-accordion-toggle{transform:rotate(-90deg);}
+    .playlists-content{overflow:hidden;transition:max-height 0.4s ease,opacity 0.3s ease,margin 0.3s ease;max-height:2000px;opacity:1;margin-top:0;}
+    .playlists-panel.collapsed .playlists-content{max-height:0;opacity:0;margin-top:0;padding-top:0;padding-bottom:0;}
     .playlists-list{display:flex;flex-direction:column;gap:8px;}
-    .playlist-pill{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#1b1c20;color:#f5f5f5;cursor:pointer;min-width:0;transition:transform .15s ease,box-shadow .15s ease;font-size:12px;}
-    .playlist-pill:hover{transform:translateY(-1px);box-shadow:0 10px 20px rgba(0,0,0,.25);}
-    .playlist-pill.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(98,245,169,.4);}
+    .playlist-pill{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--fg);cursor:pointer;min-width:0;transition:all .15s ease;font-size:13px;}
+    .playlist-pill:hover{background:var(--border);border-color:var(--accent);transform:translateY(-1px);box-shadow:0 10px 20px rgba(0,0,0,.25);}
+    .playlist-pill.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:rgba(98,245,169,0.15);}
+    .playlist-pill-icon{flex-shrink:0;width:32px;height:32px;border-radius:6px;background:rgba(98,245,169,0.15);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:16px;}
+    .playlist-pill-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+    .playlist-pill-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--fg);}
+    .playlist-pill-count{font-size:11px;color:var(--muted);}
     .playlist-pill .name{font-weight:600;font-size:13px;}
     .playlist-pill .meta{color:var(--muted);font-size:11px;}
     .playlist-empty{color:var(--muted);font-size:12px;}
@@ -802,9 +813,9 @@
     <div class="layout-grid">
       <aside id="playlistColumn" class="playlist-column">
         <section id="playlistsPanel" class="playlists-panel" hidden>
-          <div class="playlists-header">
+          <div class="playlists-header" id="playlistsHeader">
             <h2>My Playlists</h2>
-            <span id="playlistsStatus" class="muted"></span>
+            <span class="main-accordion-toggle">▼</span>
           </div>
           <div class="playlists-content">
             <div id="playlistsList" class="playlists-list"></div>
