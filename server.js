@@ -4883,10 +4883,13 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
       }
     }
 
-    // Filter to only include records with valid audio
-    const filteredData = (final.data || []).filter(d => hasValidAudio(d.fieldData || {}));
+    // Filter to only include records with valid audio AND artwork
+    const filteredData = (final.data || []).filter(d => {
+      const fields = d.fieldData || {};
+      return hasValidAudio(fields) && hasValidArtwork(fields);
+    });
     const items = filteredData.map((d) => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} }));
-    console.log(`[EXPLORE] ${start}-${end} using ${chosenField}: total ${foundTotal}, offset ${randStart}, returned ${items.length} (filtered from ${final.data?.length || 0})`);
+    console.log(`[EXPLORE] ${start}-${end} using ${chosenField}: total ${foundTotal}, offset ${randStart}, returned ${items.length} with audio+artwork (filtered from ${final.data?.length || 0})`);
 
     const response = { ok: true, items, total: foundTotal, offset: randStart - 1, limit: windowSize, field: chosenField };
     // Only cache initial loads, not refreshes (to preserve variety)
