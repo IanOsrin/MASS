@@ -34,25 +34,16 @@
     .now-playing-column{flex:0 0 260px;max-width:260px;width:100%;display:flex;flex-direction:column;gap:14px;position:fixed;top:50%;transform:translateY(-50%);right:20px;order:3;z-index:101;}
     .now-playing-column[hidden]{display:none !important;}
     .public-playlists{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;}
-    .public-playlists .playlists-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+    .public-playlists .playlists-header{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;user-select:none;}
+    .public-playlists .playlists-header:hover{background:rgba(255,255,255,0.05);margin:-4px -8px 4px -8px;padding:4px 8px;border-radius:8px;}
+    .public-playlists .playlists-header .main-accordion-toggle{margin-left:8px;transition:transform 0.3s ease;color:var(--muted);font-size:18px;}
+    .public-playlists.collapsed .playlists-header .main-accordion-toggle{transform:rotate(-90deg);}
+    .public-playlists-content{overflow:hidden;transition:max-height 0.3s ease,opacity 0.3s ease;max-height:2000px;opacity:1;}
+    .public-playlists.collapsed .public-playlists-content{max-height:0;opacity:0;}
     .public-playlists-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
-    .public-playlist-item{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:all 0.3s ease;}
-    .public-playlist-item.expanded{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
-    .public-playlist-item button{width:100%;text-align:left;background:transparent;border:none;padding:8px 10px;color:var(--fg);font-size:14px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;transition:background .15s ease;}
-    .public-playlist-item button:hover{background:rgba(255,255,255,0.05);}
-    .public-playlist-item button.active{background:rgba(98,245,169,0.15);}
-    .playlist-accordion-content{max-height:0;overflow:hidden;transition:max-height 0.3s ease;padding:0 10px;}
-    .playlist-accordion-content.expanded{max-height:2000px;padding:10px 10px 12px 10px;}
-    .playlist-accordion-tracks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;}
-    .playlist-accordion-track{display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(0,0,0,0.2);border-radius:6px;cursor:pointer;transition:background 0.15s ease;}
-    .playlist-accordion-track:hover{background:rgba(0,0,0,0.4);}
-    .playlist-accordion-track .play-btn{flex-shrink:0;width:24px;height:24px;border-radius:4px;background:var(--accent);color:var(--btn-text);border:none;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform 0.1s ease;}
-    .playlist-accordion-track .play-btn:hover{transform:scale(1.1);}
-    .playlist-accordion-track .track-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
-    .playlist-accordion-track .track-name{font-size:13px;font-weight:600;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .playlist-accordion-track .track-artist{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .playlist-accordion-chevron{margin-left:auto;transition:transform 0.3s ease;color:var(--muted);font-size:18px;}
-    .public-playlist-item.expanded .playlist-accordion-chevron{transform:rotate(180deg);}
+    .public-playlist-item button{width:100%;text-align:left;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 10px;color:var(--fg);font-size:14px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;transition:background .15s ease,border-color .15s ease;}
+    .public-playlist-item button:hover{background:var(--border);}
+    .public-playlist-item button.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:rgba(98,245,169,0.15);}
     .public-playlist-count{color:var(--muted);font-size:12px;}
     .public-featured-row{display:flex;align-items:flex-start;gap:18px;width:100%;}
     .public-featured-row > .public-playlists{flex:0 0 220px;max-width:240px;}
@@ -824,8 +815,9 @@
           </div>
         </section>
         <section id="publicPlaylistsPanel" class="public-playlists">
-          <div class="playlists-header">
+          <div class="playlists-header" id="publicPlaylistsHeader">
             <h2>Featured Playlists</h2>
+            <span class="main-accordion-toggle">▼</span>
           </div>
           <div class="public-playlists-content">
             <ul id="publicPlaylistsList" class="public-playlists-list"></ul>
