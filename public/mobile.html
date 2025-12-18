@@ -968,6 +968,7 @@
       currentUser: null,
       currentTab: 'discover',
       selectedGenre: 'All',
+      selectedDecade: null, // { label: '1970s', start: 1970 } or null
       playlists: [],
       featuredPlaylists: [],
       trendingTracks: [],
@@ -1075,14 +1076,14 @@
       });
     }
 
-    function selectGenre(genre) {
+    window.selectGenre = function(genre) {
       state.selectedGenre = genre;
       renderGenres();
 
       // Switch to discover tab and filter
       switchTab('discover');
       loadDiscover();
-    }
+    };
 
     function getGenreField(fields) {
       const genreFields = ['Local Genre', 'Genre', 'Style'];
@@ -1105,43 +1106,59 @@
       const container = document.getElementById('decades-content');
       container.innerHTML = '';
 
+      // Add "All Decades" button
+      const allBtn = document.createElement('button');
+      allBtn.className = 'genre-btn';
+      allBtn.textContent = 'All Decades';
+      if (!state.selectedDecade) {
+        allBtn.classList.add('active');
+      }
+      allBtn.addEventListener('click', () => selectDecade(null));
+      container.appendChild(allBtn);
+
+      // Add decade buttons
       DECADES.forEach(decade => {
         const btn = document.createElement('button');
         btn.className = 'genre-btn'; // Reusing genre-btn styles
         btn.textContent = decade.label;
+        if (state.selectedDecade && state.selectedDecade.start === decade.start) {
+          btn.classList.add('active');
+        }
         btn.addEventListener('click', () => selectDecade(decade.start));
         container.appendChild(btn);
       });
     }
 
-    async function selectDecade(startYear) {
-      try {
-        // Switch to discover tab
-        switchTab('discover');
-
-        // Load decade content
-        const discoverContent = document.getElementById('discover-content');
-        discoverContent.innerHTML = '<div class="skeleton-card skeleton"></div><div class="skeleton-card skeleton"></div>';
-
-        const params = new URLSearchParams({
-          start: startYear,
-          end: startYear + 9,
-          limit: 300
-        });
-
-        console.log('[Decade Select] Loading:', startYear + 's');
-        const response = await fetch(`/api/explore?${params}`);
-        const data = await response.json();
-        console.log('[Decade Select] Results:', data.total || 0, 'tracks found');
-
-        state.randomTracks = data.items || [];
-        renderDiscoverTracks();
-      } catch (err) {
-        console.error('[Decade Select] Failed:', err);
-        const discoverContent = document.getElementById('discover-content');
-        discoverContent.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Failed to load decade</p></div>';
+    function selectDecade(startYear) {
+      if (startYear === null) {
+        state.selectedDecade = null;
+      } else {
+        const decade = DECADES.find(d => d.start === startYear);
+        state.selectedDecade = decade;
       }
+      renderDecades();
+
+      // Switch to discover tab and load with both filters
+      switchTab('discover');
+      loadDiscover();
     }
+
+    // Clear filter functions (make them global for onclick handlers)
+    window.clearDecadeFilter = function() {
+      state.selectedDecade = null;
+      loadDiscover();
+    };
+
+    window.clearGenreFilter = function() {
+      state.selectedGenre = 'All';
+      loadDiscover();
+    };
+
+    window.clearAllFilters = function() {
+      state.selectedDecade = null;
+      state.selectedGenre = 'All';
+      loadDiscover();
+    };
 
     // ===== Authentication =====
     async function checkAuth() {
@@ -1303,8 +1320,30 @@
       try {
         let response, data;
 
-        if (state.selectedGenre !== 'All') {
-          // Fetch tracks by genre using search API - get more results
+        if (state.selectedDecade) {
+          // Fetch tracks by decade
+          const params = new URLSearchParams({
+            start: state.selectedDecade.start,
+            end: state.selectedDecade.start + 9,
+            limit: 300
+          });
+          console.log('[Load Discover] Fetching decade:', state.selectedDecade.label);
+          response = await fetch(`/api/explore?${params}`);
+          data = await response.json();
+          console.log('[Load Discover] Decade results:', data.total || 0, 'tracks found');
+          state.randomTracks = data.items || [];
+
+          // Apply genre filter if selected
+          if (state.selectedGenre !== 'All') {
+            console.log('[Load Discover] Applying genre filter:', state.selectedGenre);
+            state.randomTracks = state.randomTracks.filter(track => {
+              const genre = getGenreField(track.fields);
+              return genre.toLowerCase().includes(state.selectedGenre.toLowerCase());
+            });
+            console.log('[Load Discover] After genre filter:', state.randomTracks.length, 'tracks');
+          }
+        } else if (state.selectedGenre !== 'All') {
+          // Fetch tracks by genre only (no decade filter)
           console.log('[Load Discover] Fetching genre:', state.selectedGenre);
           response = await fetch(`/api/search?genre=${encodeURIComponent(state.selectedGenre)}&limit=200`);
           data = await response.json();
@@ -1318,7 +1357,7 @@
           }
           state.randomTracks = items;
         } else {
-          // Fetch random tracks
+          // Fetch random tracks (no filters)
           response = await fetch('/api/random-songs?count=50');
           data = await response.json();
           state.randomTracks = data.items || [];
@@ -1334,13 +1373,26 @@
     function renderDiscoverTracks() {
       elements.discoverContent.innerHTML = '';
 
-      // Show genre indicator if filtered
-      if (state.selectedGenre !== 'All') {
+      // Show filter indicators
+      if (state.selectedDecade || state.selectedGenre !== 'All') {
         const indicator = document.createElement('div');
-        indicator.style.cssText = 'padding: 8px 16px; background: var(--bg-card); border-radius: 8px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;';
+        indicator.style.cssText = 'padding: 8px 16px; background: var(--bg-card); border-radius: 8px; margin-bottom: 16px;';
+
+        let filterText = 'Filtered by: ';
+        const filters = [];
+        if (state.selectedDecade) filters.push(`<strong style="color: var(--accent);">${state.selectedDecade.label}</strong>`);
+        if (state.selectedGenre !== 'All') filters.push(`<strong style="color: var(--accent);">${state.selectedGenre}</strong>`);
+        filterText += filters.join(' + ');
+
         indicator.innerHTML = `
-          <span style="font-size: 14px; color: var(--text-secondary);">Filtered by: <strong style="color: var(--accent);">${state.selectedGenre}</strong></span>
-          <button onclick="selectGenre('All')" style="padding: 4px 12px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 12px; cursor: pointer;">Clear</button>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <span style="font-size: 14px; color: var(--text-secondary);">${filterText}</span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            ${state.selectedDecade ? '<button onclick="clearDecadeFilter()" style="padding: 4px 12px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 12px; cursor: pointer;">Clear Decade</button>' : ''}
+            ${state.selectedGenre !== 'All' ? '<button onclick="clearGenreFilter()" style="padding: 4px 12px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 12px; cursor: pointer;">Clear Genre</button>' : ''}
+            ${(state.selectedDecade || state.selectedGenre !== 'All') ? '<button onclick="clearAllFilters()" style="padding: 4px 12px; background: var(--accent); border: none; border-radius: 4px; color: white; font-size: 12px; cursor: pointer;">Clear All</button>' : ''}
+          </div>
         `;
         elements.discoverContent.appendChild(indicator);
       }
