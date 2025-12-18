@@ -765,6 +765,16 @@
       </div>
     </div>
 
+    <!-- Decades Tab -->
+    <div class="tab-content" id="decades-tab">
+      <div class="section-header">
+        <h2 class="section-title">Decades</h2>
+      </div>
+      <div id="decades-content" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px;">
+        <!-- Decade buttons will be added here -->
+      </div>
+    </div>
+
     <!-- Playlists Tab -->
     <div class="tab-content" id="playlists-tab">
       <div class="section-header">
@@ -818,6 +828,10 @@
     <button class="tab-button" data-tab="genres">
       <div class="tab-icon">🎸</div>
       <div>Genres</div>
+    </button>
+    <button class="tab-button" data-tab="decades">
+      <div class="tab-icon">📅</div>
+      <div>Decades</div>
     </button>
     <button class="tab-button" data-tab="playlists">
       <div class="tab-icon">📋</div>
@@ -1037,6 +1051,8 @@
         }
       } else if (tabName === 'genres') {
         renderGenres();
+      } else if (tabName === 'decades') {
+        renderDecades();
       } else if (tabName === 'playlists' && state.currentUser && state.playlists.length === 0) {
         loadPlaylists();
       }
@@ -1071,6 +1087,60 @@
     function getGenreField(fields) {
       const genreFields = ['Local Genre', 'Genre', 'Style'];
       return getFieldValue(fields, genreFields) || '';
+    }
+
+    // ===== Decades =====
+    const DECADES = [
+      { label: '1950s', start: 1950 },
+      { label: '1960s', start: 1960 },
+      { label: '1970s', start: 1970 },
+      { label: '1980s', start: 1980 },
+      { label: '1990s', start: 1990 },
+      { label: '2000s', start: 2000 },
+      { label: '2010s', start: 2010 },
+      { label: '2020s', start: 2020 }
+    ];
+
+    function renderDecades() {
+      const container = document.getElementById('decades-content');
+      container.innerHTML = '';
+
+      DECADES.forEach(decade => {
+        const btn = document.createElement('button');
+        btn.className = 'genre-btn'; // Reusing genre-btn styles
+        btn.textContent = decade.label;
+        btn.addEventListener('click', () => selectDecade(decade.start));
+        container.appendChild(btn);
+      });
+    }
+
+    async function selectDecade(startYear) {
+      try {
+        // Switch to discover tab
+        switchTab('discover');
+
+        // Load decade content
+        const discoverContent = document.getElementById('discover-content');
+        discoverContent.innerHTML = '<div class="skeleton-card skeleton"></div><div class="skeleton-card skeleton"></div>';
+
+        const params = new URLSearchParams({
+          start: startYear,
+          end: startYear + 9,
+          limit: 300
+        });
+
+        console.log('[Decade Select] Loading:', startYear + 's');
+        const response = await fetch(`/api/explore?${params}`);
+        const data = await response.json();
+        console.log('[Decade Select] Results:', data.total || 0, 'tracks found');
+
+        state.randomTracks = data.items || [];
+        renderDiscoverTracks();
+      } catch (err) {
+        console.error('[Decade Select] Failed:', err);
+        const discoverContent = document.getElementById('discover-content');
+        discoverContent.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Failed to load decade</p></div>';
+      }
     }
 
     // ===== Authentication =====
