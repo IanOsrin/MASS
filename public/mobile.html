@@ -1944,6 +1944,8 @@
       const decadeDropdown = document.getElementById('mobile-search-decade');
       if (!decadeDropdown) return;
 
+      let selectedDecade = '';
+
       function getDecadeFromYear(year) {
         if (!year) return null;
         const yearNum = parseInt(year, 10);
@@ -1953,39 +1955,62 @@
       }
 
       function filterByDecade() {
-        const selectedDecade = decadeDropdown.value;
-        const cards = document.querySelectorAll('.card, .album-card');
+        selectedDecade = decadeDropdown.value;
+        const discoverContent = document.getElementById('discover-content');
+        const searchResults = document.getElementById('search-results');
 
-        cards.forEach(card => {
-          if (!selectedDecade) {
-            // Show all if no decade selected
-            card.style.display = '';
-            return;
-          }
+        [discoverContent, searchResults].forEach(container => {
+          if (!container) return;
+          const cards = container.querySelectorAll('.card, .album-card');
 
-          // Try to find year in card data attributes or text content
-          const yearElement = card.querySelector('[data-year]');
-          let year = yearElement ? yearElement.dataset.year : null;
-
-          // If no data-year attribute, try to extract from any visible year text
-          if (!year) {
-            const text = card.textContent;
-            const yearMatch = text.match(/\b(19\d{2}|20\d{2})\b/);
-            if (yearMatch) {
-              year = yearMatch[1];
+          cards.forEach(card => {
+            if (!selectedDecade) {
+              // Show all if no decade selected
+              card.style.display = '';
+              return;
             }
-          }
 
-          const cardDecade = getDecadeFromYear(year);
-          if (cardDecade === selectedDecade) {
-            card.style.display = '';
-          } else {
-            card.style.display = 'none';
-          }
+            // Try to find year in card data attributes or text content
+            let year = card.dataset.year || '';
+
+            // If no data-year attribute, try to extract from any visible year text
+            if (!year) {
+              const text = card.textContent;
+              const yearMatch = text.match(/\b(19\d{2}|20\d{2})\b/);
+              if (yearMatch) {
+                year = yearMatch[1];
+              }
+            }
+
+            const cardDecade = getDecadeFromYear(year);
+            if (cardDecade === selectedDecade) {
+              card.style.display = '';
+            } else {
+              card.style.display = 'none';
+            }
+          });
         });
       }
 
       decadeDropdown.addEventListener('change', filterByDecade);
+
+      // Watch for new content being added and apply filter
+      const discoverContent = document.getElementById('discover-content');
+      const searchResults = document.getElementById('search-results');
+
+      [discoverContent, searchResults].forEach(container => {
+        if (!container) return;
+        const observer = new MutationObserver(() => {
+          if (selectedDecade) {
+            filterByDecade();
+          }
+        });
+
+        observer.observe(container, {
+          childList: true,
+          subtree: false
+        });
+      });
     })();
   </script>
 </body>

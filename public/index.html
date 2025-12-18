@@ -2443,6 +2443,8 @@
     const decadeDropdown = document.getElementById('searchDecade');
     if (!decadeDropdown) return;
 
+    let selectedDecade = '';
+
     function getDecadeFromYear(year) {
       if (!year) return null;
       const yearNum = parseInt(year, 10);
@@ -2452,8 +2454,11 @@
     }
 
     function filterByDecade() {
-      const selectedDecade = decadeDropdown.value;
-      const cards = document.querySelectorAll('.card');
+      selectedDecade = decadeDropdown.value;
+      const albumsContainer = document.querySelector('.albums');
+      if (!albumsContainer) return;
+
+      const cards = albumsContainer.querySelectorAll('.card');
 
       cards.forEach(card => {
         if (!selectedDecade) {
@@ -2462,9 +2467,8 @@
           return;
         }
 
-        // Try to find year in card data attributes or text content
-        const yearElement = card.querySelector('[data-year]');
-        let year = yearElement ? yearElement.dataset.year : null;
+        // Get year from card dataset
+        let year = card.dataset.year || '';
 
         // If no data-year attribute, try to extract from any visible year badges
         if (!year) {
@@ -2487,6 +2491,21 @@
     }
 
     decadeDropdown.addEventListener('change', filterByDecade);
+
+    // Watch for new cards being added and apply filter
+    const albumsContainer = document.querySelector('.albums');
+    if (albumsContainer) {
+      const observer = new MutationObserver(() => {
+        if (selectedDecade) {
+          filterByDecade();
+        }
+      });
+
+      observer.observe(albumsContainer, {
+        childList: true,
+        subtree: false
+      });
+    }
   })();
   </script>
 
