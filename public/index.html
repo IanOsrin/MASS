@@ -35,8 +35,9 @@
     .now-playing-column[hidden]{display:none !important;}
     .public-playlists{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;transition:gap 0.3s ease;}
     .public-playlists.collapsed{gap:0;}
-    .public-playlists .playlists-header{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;user-select:none;}
-    .public-playlists .playlists-header:hover{background:rgba(255,255,255,0.05);margin:-4px -8px 4px -8px;padding:4px 8px;border-radius:8px;}
+    .public-playlists .playlists-header{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;user-select:none;padding:4px 8px;margin:-4px -8px;border-radius:8px;transition:background 0.2s ease;pointer-events:auto;}
+    .public-playlists .playlists-header *{pointer-events:none;}
+    .public-playlists .playlists-header:hover{background:rgba(255,255,255,0.05);}
     .public-playlists .playlists-header .main-accordion-toggle{margin-left:8px;transition:transform 0.3s ease;color:var(--muted);font-size:18px;}
     .public-playlists.collapsed .playlists-header .main-accordion-toggle{transform:rotate(-90deg);}
     .public-playlists-content{overflow:hidden;transition:max-height 0.4s ease,opacity 0.3s ease,margin 0.3s ease;max-height:2000px;opacity:1;margin-top:0;}
