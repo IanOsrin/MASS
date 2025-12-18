@@ -2695,6 +2695,7 @@ async function collectTrendingStats({ limit, lookbackHours, fetchLimit }) {
     const fields = record.fieldData || {};
     if (!recordIsVisible(fields)) continue;
     if (!hasValidAudio(fields)) continue;
+    if (!hasValidArtwork(fields)) continue;
     results.push({
       recordId: record.recordId || stat.trackRecordId,
       modId: record.modId || '0',
