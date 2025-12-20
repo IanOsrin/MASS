@@ -855,6 +855,16 @@
   <main>
     <div class="layout-grid">
       <aside id="playlistColumn" class="playlist-column">
+        <section id="publicPlaylistsPanel" class="public-playlists">
+          <div class="playlists-header" id="publicPlaylistsHeader">
+            <h2>Featured Playlists</h2>
+            <span class="main-accordion-toggle">▼</span>
+          </div>
+          <div class="public-playlists-content">
+            <ul id="publicPlaylistsList" class="public-playlists-list"></ul>
+            <div id="publicPlaylistsEmpty" class="playlist-empty" hidden>No curated playlists yet.</div>
+          </div>
+        </section>
         <section id="playlistsPanel" class="playlists-panel" hidden>
           <div class="playlists-header" id="playlistsHeader">
             <h2>My Playlists</h2>
@@ -868,16 +878,6 @@
             </form>
             <button id="importPlaylistButton" type="button" class="btn small" style="width:100%;margin-top:8px;">Import Playlist</button>
             <div id="playlistsEmpty" class="playlist-empty" hidden>No playlists yet. Create one to start saving tracks.</div>
-          </div>
-        </section>
-        <section id="publicPlaylistsPanel" class="public-playlists">
-          <div class="playlists-header" id="publicPlaylistsHeader">
-            <h2>Featured Playlists</h2>
-            <span class="main-accordion-toggle">▼</span>
-          </div>
-          <div class="public-playlists-content">
-            <ul id="publicPlaylistsList" class="public-playlists-list"></ul>
-            <div id="publicPlaylistsEmpty" class="playlist-empty" hidden>No curated playlists yet.</div>
           </div>
         </section>
         <section id="playlistTracksSection" class="playlist-tracks" hidden>
