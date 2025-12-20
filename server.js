@@ -3548,11 +3548,13 @@ app.get('/api/cache/stats', (req, res) => {
 /* ========= Static site ========= */
 // Note: express.static() moved to top of file (line ~206) for better performance
 // Static files now bypass rate limiting and API middleware
-// Default to MADMusic (modern-view) layout
-app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'modern-view.html')));
+// Default to Classic jukebox layout
+app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 // Classic jukebox view available at /jukebox and /classic
 app.get('/jukebox', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 app.get('/classic', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
+// Modern view (MADMusic) available at /modern
+app.get('/modern', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'modern-view.html')));
 // Mobile-optimized view
 app.get('/mobile', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'mobile.html')));
 app.get('/m', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'mobile.html')));
@@ -3587,7 +3589,7 @@ const parseFieldList = (envKey, fallback) => {
 };
 
 const AI_GENRE_FIELDS = parseFieldList('FM_GENRE_FIELDS', ['Local Genre', 'Genre']);
-const SEARCH_GENRE_FIELDS = ['Local Genre', 'Genre'];
+const SEARCH_GENRE_FIELDS = ['Local Genre'];
 const AI_LANGUAGE_FIELDS = parseFieldList('FM_LANGUAGE_FIELDS', ['Language Code']);
 
 const listSearchFields = (base, optional, includeOptional) =>
@@ -3946,10 +3948,9 @@ app.get('/api/search', async (req, res) => {
       const augmented = [];
       for (const baseQuery of queries) {
         for (const genreValue of genreFilters) {
-          // Use begins-with pattern (value*) instead of contains (*value*)
-          // This allows FileMaker to use indexes for much faster queries
-          // Changed from 15-20 seconds to 1-3 seconds per query
-          const pattern = `${genreValue}*`;
+          // Use exact match (==value) for accurate genre filtering
+          // This ensures "Afro Beat" doesn't match "Afro-Folk", "Afro Fusion", etc.
+          const pattern = `==${genreValue}`;
           fields.forEach((field) => {
             augmented.push({
               ...baseQuery,

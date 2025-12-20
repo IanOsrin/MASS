@@ -748,6 +748,46 @@
             <option value="2010s">2010s</option>
             <option value="2020s">2020s</option>
           </select>
+          <select id="searchGenre" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);font-size:13px;cursor:pointer;">
+            <option value="">All Genres</option>
+            <option value="60's">60's</option>
+            <option value="70's">70's</option>
+            <option value="80's">80's</option>
+            <option value="90's">90's</option>
+            <option value="Adult Contemporary">Adult Contemporary</option>
+            <option value="African">African</option>
+            <option value="African Jazz">African Jazz</option>
+            <option value="Amapiano">Amapiano</option>
+            <option value="Afro Beat">Afro Beat</option>
+            <option value="Afro-Folk">Afro-Folk</option>
+            <option value="Afro Fusion">Afro Fusion</option>
+            <option value="Afro House">Afro House</option>
+            <option value="Afro Jazz">Afro Jazz</option>
+            <option value="Afro Pop">Afro Pop</option>
+            <option value="Afro Soul">Afro Soul</option>
+            <option value="Blues">Blues</option>
+            <option value="Classical">Classical</option>
+            <option value="Country">Country</option>
+            <option value="Dance">Dance</option>
+            <option value="Disco">Disco</option>
+            <option value="Electronic">Electronic</option>
+            <option value="Folk">Folk</option>
+            <option value="Funk">Funk</option>
+            <option value="Gospel">Gospel</option>
+            <option value="Gqom">Gqom</option>
+            <option value="Hip Hop">Hip Hop</option>
+            <option value="Jazz">Jazz</option>
+            <option value="Kwaito">Kwaito</option>
+            <option value="Latin">Latin</option>
+            <option value="Maskandi">Maskandi</option>
+            <option value="Pop">Pop</option>
+            <option value="R & B/Soul">R &amp; B/Soul</option>
+            <option value="Reggae">Reggae</option>
+            <option value="RnB">RnB</option>
+            <option value="Rock">Rock</option>
+            <option value="Soul">Soul</option>
+            <option value="World">World</option>
+          </select>
         </div>
         <div>
           <input id="search" type="search" placeholder="Search albums, artists, tracks, year, genre…" autocomplete="off" hidden />
@@ -759,7 +799,7 @@
 
       <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
         <div class="header-actions">
-          <a href="/" class="btn" style="text-decoration: none;">Home</a>
+          <a href="/modern" class="btn" style="text-decoration: none;">Modern</a>
           <div class="ai-search-panel" id="aiSearchPanel" data-collapsed="true">
             <button id="aiSearchToggle" type="button" class="ai-search-toggle" aria-expanded="false" aria-controls="aiSearchPanelBody" aria-label="Toggle AI natural language search panel">
               <strong>AI Search</strong>
@@ -1746,6 +1786,8 @@
     const searchArtistEl = document.getElementById('searchArtist');
     const searchAlbumEl = document.getElementById('searchAlbum');
     const searchTrackEl = document.getElementById('searchTrack');
+    const searchGenreEl = document.getElementById('searchGenre');
+    const searchDecadeEl = document.getElementById('searchDecade');
     const searchFieldsEl = document.getElementById('searchFields');
     const goEl = document.getElementById('go');
     const clearEl = document.getElementById('clear');
@@ -1764,8 +1806,10 @@
         const artist = searchArtistEl?.value?.trim() || '';
         const album = searchAlbumEl?.value?.trim() || '';
         const track = searchTrackEl?.value?.trim() || '';
-        const genreValue = typeof options.genre === 'string' ? options.genre.trim() : '';
-        const useAdvanced = Boolean(artist || album || track);
+        const genre = searchGenreEl?.value?.trim() || '';
+        const decade = searchDecadeEl?.value?.trim() || '';
+        const genreValue = typeof options.genre === 'string' ? options.genre.trim() : genre;
+        const useAdvanced = Boolean(artist || album || track || genre || decade);
 
         if (!useAdvanced) {
           return originalDoSearch.call(this, q, options);
@@ -1776,6 +1820,7 @@
         if (album) params.set('album', album);
         if (track) params.set('track', track);
         if (genreValue) params.set('genre', genreValue);
+        if (decade) params.set('decade', decade);
         const searchLimit = (artist && !album && !track) ? 500 : 200;
         params.set('limit', searchLimit);
         const requestedOffset = Number.isFinite(options.offset) ? Math.max(0, Number(options.offset)) : 0;
@@ -1822,9 +1867,11 @@
           const artist = searchArtistEl?.value?.trim() || '';
           const album = searchAlbumEl?.value?.trim() || '';
           const track = searchTrackEl?.value?.trim() || '';
+          const genre = searchGenreEl?.value?.trim() || '';
+          const decade = searchDecadeEl?.value?.trim() || '';
 
           // Need at least one field to search
-          if (!artist && !album && !track) {
+          if (!artist && !album && !track && !genre && !decade) {
             return;
           }
 
@@ -1843,12 +1890,41 @@
           if (searchArtistEl) searchArtistEl.value = '';
           if (searchAlbumEl) searchAlbumEl.value = '';
           if (searchTrackEl) searchTrackEl.value = '';
+          if (searchGenreEl) searchGenreEl.value = '';
+          if (searchDecadeEl) searchDecadeEl.value = '';
           searchFieldsEl.hidden = true;
           if (typeof originalClearHandler === 'function') {
             try {
               originalClearHandler.call(clearEl);
             } catch (err) {
               console.warn('[Separate Search] Original clear handler threw', err);
+            }
+          }
+        });
+      }
+
+      // Add change listeners to genre and decade dropdowns to trigger search
+      if (searchGenreEl) {
+        searchGenreEl.addEventListener('change', () => {
+          if (searchGenreEl.value) {
+            // Show search fields when genre is selected
+            if (searchFieldsEl) searchFieldsEl.hidden = false;
+            // Trigger search
+            if (typeof window.run === 'function') {
+              window.run(' ');
+            }
+          }
+        });
+      }
+
+      if (searchDecadeEl) {
+        searchDecadeEl.addEventListener('change', () => {
+          if (searchDecadeEl.value) {
+            // Show search fields when decade is selected
+            if (searchFieldsEl) searchFieldsEl.hidden = false;
+            // Trigger search
+            if (typeof window.run === 'function') {
+              window.run(' ');
             }
           }
         });
