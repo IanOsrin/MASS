@@ -201,8 +201,8 @@
     .playlist-track.playing{background:#202427;border-color:var(--accent);}
     .playlist-track .track-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;font-weight:600;line-height:1.4;margin:0;}
     .playlist-track .track-play{width:26px;height:26px;border-radius:4px;padding:0;font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;line-height:1;}
-    .playlist-tracks.collapsed .tracks{display:none;}
-    .playlist-tracks.collapsed .playlist-empty{display:none;}
+    .playlist-tracks.collapsed .playlist-tracks-content{display:none;}
+    .playlist-tracks.collapsed .main-accordion-toggle{transform:rotate(-90deg);}
     .playlist-tracks.only-current .tracks{display:none;}
     .playlist-tracks.only-current .playlist-empty{display:none;}
     .playlist-tracks.only-current .now-playing-placeholder{display:none;}
@@ -881,8 +881,11 @@
           </div>
         </section>
         <section id="playlistTracksSection" class="playlist-tracks" hidden>
-          <div class="playlists-header">
-            <h2 id="playlistTracksTitle">Playlist</h2>
+          <div class="playlists-header" id="playlistTracksHeader">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <h2 id="playlistTracksTitle">Playlist</h2>
+              <span class="main-accordion-toggle">▼</span>
+            </div>
             <div class="playlist-actions">
               <button id="deletePlaylistButton" type="button" class="btn small btn-error">Delete playlist</button>
             </div>
