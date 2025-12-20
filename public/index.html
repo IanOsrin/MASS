@@ -261,7 +261,7 @@
     .image-lightbox-close:hover{background:rgba(255,255,255,0.2);}
     .image-lightbox img{max-width:90vw;max-height:90vh;object-fit:contain;}
     .modal header{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);background:#14161a;position:sticky;top:0;z-index:1;}
-    .modal .cover-wrap{width:40px;height:40px;margin:0;display:none !important;}
+    .modal .cover-wrap{width:40px;height:40px;margin:0;display:none;}
     .modal .meta{display:flex;flex-direction:column;gap:2px;min-width:0;}
     .modal h2{margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .modal .sub{color:var(--muted);font-size:11px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
@@ -1803,18 +1803,13 @@
       }
 
       window.doSearch = function(q, options = {}) {
-        console.log('[doSearch Override] Called with q:', q, 'options:', options);
         const artist = searchArtistEl?.value?.trim() || '';
         const album = searchAlbumEl?.value?.trim() || '';
         const track = searchTrackEl?.value?.trim() || '';
         const genre = searchGenreEl?.value?.trim() || '';
         const decade = searchDecadeEl?.value?.trim() || '';
-        console.log('[doSearch Override] Field values - artist:', artist, 'album:', album, 'track:', track, 'genre:', genre, 'decade:', decade);
-        // Use options.genre only if it's a non-empty string, otherwise use the dropdown value
-        const genreValue = (options.genre?.trim() || genre);
-        const decadeValue = (options.decade?.trim() || decade);
-        const useAdvanced = Boolean(artist || album || track || genreValue || decadeValue);
-        console.log('[doSearch Override] useAdvanced:', useAdvanced, 'genreValue:', genreValue, 'decadeValue:', decadeValue);
+        const genreValue = typeof options.genre === 'string' ? options.genre.trim() : genre;
+        const useAdvanced = Boolean(artist || album || track || genre || decade);
 
         if (!useAdvanced) {
           return originalDoSearch.call(this, q, options);
@@ -1825,7 +1820,7 @@
         if (album) params.set('album', album);
         if (track) params.set('track', track);
         if (genreValue) params.set('genre', genreValue);
-        if (decadeValue) params.set('decade', decadeValue);
+        if (decade) params.set('decade', decade);
         const searchLimit = (artist && !album && !track) ? 500 : 200;
         params.set('limit', searchLimit);
         const requestedOffset = Number.isFinite(options.offset) ? Math.max(0, Number(options.offset)) : 0;
@@ -1911,25 +1906,12 @@
       // Add change listeners to genre and decade dropdowns to trigger search
       if (searchGenreEl) {
         searchGenreEl.addEventListener('change', () => {
-          console.log('[Genre Change] Selected genre:', searchGenreEl.value);
           if (searchGenreEl.value) {
-            // Clear other search fields for genre-only search
-            if (searchArtistEl) searchArtistEl.value = '';
-            if (searchAlbumEl) searchAlbumEl.value = '';
-            if (searchTrackEl) searchTrackEl.value = '';
             // Show search fields when genre is selected
             if (searchFieldsEl) searchFieldsEl.hidden = false;
-            console.log('[Genre Change] About to call window.run()');
-            // Trigger search with run() which handles rendering
+            // Trigger search
             if (typeof window.run === 'function') {
               window.run(' ');
-            } else {
-              console.error('[Genre Change] window.run is not a function!');
-            }
-          } else {
-            // If cleared, reload featured or clear results
-            if (typeof window.clear === 'function') {
-              window.clear();
             }
           }
         });
@@ -1938,20 +1920,11 @@
       if (searchDecadeEl) {
         searchDecadeEl.addEventListener('change', () => {
           if (searchDecadeEl.value) {
-            // Clear other search fields for decade-only search
-            if (searchArtistEl) searchArtistEl.value = '';
-            if (searchAlbumEl) searchAlbumEl.value = '';
-            if (searchTrackEl) searchTrackEl.value = '';
             // Show search fields when decade is selected
             if (searchFieldsEl) searchFieldsEl.hidden = false;
-            // Trigger search with run() which handles rendering
+            // Trigger search
             if (typeof window.run === 'function') {
               window.run(' ');
-            }
-          } else {
-            // If cleared, reload featured or clear results
-            if (typeof window.clear === 'function') {
-              window.clear();
             }
           }
         });
