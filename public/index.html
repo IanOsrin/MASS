@@ -1195,6 +1195,12 @@
         }
       }
 
+      // Set Featured Playlists to collapsed by default
+      const publicPlaylistsPanel = document.getElementById('publicPlaylistsPanel');
+      if (publicPlaylistsPanel) {
+        publicPlaylistsPanel.classList.add('collapsed');
+      }
+
       // Accordion functionality for playlist tracks section
       const playlistTracksSection = document.getElementById('playlistTracksSection');
       if (playlistTracksSection) {
