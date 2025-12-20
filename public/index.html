@@ -1178,23 +1178,6 @@
         field.addEventListener('input', debouncedSearch);
       });
 
-      // Accordion functionality for My Playlists
-      const playlistsPanel = document.getElementById('playlistsPanel');
-      if (playlistsPanel) {
-        const header = playlistsPanel.querySelector('.playlists-header');
-        if (header) {
-          header.addEventListener('click', (e) => {
-            // Don't toggle if clicking on the status span
-            if (e.target.id === 'playlistsStatus') return;
-            playlistsPanel.classList.toggle('collapsed');
-            localStorage.setItem('myPlaylistsCollapsed', playlistsPanel.classList.contains('collapsed'));
-          });
-        }
-        if (localStorage.getItem('myPlaylistsCollapsed') === 'true') {
-          playlistsPanel.classList.add('collapsed');
-        }
-      }
-
       // Set Featured Playlists to collapsed by default
       const publicPlaylistsPanel = document.getElementById('publicPlaylistsPanel');
       if (publicPlaylistsPanel) {
