@@ -288,6 +288,7 @@ app.use('/api/', async (req, res, next) => {
     '/random-songs',  // Public discovery endpoint for "Discover More" and "Highlights"
     '/public-playlists',  // Featured playlists - public discovery
     '/search',  // Album/artist search - public discovery
+    '/album',  // Album details - public discovery
     '/trending',  // Trending tracks - public discovery
     '/featured-albums',  // Featured albums - public discovery
     '/missing-audio-songs'  // Debug endpoint for finding missing audio
@@ -692,29 +693,8 @@ const ARTWORK_FIELD_CANDIDATES = [
 ];
 const CATALOGUE_FIELD_CANDIDATES = [
   'Album Catalogue Number',
-  'Album Catalog Number',
-  'Album Catalogue No',
-  'Album Catalog No',
-  'Catalogue',
-  'Catalogue #',
-  'Catalogue Number',
-  'Catalog Number',
-  'Catalog #',
-  'Tape Files::Album Catalogue Number',
-  'Tape Files::Catalogue',
-  'Tape Files::Catalogue #',
   'Reference Catalogue Number',
-  'Reference Catalog Number',
-  'Reference Catalogue No',
-  'Reference Catalog No',
-  'Reference Catalogue #',
-  'Reference Catalog #',
-  'Tape Files::Reference Catalogue Number',
-  'Tape Files::Reference Catalogue No',
-  'Tape Files::Reference Catalogue #',
-  'Tape Files::Reference Catalog Number',
-  'Tape Files::Reference Catalog No',
-  'Tape Files::Reference Catalog #'
+  'Tape Files::Reference Catalogue Number'
 ];
 const FEATURED_FIELD_BASE = FM_FEATURED_FIELD.replace(/^tape files::/i, '').trim();
 const FEATURED_FIELD_CANDIDATES = Array.from(
@@ -5197,25 +5177,15 @@ app.get('/api/album', async (req, res) => {
     const exact = (v) => `==${v}`;
 
     if (cat) {
-      const seenFields = new Set();
-      queries = [];
-      for (const field of CATALOGUE_FIELD_CANDIDATES) {
-        if (!field || seenFields.has(field)) continue;
-        seenFields.add(field);
-        queries.push({ [field]: exact(cat) });
-      }
+      // Search by Reference Catalogue Number
+      queries = [
+        { 'Reference Catalogue Number': cat }
+      ];
     } else if (title) {
-      if (artist) {
-        queries = [
-          { 'Album Title': exact(title), 'Album Artist': exact(artist) },
-          { 'Tape Files::Album_Title': exact(title), 'Tape Files::Album Artist': exact(artist) }
-        ];
-      } else {
-        queries = [
-          { 'Album Title': exact(title) },
-          { 'Tape Files::Album_Title': exact(title) }
-        ];
-      }
+      // Just search by album title - don't use exact match as it may not be supported
+      queries = [
+        { 'Album Title': title }
+      ];
     } else {
       return res.status(400).json({ error: 'Missing cat or title' });
     }

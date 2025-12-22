@@ -820,5 +820,30 @@
     ],
     "createdAt": "2025-12-07T14:19:04.720Z",
     "updatedAt": "2025-12-07T14:26:36.220Z"
+  },
+  {
+    "id": "3cad4b6b-be6a-473c-93ed-0d5608a4ac2c",
+    "userId": "1",
+    "name": "African Jazz",
+    "tracks": [
+      {
+        "id": "baee8b9e-8532-47fc-838a-70781f3cee58",
+        "trackRecordId": "79310",
+        "name": "Angiboni Kahle",
+        "albumTitle": "Angiboni Kahle + Molweni",
+        "albumArtist": "Silvertown Brown Bombers",
+        "catalogue": "6787-92",
+        "trackArtist": "Silvertown Brown Bombers",
+        "mp3": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/mp3/GMVF39581.mp3",
+        "resolvedSrc": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/mp3/GMVF39581.mp3",
+        "seq": 1,
+        "artwork": "https://mass-music-audio-files.s3.eu-north-1.amazonaws.com/artwork/.jpg",
+        "audioField": "S3_URL",
+        "artworkField": "Tape Files::Artwork_S3_URL",
+        "addedAt": "2025-12-20T19:22:12.468Z"
+      }
+    ],
+    "createdAt": "2025-12-20T19:22:11.414Z",
+    "updatedAt": "2025-12-20T19:22:12.468Z"
   }
 ]

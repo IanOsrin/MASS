@@ -1507,10 +1507,25 @@
     const originalFetch = window.fetch;
     window.fetch = function(url, options = {}) {
       const isApiCall = url.includes('/api/') || url.startsWith('/api/');
-      const isAccessValidateCall = url.includes('/api/access/validate');
 
-      // Block API calls without token (except the validate endpoint itself)
-      if (isApiCall && !currentAccessToken && !isAccessValidateCall) {
+      // Public endpoints that don't require access token
+      const publicEndpoints = [
+        '/api/access/validate',
+        '/api/wake',
+        '/api/container',
+        '/api/random-songs',
+        '/api/public-playlists',
+        '/api/search',
+        '/api/album',
+        '/api/trending',
+        '/api/featured-albums',
+        '/api/missing-audio-songs'
+      ];
+
+      const isPublicEndpoint = publicEndpoints.some(endpoint => url.includes(endpoint));
+
+      // Block API calls without token (except public endpoints)
+      if (isApiCall && !currentAccessToken && !isPublicEndpoint) {
         console.warn('[Access Token] Blocking API call without token:', url);
         return Promise.reject(new Error('API call attempted before access token was ready'));
       }
@@ -1756,7 +1771,7 @@
     }
   })();
   </script>
-  <script defer src="/app.min.js?v=84&t=1733401000"></script>
+  <script defer src="/app.min.js?v=88&t=1734916800"></script>
   <script>
   // Override search to use separate fields
   window.addEventListener('load', () => {
