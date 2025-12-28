@@ -8,12 +8,31 @@ import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
-import { fetch } from 'undici';
+import { fetch, Agent } from 'undici';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import { searchCache, exploreCache, albumCache, publicPlaylistsCache, trendingCache, genreCache } from './cache.js';
+
+// ============================================================================
+// HTTP CONNECTION POOL FOR FILEMAKER
+// ============================================================================
+// Persistent connection pool to FileMaker for better performance
+// Reuses TCP connections instead of creating new ones for each request
+const fmAgent = new Agent({
+  connections: 20,              // Max 20 persistent connections to FileMaker
+  pipelining: 1,                // 1 request per connection (HTTP/1.1 default)
+  keepAliveTimeout: 60000,      // Keep connections alive for 60 seconds
+  keepAliveMaxTimeout: 600000,  // Maximum keep-alive time: 10 minutes
+  connect: {
+    timeout: 30000,             // 30 second connection timeout
+    keepAlive: true,
+    keepAliveInitialDelay: 1000
+  }
+});
+
+console.log('[INIT] FileMaker HTTP connection pool created (20 persistent connections)');
 
 // Request deduplication - prevent duplicate simultaneous requests to FileMaker
 const pendingRequests = new Map();
@@ -107,7 +126,7 @@ function parseNonNegativeInt(value, fallback) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const FM_TIMEOUT_MS = parsePositiveInt(process.env.FM_TIMEOUT_MS, 45000);
-const fmDefaultFetchOptions = { timeoutMs: FM_TIMEOUT_MS, retries: 1 };
+const fmDefaultFetchOptions = { timeoutMs: FM_TIMEOUT_MS, retries: 1, dispatcher: fmAgent };
 const FM_MAX_CONCURRENT_REQUESTS = parsePositiveInt(process.env.FM_MAX_CONCURRENT_REQUESTS, 8);
 const FM_MIN_REQUEST_INTERVAL_MS = parseNonNegativeInt(process.env.FM_MIN_REQUEST_INTERVAL_MS, 10);
 
@@ -630,13 +649,17 @@ function hasValidAudio(fields) {
 
 function hasValidArtwork(fields) {
   if (!fields || typeof fields !== 'object') return false;
-  for (const field of ARTWORK_FIELD_CANDIDATES) {
-    const raw = fields[field];
-    if (!raw) continue;
-    const resolved = resolveArtworkSrc(String(raw));
-    if (resolved) return true;
-  }
-  return false;
+
+  // Only accept albums with Artwork_S3_URL containing "GMVi" (valid sleeves)
+  const artworkS3URL = fields['Artwork_S3_URL'] || fields['Tape Files::Artwork_S3_URL'] || '';
+  if (!artworkS3URL || typeof artworkS3URL !== 'string') return false;
+
+  // Case-insensitive check for GMVi
+  if (!artworkS3URL.toLowerCase().includes('gmvi')) return false;
+
+  // Verify the artwork can be resolved
+  const resolved = resolveArtworkSrc(artworkS3URL);
+  return !!resolved;
 }
 
 function applyVisibility(query = {}) {
@@ -914,7 +937,7 @@ const TRENDING_MAX_LIMIT = parsePositiveInt(process.env.TRENDING_MAX_LIMIT, 20);
 const RETRYABLE_CODES = new Set(['UND_ERR_SOCKET', 'ECONNRESET', 'ETIMEDOUT']);
 const RETRYABLE_NAMES = new Set(['AbortError']);
 
-async function safeFetch(url, options = {}, { timeoutMs = 15000, retries = 2 } = {}) {
+async function safeFetch(url, options = {}, { timeoutMs = 15000, retries = 2, dispatcher = null } = {}) {
   let attempt = 0;
   let backoff = 500;
 
@@ -927,10 +950,14 @@ async function safeFetch(url, options = {}, { timeoutMs = 15000, retries = 2 } =
       timeoutController.abort();
     }, timeoutMs);
 
-    const { signal: originalSignal, headers: originalHeaders, ...rest } = options || {};
+    const { signal: originalSignal, headers: originalHeaders, dispatcher: optionsDispatcher, ...rest } = options || {};
 
     const headers = new Headers(originalHeaders || {});
-    if (!headers.has('Connection')) headers.set('Connection', 'close');
+    // Only set Connection: close if we're not using a connection pool
+    const finalDispatcher = optionsDispatcher || dispatcher;
+    if (!finalDispatcher && !headers.has('Connection')) {
+      headers.set('Connection', 'close');
+    }
 
     if (originalSignal) {
       if (originalSignal.aborted) {
@@ -953,7 +980,11 @@ async function safeFetch(url, options = {}, { timeoutMs = 15000, retries = 2 } =
     const composedSignal = signals.length > 1 ? AbortSignal.any(signals) : timeoutController.signal;
 
     try {
-      const response = await fetch(url, { ...rest, headers, signal: composedSignal });
+      const fetchOptions = { ...rest, headers, signal: composedSignal };
+      if (finalDispatcher) {
+        fetchOptions.dispatcher = finalDispatcher;
+      }
+      const response = await fetch(url, fetchOptions);
       clearTimeout(timer);
       return response;
     } catch (err) {
@@ -1291,6 +1322,11 @@ function resolvePlayableSrc(raw) {
   if (src.startsWith('/api/container?')) return src;
   if (REGEX_ABSOLUTE_API_CONTAINER.test(src)) return src;
   if (REGEX_DATA_URI.test(src)) return src;
+
+  // Return S3 URLs directly (no proxy needed) - optimized for direct browser playback
+  if (/^https?:\/\/.*\.s3[.-]/.test(src) || /^https?:\/\/s3[.-]/.test(src)) return src;
+
+  // Only proxy non-S3 HTTP URLs through /api/container
   if (REGEX_HTTP_HTTPS.test(src)) return `/api/container?u=${encodeURIComponent(src)}`;
   if (src.startsWith('/')) return src;
   return `/api/container?u=${encodeURIComponent(src)}`;
@@ -1302,15 +1338,22 @@ function resolveArtworkSrc(raw) {
   if (!src) return '';
 
   // Detect FileMaker's internal container metadata format (not a valid URL)
+  // But allow GMVi URLs which might contain "image:" in the path
   if (src.includes('\r') || src.includes('\n') ||
       (src.includes('movie:') && src.includes('size:')) ||
-      src.includes('moviemac:') || src.includes('moviewin:') ||
-      src.includes('image:')) {
+      src.includes('moviemac:') || src.includes('moviewin:')) {
     console.warn('[MASS] Detected FileMaker container metadata in artwork, rejecting:', src.slice(0, 100));
     return ''; // Return empty - artwork is optional
   }
 
-  if (src.startsWith('/api/container?') || REGEX_HTTP_HTTPS.test(src)) return src;
+  if (src.startsWith('/api/container?')) return src;
+
+  // Return S3 URLs directly (no proxy needed) - optimized for direct browser loading
+  if (/^https?:\/\/.*\.s3[.-]/.test(src) || /^https?:\/\/s3[.-]/.test(src)) return src;
+
+  // Return other HTTP/HTTPS URLs as-is (for compatibility)
+  if (REGEX_HTTP_HTTPS.test(src)) return src;
+
   return `/api/container?u=${encodeURIComponent(src)}`;
 }
 
@@ -4728,24 +4771,29 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
     const start = parseInt((req.query.start || '0'), 10);
     const end = parseInt((req.query.end || '0'), 10);
     const reqLimit = Math.max(1, Math.min(300, parseInt((req.query.limit || '50'), 10)));
+    const requestedOffset = Math.max(0, parseInt((req.query.offset || '0'), 10));
     const bypassCache = req.query.refresh === '1' || req.query.refresh === 'true';
+    const usePagination = requestedOffset > 0 || req.query.pagination === 'true';
     if (!start || !end || end < start) return res.status(400).json({ error: 'bad decade', start, end });
 
     // Note: Random offset means we cache by decade/limit but accept different random results
     // This gives variety while still caching common decade queries
     // Skip cache if refresh parameter is present (for "Select Again" button)
+    // Don't cache pagination requests (they need consistent results)
     const cacheKey = `explore:${start}:${end}:${reqLimit}`;
-    if (!bypassCache) {
+    if (!bypassCache && !usePagination) {
       const cached = exploreCache.get(cacheKey);
       if (cached) {
         console.log(`[CACHE HIT] explore: ${start}-${end}`);
         res.setHeader('X-Cache-Hit', 'true');
         return res.json(cached);
       }
-    } else {
+    } else if (bypassCache) {
       console.log(`[CACHE BYPASS] explore: ${start}-${end} (refresh requested)`);
       // Clear cache for this decade to ensure maximum variety
       exploreCache.delete(cacheKey);
+    } else if (usePagination) {
+      console.log(`[CACHE BYPASS] explore: ${start}-${end} (pagination mode)`);
     }
 
     const FIELDS = [
@@ -4854,14 +4902,25 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
 
     const windowSize = Math.min(reqLimit, 300);
     const maxStart = Math.max(1, foundTotal - windowSize + 1);
-    const randStart = Math.floor(1 + Math.random() * maxStart);
 
-    let final = await tryFind({ query: [{ [chosenField]: `${start}...${end}` }], limit: windowSize, offset: randStart });
+    // Use pagination offset if requested, otherwise use random offset
+    let fetchOffset;
+    if (usePagination) {
+      // For pagination: use requested offset (1-based for FileMaker)
+      fetchOffset = Math.max(1, Math.min(requestedOffset + 1, foundTotal));
+      console.log(`[EXPLORE] Pagination mode: offset=${requestedOffset}, limit=${windowSize}`);
+    } else {
+      // For random/shuffle: use random offset
+      fetchOffset = Math.floor(1 + Math.random() * maxStart);
+      console.log(`[EXPLORE] Random mode: offset=${fetchOffset}, limit=${windowSize}`);
+    }
+
+    let final = await tryFind({ query: [{ [chosenField]: `${start}...${end}` }], limit: windowSize, offset: fetchOffset });
     if (!final.ok || final.data.length === 0) {
       const years = Array.from({ length: end - start + 1 }, (_, i) => start + i);
-      final = await tryFind({ query: years.map((y) => ({ [chosenField]: `==${y}` })), limit: windowSize, offset: randStart });
+      final = await tryFind({ query: years.map((y) => ({ [chosenField]: `==${y}` })), limit: windowSize, offset: fetchOffset });
       if (!final.ok || final.data.length === 0) {
-        final = await tryFind({ query: [{ [chosenField]: `${start}*` }], limit: windowSize, offset: randStart });
+        final = await tryFind({ query: [{ [chosenField]: `${start}*` }], limit: windowSize, offset: fetchOffset });
       }
     }
 
@@ -4871,11 +4930,24 @@ app.get('/api/explore', expensiveLimiter, async (req, res) => {
       return hasValidAudio(fields) && hasValidArtwork(fields);
     });
     const items = filteredData.map((d) => ({ recordId: d.recordId, modId: d.modId, fields: d.fieldData || {} }));
-    console.log(`[EXPLORE] ${start}-${end} using ${chosenField}: total ${foundTotal}, offset ${randStart}, returned ${items.length} with audio+artwork (filtered from ${final.data?.length || 0})`);
+    console.log(`[EXPLORE] ${start}-${end} using ${chosenField}: total ${foundTotal}, offset ${fetchOffset}, returned ${items.length} with audio+artwork (filtered from ${final.data?.length || 0})`);
 
-    const response = { ok: true, items, total: foundTotal, offset: randStart - 1, limit: windowSize, field: chosenField };
-    // Only cache initial loads, not refreshes (to preserve variety)
-    if (!bypassCache) {
+    // Calculate if there are more results available (for "Load More" button)
+    const currentOffset = fetchOffset - 1; // Convert to 0-based
+    const hasMore = (currentOffset + items.length) < foundTotal;
+
+    const response = {
+      ok: true,
+      items,
+      total: foundTotal,
+      offset: currentOffset,
+      limit: windowSize,
+      field: chosenField,
+      hasMore,
+      nextOffset: hasMore ? currentOffset + items.length : null
+    };
+    // Only cache initial loads, not refreshes or pagination (to preserve variety and consistency)
+    if (!bypassCache && !usePagination) {
       exploreCache.set(cacheKey, response);
     }
     return res.json(response);
@@ -4931,7 +5003,10 @@ async function fetchFeaturedAlbumRecords(limit = 400) {
   // Helper function to try a specific field
   const tryField = async (field) => {
     if (!field) return null;
-    const query = applyVisibility({ [field]: FM_FEATURED_VALUE });
+    // Featured albums are a small set, so we'll filter in Node.js to be less restrictive
+    const query = applyVisibility({
+      [field]: FM_FEATURED_VALUE
+    });
     const payload = {
       query: [query],
       limit: normalizedLimit,
@@ -4953,6 +5028,7 @@ async function fetchFeaturedAlbumRecords(limit = 400) {
         return [];
       }
       const rawData = json?.response?.data || [];
+      // Filter in Node.js for featured albums (small dataset, less restrictive)
       const filtered = rawData
         .filter(record => recordIsVisible(record.fieldData || {}))
         .filter(record => hasValidAudio(record.fieldData || {}))
@@ -5299,6 +5375,7 @@ function logServerReady(protocolLabel = 'HTTP/1.1') {
 // Call warmConnections before starting the server
 await warmConnections();
 
+let server = null;
 let serverStarted = false;
 if (HTTP2_ENABLED) {
   if (HTTP2_CERT_PATH && HTTP2_KEY_PATH) {
@@ -5307,8 +5384,8 @@ if (HTTP2_ENABLED) {
         fs.readFile(HTTP2_KEY_PATH),
         fs.readFile(HTTP2_CERT_PATH)
       ]);
-      const h2Server = http2.createSecureServer({ key, cert, allowHTTP1: true }, app);
-      h2Server.listen(PORT, HOST, () => logServerReady('HTTP/2 (ALPN fallback enabled)'));
+      server = http2.createSecureServer({ key, cert, allowHTTP1: true }, app);
+      server.listen(PORT, HOST, () => logServerReady('HTTP/2 (ALPN fallback enabled)'));
       serverStarted = true;
     } catch (err) {
       console.warn('[MASS] Failed to start HTTP/2 server, falling back to HTTP/1.1:', err?.message || err);
@@ -5319,6 +5396,43 @@ if (HTTP2_ENABLED) {
 }
 
 if (!serverStarted) {
-  const httpServer = http.createServer(app);
-  httpServer.listen(PORT, HOST, () => logServerReady('HTTP/1.1'));
+  server = http.createServer(app);
+  server.listen(PORT, HOST, () => logServerReady('HTTP/1.1'));
 }
+
+// ============================================================================
+// GRACEFUL SHUTDOWN HANDLERS
+// ============================================================================
+// Properly close the HTTP connection pool and server on shutdown signals
+
+process.on('SIGTERM', async () => {
+  console.log('[MASS] SIGTERM received, shutting down gracefully...');
+  if (server) {
+    server.close(() => {
+      console.log('[MASS] HTTP server closed');
+    });
+  }
+  try {
+    await fmAgent.close();
+    console.log('[MASS] FileMaker connection pool closed');
+  } catch (err) {
+    console.error('[MASS] Error closing connection pool:', err);
+  }
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('[MASS] SIGINT received, shutting down gracefully...');
+  if (server) {
+    server.close(() => {
+      console.log('[MASS] HTTP server closed');
+    });
+  }
+  try {
+    await fmAgent.close();
+    console.log('[MASS] FileMaker connection pool closed');
+  } catch (err) {
+    console.error('[MASS] Error closing connection pool:', err);
+  }
+  process.exit(0);
+});
