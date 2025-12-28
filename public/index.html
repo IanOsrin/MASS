@@ -947,6 +947,12 @@
           <span id="pageInfo" class="badge">Page 1</span>
           <button id="next">Next ▶</button>
         </div>
+        <div id="loadMoreContainer" style="text-align: center; padding: 20px;" hidden>
+          <button id="loadMoreBtn" class="btn" style="padding: 12px 24px; font-size: 14px;">
+            Next Page →
+          </button>
+          <div style="margin-top: 8px; color: var(--muted); font-size: 12px;" id="loadMoreInfo"></div>
+        </div>
         <div id="error" class="error" hidden></div>
       </section>
       <aside id="nowPlayingColumn" class="now-playing-column">
@@ -967,6 +973,7 @@
             <div class="now-playing-meta">
               <div id="nowPlayingTitle" class="now-playing-title">Track</div>
               <div id="nowPlayingSubtitle" class="now-playing-sub">Artist</div>
+              <div id="nowPlayingYear" class="now-playing-year" style="font-size: 11px; color: var(--muted); margin-top: 2px;"></div>
               <div id="nowPlayingSource" class="now-playing-source"></div>
             </div>
           </div>
@@ -1771,7 +1778,7 @@
     }
   })();
   </script>
-  <script defer src="/app.min.js?v=88&t=1734916800"></script>
+  <script defer src="/app.min.js?v=94&t=1735077300"></script>
   <script>
   // Override search to use separate fields
   window.addEventListener('load', () => {
