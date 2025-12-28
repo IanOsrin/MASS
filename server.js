@@ -3902,7 +3902,7 @@ app.get('/api/search', async (req, res) => {
     const artist = (req.query.artist || '').toString().trim();
     const album = (req.query.album || '').toString().trim();
     const track = (req.query.track || '').toString().trim();
-    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || '10', 10)));
+    const limit = Math.max(1, Math.min(500, parseInt(req.query.limit || '10', 10)));
     const uiOff0 = Math.max(0, parseInt(req.query.offset || '0', 10));
     const fmOff = uiOff0 + 1;
 
