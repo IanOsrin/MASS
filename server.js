@@ -4124,7 +4124,8 @@ app.get('/api/search', async (req, res) => {
     };
 
     let validRecords = filterValidRecords();
-    let processedRecords = genreFilters.length ? dedupeByAlbum(validRecords) : validRecords.slice();
+    // Don't deduplicate - frontend groupAlbums() needs all tracks to group properly
+    let processedRecords = validRecords.slice();
 
     if (genreFilters.length) {
       let batchesFetched = 1;
@@ -4158,7 +4159,8 @@ app.get('/api/search', async (req, res) => {
           }
         }
         validRecords = filterValidRecords();
-        processedRecords = dedupeByAlbum(validRecords);
+        // Don't deduplicate - frontend needs all tracks
+        processedRecords = validRecords.slice();
       }
     }
 
