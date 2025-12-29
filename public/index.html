@@ -1918,12 +1918,12 @@
             if (searchTrackEl) searchTrackEl.value = '';
             // Show search fields when genre is selected
             if (searchFieldsEl) searchFieldsEl.hidden = false;
-            console.log('[Genre Change] About to call window.run()');
-            // Trigger search with run() which handles rendering
-            if (typeof window.run === 'function') {
-              window.run(' ');
+            console.log('[Genre Change] Using genre pagination:', searchGenreEl.value);
+            // Use genre pagination mode instead of regular search
+            if (typeof window.runGenreExplore === 'function') {
+              window.runGenreExplore(searchGenreEl.value);
             } else {
-              console.error('[Genre Change] window.run is not a function!');
+              console.error('[Genre Change] window.runGenreExplore is not a function!');
             }
           } else {
             // If cleared, reload featured or clear results
