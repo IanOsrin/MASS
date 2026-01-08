@@ -346,24 +346,36 @@
 
     /* Dark Mode Toggle */
     .dark-mode-toggle {
-      background: transparent;
-      border: 1px solid var(--border);
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 48px;
+      height: 48px;
       border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      cursor: pointer;
+      background: var(--bg-card);
+      border: 2px solid var(--border);
+      font-size: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.2rem;
-      transition: all 0.3s ease;
-      color: var(--text-secondary);
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+      z-index: 999;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
 
     .dark-mode-toggle:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+    }
+
+    .dark-mode-toggle:active {
+      transform: scale(0.95);
+    }
+
+    body.dark-mode .dark-mode-toggle {
+      background: var(--bg-card);
       border-color: var(--accent);
-      color: var(--accent);
-      transform: scale(1.05);
     }
 
     /* Main Content */
@@ -1363,9 +1375,6 @@
         <div id="genreFeedback" class="genre-feedback" role="status" aria-live="polite"></div>
       </div>
       <a href="/classic" class="view-switcher">🎵 Jukebox View</a>
-      <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
-        🌙
-      </button>
     </div>
   </nav>
 
@@ -3635,5 +3644,11 @@
       loadInitialContent();
     });
   </script>
+
+  <!-- Dark mode toggle button -->
+  <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+    🌙
+  </button>
+
 </body>
 </html>
