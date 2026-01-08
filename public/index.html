@@ -2669,5 +2669,59 @@
   })();
   </script>
 
+  <script>
+  // Secret feature: Publish playlist to FileMaker (Ctrl+Shift+P)
+  (function() {
+    document.addEventListener('keydown', async (e) => {
+      // Check for Ctrl+Shift+P (or Cmd+Shift+P on Mac)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') {
+        e.preventDefault();
+
+        // Get current playlist from UI
+        const playlistTracksSection = document.getElementById('playlistTracksSection');
+        if (!playlistTracksSection || playlistTracksSection.hidden) {
+          console.log('[Secret] No playlist is currently open');
+          return;
+        }
+
+        const playlistId = playlistTracksSection.dataset.playlistId;
+        if (!playlistId) {
+          console.log('[Secret] No playlist ID found');
+          return;
+        }
+
+        const confirmed = confirm('🔒 SECRET FEATURE 🔒\n\nPublish this playlist to FileMaker as a Public Playlist?\n\nThis will set the PublicPlaylist field on all tracks in this playlist.');
+        if (!confirmed) {
+          return;
+        }
+
+        try {
+          console.log(`[Secret] Publishing playlist ${playlistId} to FileMaker...`);
+          const response = await fetch(`/api/playlists/${playlistId}/publish-to-filemaker`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
+
+          const result = await response.json();
+
+          if (result.ok) {
+            alert(`✅ Success!\n\nPlaylist "${result.playlistName}" published to FileMaker.\n\n${result.successCount} tracks updated successfully\n${result.failCount} failed`);
+            console.log('[Secret] Publish results:', result);
+          } else {
+            alert(`❌ Failed to publish playlist:\n\n${result.error}`);
+            console.error('[Secret] Publish failed:', result);
+          }
+        } catch (err) {
+          alert(`❌ Error publishing playlist:\n\n${err.message}`);
+          console.error('[Secret] Publish error:', err);
+        }
+      }
+    });
+    console.log('[Secret] Playlist publish feature loaded (Ctrl+Shift+P)');
+  })();
+  </script>
+
 </body>
 </html>
