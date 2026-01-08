@@ -25,6 +25,22 @@
       --overlay: rgba(0, 0, 0, 0.4);
     }
 
+    /* Dark Mode */
+    body.dark-mode {
+      --bg-primary: #1a1a2e;
+      --bg-secondary: #16213e;
+      --bg-card: #0f3460;
+      --text-primary: #e8edf2;
+      --text-secondary: #b8c4d0;
+      --text-muted: #8b98a5;
+      --accent: #5b9cf5;
+      --accent-hover: #4a90e2;
+      --border: #2c3e50;
+      --shadow: rgba(255, 255, 255, 0.05);
+      --overlay: rgba(0, 0, 0, 0.7);
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #16213e 75%, #1a1a2e 100%) !important;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
       background: linear-gradient(135deg, #e8edf2 0%, #f0f4f8 25%, #f8f9fb 50%, #e8eef4 75%, #dfe7f0 100%);
@@ -33,6 +49,7 @@
       line-height: 1.6;
       overflow-x: hidden;
       min-height: 100vh;
+      transition: background 0.3s ease;
     }
 
     /* Navigation Header */
@@ -49,6 +66,11 @@
       align-items: center;
       gap: 2rem;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      transition: background 0.3s ease, border-color 0.3s ease;
+    }
+
+    body.dark-mode .nav-header {
+      background: rgba(26, 26, 46, 0.85);
     }
 
     .logo {
@@ -320,6 +342,28 @@
       border-color: var(--accent);
       color: var(--accent);
       transform: translateY(-2px);
+    }
+
+    /* Dark Mode Toggle */
+    .dark-mode-toggle {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      transition: all 0.3s ease;
+      color: var(--text-secondary);
+    }
+
+    .dark-mode-toggle:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      transform: scale(1.05);
     }
 
     /* Main Content */
@@ -1319,6 +1363,9 @@
         <div id="genreFeedback" class="genre-feedback" role="status" aria-live="polite"></div>
       </div>
       <a href="/classic" class="view-switcher">🎵 Jukebox View</a>
+      <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+        🌙
+      </button>
     </div>
   </nav>
 
@@ -3479,9 +3526,48 @@
       syncGenreFilters({ forceReloadRandom: true });
     }
 
+    // Dark Mode Management
+    const DARK_MODE_KEY = 'madmusic.darkMode';
+    const darkModeToggle = document.getElementById('darkModeToggle');
+
+    function applyDarkMode(isDark) {
+      document.body.classList.toggle('dark-mode', isDark);
+      if (darkModeToggle) {
+        darkModeToggle.textContent = isDark ? '☀️' : '🌙';
+        darkModeToggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+        darkModeToggle.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+      }
+    }
+
+    function initDarkMode() {
+      try {
+        const saved = localStorage.getItem(DARK_MODE_KEY);
+        const isDark = saved === 'true';
+        applyDarkMode(isDark);
+      } catch (e) {
+        console.warn('Could not load dark mode preference:', e);
+      }
+    }
+
+    // Initialize dark mode before DOM loads
+    initDarkMode();
+
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
       // Don't load content yet - wait for access token to be ready
+
+      // Setup dark mode toggle
+      if (darkModeToggle) {
+        darkModeToggle.addEventListener('click', () => {
+          const isDark = !document.body.classList.contains('dark-mode');
+          applyDarkMode(isDark);
+          try {
+            localStorage.setItem(DARK_MODE_KEY, isDark.toString());
+          } catch (e) {
+            console.warn('Could not save dark mode preference:', e);
+          }
+        });
+      }
 
       // Setup mini player controls
       document.getElementById('playerPause').addEventListener('click', togglePause);
