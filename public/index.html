@@ -395,7 +395,8 @@
     button:disabled{opacity:.6;cursor:not-allowed;transform:none !important;box-shadow:none !important;}
 
     /* Dark mode toggle button */
-    .dark-mode-toggle{position:fixed;bottom:24px;right:24px;width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform 0.2s ease,box-shadow 0.2s ease,background 0.2s ease;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,0.1);}
+    .dark-mode-toggle{position:fixed;bottom:24px;right:24px;width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform 0.2s ease,box-shadow 0.2s ease,background 0.2s ease,opacity 0.5s ease;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,0.1);opacity:1;}
+    .dark-mode-toggle.auto-hidden{opacity:0;pointer-events:none;}
     .dark-mode-toggle:hover{transform:scale(1.08);box-shadow:0 4px 12px rgba(0,0,0,0.2);}
     .dark-mode-toggle:active{transform:scale(0.95);}
     body.dark-mode .dark-mode-toggle{background:var(--card);border-color:var(--accent);}
@@ -2637,6 +2638,24 @@
         // Sync button state with current mode
         const currentDark = document.body.classList.contains('dark-mode');
         applyDarkMode(currentDark);
+
+        // Auto-hide after 10 seconds
+        setTimeout(() => {
+          darkModeToggle.classList.add('auto-hidden');
+        }, 10000);
+
+        // Show on hover in bottom-right corner
+        document.addEventListener('mousemove', (e) => {
+          const showDistance = 100; // pixels from bottom-right corner
+          const fromRight = window.innerWidth - e.clientX;
+          const fromBottom = window.innerHeight - e.clientY;
+
+          if (fromRight < showDistance && fromBottom < showDistance) {
+            darkModeToggle.classList.remove('auto-hidden');
+          } else {
+            darkModeToggle.classList.add('auto-hidden');
+          }
+        });
 
         darkModeToggle.addEventListener('click', () => {
           const isDark = !document.body.classList.contains('dark-mode');

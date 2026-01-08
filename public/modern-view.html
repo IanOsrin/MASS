@@ -359,9 +359,15 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, opacity 0.5s ease;
       z-index: 999;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      opacity: 1;
+    }
+
+    .dark-mode-toggle.auto-hidden {
+      opacity: 0;
+      pointer-events: none;
     }
 
     .dark-mode-toggle:hover {
@@ -3574,6 +3580,24 @@
         // Sync button icon with current dark mode state after DOM loads
         const currentDarkMode = document.body.classList.contains('dark-mode');
         applyDarkMode(currentDarkMode);
+
+        // Auto-hide after 10 seconds
+        setTimeout(() => {
+          darkModeToggle.classList.add('auto-hidden');
+        }, 10000);
+
+        // Show on hover in bottom-right corner
+        document.addEventListener('mousemove', (e) => {
+          const showDistance = 100; // pixels from bottom-right corner
+          const fromRight = window.innerWidth - e.clientX;
+          const fromBottom = window.innerHeight - e.clientY;
+
+          if (fromRight < showDistance && fromBottom < showDistance) {
+            darkModeToggle.classList.remove('auto-hidden');
+          } else {
+            darkModeToggle.classList.add('auto-hidden');
+          }
+        });
 
         darkModeToggle.addEventListener('click', () => {
           console.log('[Modern Dark Mode] Button clicked');
