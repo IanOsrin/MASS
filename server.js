@@ -1669,7 +1669,8 @@ async function buildPublicPlaylistsPayload({ nameParam = '', limit = 100 } = {})
           artworkField: artworkInfo.field || '',
           picture: resolvedArt,
           albumPicture: resolvedArt,
-          albumKey
+          albumKey,
+          hasValidAudio: true
         });
       }
     }
