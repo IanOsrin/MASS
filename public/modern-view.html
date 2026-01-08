@@ -3567,6 +3567,10 @@
 
       // Setup dark mode toggle
       if (darkModeToggle) {
+        // Sync button icon with current dark mode state after DOM loads
+        const currentDarkMode = document.body.classList.contains('dark-mode');
+        applyDarkMode(currentDarkMode);
+
         darkModeToggle.addEventListener('click', () => {
           const isDark = !document.body.classList.contains('dark-mode');
           applyDarkMode(isDark);
