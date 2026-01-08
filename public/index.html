@@ -2611,31 +2611,40 @@
   // Dark mode functionality
   (function() {
     const DARK_MODE_KEY = 'mass.darkMode';
-    const darkModeToggle = document.getElementById('darkModeToggle');
 
     function applyDarkMode(isDark) {
       document.body.classList.toggle('dark-mode', isDark);
+      const darkModeToggle = document.getElementById('darkModeToggle');
       if (darkModeToggle) {
         darkModeToggle.textContent = isDark ? '☀️' : '🌙';
         darkModeToggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
         darkModeToggle.setAttribute('title', isDark ? 'Switch to light mode' : 'Switch to dark mode');
       }
+      console.log('[Dark Mode] Applied:', isDark);
     }
 
-    // Check localStorage for saved preference
+    // Apply saved preference immediately
     const savedMode = localStorage.getItem(DARK_MODE_KEY);
     if (savedMode !== null) {
-      applyDarkMode(savedMode === 'true');
+      const isDark = savedMode === 'true';
+      applyDarkMode(isDark);
     }
 
-    // Toggle on button click
-    if (darkModeToggle) {
-      darkModeToggle.addEventListener('click', () => {
-        const isDark = !document.body.classList.contains('dark-mode');
-        applyDarkMode(isDark);
-        localStorage.setItem(DARK_MODE_KEY, isDark);
-      });
-    }
+    // Setup toggle on DOM ready
+    document.addEventListener('DOMContentLoaded', () => {
+      const darkModeToggle = document.getElementById('darkModeToggle');
+      if (darkModeToggle) {
+        // Sync button state with current mode
+        const currentDark = document.body.classList.contains('dark-mode');
+        applyDarkMode(currentDark);
+
+        darkModeToggle.addEventListener('click', () => {
+          const isDark = !document.body.classList.contains('dark-mode');
+          applyDarkMode(isDark);
+          localStorage.setItem(DARK_MODE_KEY, isDark);
+        });
+      }
+    });
   })();
   </script>
 
